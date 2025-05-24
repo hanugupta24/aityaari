@@ -48,48 +48,57 @@ const prompt = ai.definePrompt({
   name: 'generateInterviewQuestionsPrompt',
   input: {schema: GenerateInterviewQuestionsInputSchema},
   output: {schema: GenerateInterviewQuestionsOutputSchema},
-  prompt: `You are an expert interviewer. Generate interview questions for a job candidate.
-The interview will have specific stages and question types based on the candidate's role and interview duration.
+  prompt: `You are an expert AI Interview Question Generator. Your task is to create a set of high-quality, relevant interview questions, including those frequently asked for the specified role and field. The questions should be tailored to the candidate's profile field, role, and the total interview duration.
 
 Candidate Profile Field: {{{profileField}}}
 Candidate Role: {{{role}}}
 Interview Duration: {{{interviewDuration}}} minutes
 
-Determine if the role is technical. Roles are considered technical if they include keywords such as: ${technicalRolesKeywords.join(', ')}.
+Determine if the role is technical. Roles are considered technical if they include keywords such as: ${technicalRolesKeywords.join(', ')}. Examples: "Software Developer", "Data Scientist", "Frontend Developer", "Backend Developer", "Flutter Developer".
 
-Question Stages:
-1.  'oral': Questions in this stage are for the candidate to answer verbally. The AI (you) will dictate the question. Types for this stage are 'conversational' (e.g., "Tell me about yourself", "Why are you interested in this role?") or 'behavioral' (e.g., "Describe a time you faced a challenge and how you overcame it.").
-2.  'technical_written': This stage is ONLY for technical roles and comes AFTER the 'oral' stage. Questions require a typed or written answer. Types for this stage are 'technical' (e.g., "Explain the concept of X specific to {{{profileField}}}") or 'coding' (e.g., "Write a function to do Y relevant to {{{role}}}").
+Question Stages & Types:
+
+1.  **Oral Stage ('oral')**:
+    *   These questions are for the candidate to answer verbally. The AI (interviewer) will dictate the question.
+    *   Focus: Conversational ice-breakers, behavioral questions, and general theoretical questions relevant to the role and field.
+    *   Allowed Types: 'conversational' (e.g., "Tell me about yourself," "Why are you interested in this role?"), 'behavioral' (e.g., "Describe a time you faced a challenge and how you overcame it.").
+
+2.  **Technical/Written Stage ('technical_written')**:
+    *   This stage is **ONLY for technical roles** and comes AFTER all 'oral' stage questions.
+    *   Questions require a typed or written answer (e.g., code, detailed explanation).
+    *   Allowed Types:
+        *   'technical': Questions asking for explanations of concepts, definitions, or comparisons (e.g., "Explain the concept of closures in JavaScript specific to {{{profileField}}}").
+        *   'coding': Questions requiring the candidate to write a function or solve a coding problem (e.g., "Write a Python function to find the median of a list, relevant to a {{{role}}}").
 
 Question Distribution and Types based on Duration:
 
 *   **15 minutes:**
     *   Non-technical roles: 3-4 'oral' questions (mix of 'conversational' and 'behavioral').
     *   Technical roles:
-        *   Stage 1 ('oral'): 2 'oral' questions ('conversational' or 'behavioral').
-        *   Stage 2 ('technical_written'): 1 'technical_written' question (can be 'technical' or 'coding', relevant to {{{role}}} and {{{profileField}}}).
+        *   Oral Stage: 2 'oral' questions (mix of 'conversational', 'behavioral').
+        *   Technical/Written Stage: 1 'technical_written' question (can be 'technical' or 'coding', highly relevant to {{{role}}} and {{{profileField}}}).
 
 *   **30 minutes:**
     *   Non-technical roles: 5-6 'oral' questions (mix of 'conversational' and 'behavioral').
     *   Technical roles:
-        *   Stage 1 ('oral'): 3 'oral' questions ('conversational' or 'behavioral').
-        *   Stage 2 ('technical_written'): 1-2 'technical_written' questions ('technical' or 'coding').
+        *   Oral Stage: 3 'oral' questions (mix of 'conversational', 'behavioral').
+        *   Technical/Written Stage: 1-2 'technical_written' questions (mix of 'technical' or 'coding').
 
 *   **45 minutes:**
     *   Non-technical roles: 7-8 'oral' questions (mix of 'conversational' and 'behavioral').
     *   Technical roles:
-        *   Stage 1 ('oral'): 3-4 'oral' questions ('conversational' or 'behavioral').
-        *   Stage 2 ('technical_written'): 2 'technical_written' questions ('technical' or 'coding').
+        *   Oral Stage: 3-4 'oral' questions (mix of 'conversational', 'behavioral').
+        *   Technical/Written Stage: 2 'technical_written' questions (mix of 'technical' and 'coding'). Ensure a good mix if multiple.
 
 General Guidelines:
-- Ensure all questions are relevant to the provided 'profileField' and 'role'.
-- For 'technical_written' questions of type 'coding', provide a clear problem statement.
-- For 'technical_written' questions of type 'technical', ask about concepts, definitions, or explanations.
-- 'Oral' questions should be open-ended and encourage spoken responses.
-- Provide questions in a logical sequence: 'oral' stage questions first, then 'technical_written' stage questions if applicable.
+- All questions MUST be directly relevant to the provided 'profileField' and 'role'.
+- For 'technical_written' questions of type 'coding', provide a clear, concise problem statement.
+- For 'technical_written' questions of type 'technical', ask about core concepts, definitions, or detailed explanations.
+- 'Oral' questions should be open-ended and designed to encourage spoken, detailed responses. They should be phrased as if an interviewer is speaking them.
+- Provide questions in a logical sequence: all 'oral' stage questions first, then all 'technical_written' stage questions if the role is technical.
 - Each question MUST have a unique 'id' (e.g., "q1", "q2", "q3"...), its 'text', its designated 'stage', and its 'type'.
 
-Generate the questions array according to these guidelines.
+Generate the questions array according to these guidelines. Ensure questions are challenging yet appropriate for the experience level implied by the role and field.
 `,
 });
 
@@ -101,32 +110,34 @@ const generateInterviewQuestionsFlow = ai.defineFlow(
     outputSchema: GenerateInterviewQuestionsOutputSchema,
   },
   async (input) => {
-    const isTechnicalRole = technicalRolesKeywords.some(keyword =>
+    // This logic is to help the prompt, the AI should make the final determination.
+    const isLikelyTechnicalRole = technicalRolesKeywords.some(keyword =>
       input.role.toLowerCase().includes(keyword) || input.profileField.toLowerCase().includes(keyword)
     );
 
-    console.log(`Generating questions for ${input.interviewDuration} min interview. Role: ${input.role}, Field: ${input.profileField}. Technical: ${isTechnicalRole}`);
+    console.log(`Generating questions for ${input.interviewDuration} min interview. Role: ${input.role}, Field: ${input.profileField}. Considered technical by flow: ${isLikelyTechnicalRole}`);
 
     const {output} = await prompt(input);
 
     if (!output || !output.questions || output.questions.length === 0) {
         console.error("AI did not return any questions. Input was:", input);
-        // Fallback or error based on requirements. For now, empty array to satisfy schema.
-        // Consider throwing an error if questions are essential for the flow to proceed.
-        return { questions: [] };
+        // Fallback or error based on requirements.
+        return { questions: [] }; // Return empty array to satisfy schema, client should handle.
     }
     
-    // Ensure IDs are unique and other basic validation if needed, though prompt asks for it.
-    // Also, sort questions to ensure 'oral' comes before 'technical_written' if AI doesn't guarantee order.
-    const sortedQuestions = output.questions.sort((a, b) => {
+    // Ensure IDs are unique and sort questions to enforce 'oral' before 'technical_written'
+    // The AI prompt already requests this, but sorting here is a safeguard.
+    const sortedQuestions = output.questions
+      .map((q, index) => ({
+        ...q,
+        id: q.id || `gen_q${index + 1}`, // Fallback ID if AI misses it
+      }))
+      .sort((a, b) => {
         if (a.stage === 'oral' && b.stage === 'technical_written') return -1;
         if (a.stage === 'technical_written' && b.stage === 'oral') return 1;
-        // if same stage, maintain original order (or sort by id if needed)
+        // If same stage, maintain original order or sort by id if necessary
         return (parseInt(a.id.substring(1)) || 0) - (parseInt(b.id.substring(1)) || 0);
-    }).map((q, index) => ({
-      ...q,
-      id: q.id || `gen_q${index + 1}`, // Fallback ID generation
-    }));
+    });
     
     return {
       questions: sortedQuestions as GeneratedQuestion[],
