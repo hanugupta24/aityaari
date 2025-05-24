@@ -105,10 +105,17 @@ export default function ProfilePage() {
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
+    
+    // Clear previous resume state regardless of what happens next
+    form.setValue("resumeText", "", { shouldValidate: false }); // Don't validate empty string yet
+    setSelectedFileName(null);
+
     if (!file) {
-      // If no file is selected, but there was a resumeText in form, keep "Resume on file"
-      if (!form.getValues("resumeText")) {
-          setSelectedFileName(null);
+      if (fileInputRef.current) fileInputRef.current.value = ""; // Ensure input is cleared
+      // If there was a resume previously (from userProfile), set the "Resume on file" message back
+      if (userProfile?.resumeText) {
+          setSelectedFileName("Resume on file (upload new to replace)");
+          form.setValue("resumeText", userProfile.resumeText, {shouldValidate: true}); // Restore old value
       }
       return;
     }
@@ -126,7 +133,7 @@ export default function ProfilePage() {
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
        toast({
         title: "File Too Large",
-        description: `Please upload a file smaller than ${MAX_FILE_SIZE_MB}MB.`,
+        description: `Please upload a file smaller than ${MAX_FILE_SIZE_MB}MB. Your file is ${(file.size / (1024*1024)).toFixed(2)}MB.`,
         variant: "destructive",
       });
       if (fileInputRef.current) fileInputRef.current.value = ""; // Clear the input
@@ -134,8 +141,7 @@ export default function ProfilePage() {
     }
     
     setIsReadingFile(true);
-    setSelectedFileName(file.name); // Show the name of the newly selected file
-
+    
     if (['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.type)) {
       toast({
         title: "File Type Notice",
@@ -148,15 +154,16 @@ export default function ProfilePage() {
     reader.onload = (e) => {
       const text = e.target?.result as string;
       form.setValue("resumeText", text, { shouldValidate: true });
+      setSelectedFileName(file.name); // Show the name of the newly selected file
       setIsReadingFile(false);
       toast({ title: "Resume Content Loaded", description: `Text from ${file.name} has been loaded into the form.`});
     };
     reader.onerror = (e) => {
         console.error("Error reading file:", e);
         toast({ title: "File Read Error", description: "Could not read the resume file content.", variant: "destructive"});
-        // Revert to "Resume on file" if there was one originally, otherwise null
-        setSelectedFileName(userProfile?.resumeText ? "Resume on file (upload new to replace)" : null);
-        if (fileInputRef.current) fileInputRef.current.value = "";
+        form.setValue("resumeText", "", { shouldValidate: true }); // Clear from form
+        setSelectedFileName(null); // Clear display name
+        if (fileInputRef.current) fileInputRef.current.value = ""; // Clear file input
         setIsReadingFile(false);
     };
     reader.readAsText(file); 
@@ -184,14 +191,13 @@ export default function ProfilePage() {
       const currentProfileData = currentProfileSnap.exists() ? currentProfileSnap.data() : {};
 
       const profileDataToSave: Partial<UserProfile> = {
-        ...currentProfileData, // Preserve existing fields not in the form
+        ...currentProfileData, 
         ...values, 
         uid: user.uid, 
-        email: user.email || undefined, // Firebase user email might be null
+        email: user.email || undefined, 
         updatedAt: new Date().toISOString(),
       };
       
-      // Ensure optional fields that are empty strings are stored as undefined or removed
       if (profileDataToSave.company === "") profileDataToSave.company = undefined;
       if (profileDataToSave.phoneNumber === "") profileDataToSave.phoneNumber = undefined;
       if (profileDataToSave.resumeText === null || profileDataToSave.resumeText === "") {
@@ -202,11 +208,12 @@ export default function ProfilePage() {
 
       toast({ title: "Profile Updated", description: "Your profile has been successfully updated." });
       await refreshUserProfile(); 
-      // If resumeText was updated, reflect this in selectedFileName
+      
       if (values.resumeText) {
         setSelectedFileName("Resume on file (upload new to replace)");
       } else {
         setSelectedFileName(null);
+        if (fileInputRef.current) fileInputRef.current.value = ""; // Ensure file input is also cleared if resumeText is cleared by save
       }
 
     } catch (error: any) {
@@ -317,7 +324,7 @@ export default function ProfilePage() {
                     file:text-sm file:font-semibold
                     file:bg-primary/10 file:text-primary
                     hover:file:bg-primary/20"
-                  disabled={isReadingFile}
+                  disabled={isReadingFile || isSubmitting}
                 />
               </FormControl>
               {isReadingFile && <p className="text-sm text-muted-foreground flex items-center"><Loader2 className="h-4 w-4 animate-spin mr-2" />Reading file...</p>}
@@ -336,10 +343,11 @@ export default function ProfilePage() {
                 Upload your resume ({ACCEPT_FILE_EXTENSIONS}, max {MAX_FILE_SIZE_MB}MB). Text content will be extracted.
                 For PDF/Word files, plain text versions (.txt, .md) provide the best input for AI question generation.
               </FormDescription>
+              {/* Hidden input to store the actual resumeText for the form */}
               <FormField
                 control={form.control}
                 name="resumeText"
-                render={({ field }) => <Input type="hidden" {...field} />} 
+                render={({ field }) => <Input type="hidden" {...field} value={field.value ?? ""} />}
               />
               <FormMessage>{form.formState.errors.resumeText?.message}</FormMessage>
             </FormItem>
@@ -367,6 +375,4 @@ export default function ProfilePage() {
     </Card>
   );
 }
-    
-
     
