@@ -189,32 +189,7 @@ export default function DashboardPage() {
                 )}
               </AlertDescription>
             </Alert>
-          ) : fetchedPastInterviews.length > 0 ? (
-            <div className="space-y-4">
-              {fetchedPastInterviews.map((interview) => (
-                <Card key={interview.id} className="hover:shadow-md transition-shadow">
-                  <CardHeader>
-                    <CardTitle className="text-lg">Interview on {new Date(interview.createdAt).toLocaleDateString()}</CardTitle>
-                    <CardDescription>
-                      Duration: {interview.duration} mins | Score: {interview.feedback?.overallScore !== undefined ? `${interview.feedback.overallScore}%` : "Pending"}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground truncate">
-                      {interview.feedback?.overallFeedback ?
-                        (interview.feedback.overallFeedback.substring(0,150) + (interview.feedback.overallFeedback.length > 150 ? "..." : ""))
-                        : "Feedback processing or not available."}
-                    </p>
-                  </CardContent>
-                  <CardFooter>
-                    <Link href={`/feedback/${interview.id}`} passHref>
-                      <Button variant="outline" size="sm">View Detailed Feedback</Button>
-                    </Link>
-                  </CardFooter>
-                </Card>
-              ))}
-            </div>
-          ) : (
+          ) :  (
             <div className="text-center py-10">
               <Image
                 src="https://placehold.co/300x200.png?text=No+Interviews+Yet"
