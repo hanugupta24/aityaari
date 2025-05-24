@@ -9,6 +9,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Label } from "@/components/ui/label";
 import { Loader2, ThumbsUp, ThumbsDown, Lightbulb, MessageSquare, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { InterviewSession, InterviewFeedback } from "@/types";
@@ -110,7 +111,7 @@ export default function FeedbackPage() {
       </Card>
 
       <Accordion type="single" collapsible defaultValue="item-1" className="w-full space-y-4">
-        <Card as={AccordionItem} value="item-1" className="shadow-md">
+        <AccordionItem value="item-1" className="rounded-lg border bg-card text-card-foreground shadow-md">
           <AccordionTrigger className="p-6 hover:no-underline">
             <div className="flex items-center gap-3">
               <MessageSquare className="h-6 w-6 text-primary" />
@@ -129,9 +130,9 @@ export default function FeedbackPage() {
                 </div>
             )}
           </AccordionContent>
-        </Card>
+        </AccordionItem>
 
-        <Card as={AccordionItem} value="item-2" className="shadow-md">
+        <AccordionItem value="item-2" className="rounded-lg border bg-card text-card-foreground shadow-md">
           <AccordionTrigger className="p-6 hover:no-underline">
             <div className="flex items-center gap-3">
               <ThumbsUp className="h-6 w-6 text-green-500" />
@@ -141,9 +142,9 @@ export default function FeedbackPage() {
           <AccordionContent className="p-6 pt-0">
             <p className="text-muted-foreground whitespace-pre-wrap">{feedback.correctAnswersSummary}</p>
           </AccordionContent>
-        </Card>
+        </AccordionItem>
 
-        <Card as={AccordionItem} value="item-3" className="shadow-md">
+        <AccordionItem value="item-3" className="rounded-lg border bg-card text-card-foreground shadow-md">
           <AccordionTrigger className="p-6 hover:no-underline">
             <div className="flex items-center gap-3">
               <ThumbsDown className="h-6 w-6 text-red-500" />
@@ -153,9 +154,9 @@ export default function FeedbackPage() {
           <AccordionContent className="p-6 pt-0">
             <p className="text-muted-foreground whitespace-pre-wrap">{feedback.incorrectAnswersSummary}</p>
           </AccordionContent>
-        </Card>
+        </AccordionItem>
 
-        <Card as={AccordionItem} value="item-4" className="shadow-md">
+        <AccordionItem value="item-4" className="rounded-lg border bg-card text-card-foreground shadow-md">
           <AccordionTrigger className="p-6 hover:no-underline">
             <div className="flex items-center gap-3">
               <Lightbulb className="h-6 w-6 text-yellow-500" />
@@ -165,10 +166,10 @@ export default function FeedbackPage() {
           <AccordionContent className="p-6 pt-0">
             <p className="text-muted-foreground whitespace-pre-wrap">{feedback.areasForImprovement}</p>
           </AccordionContent>
-        </Card>
+        </AccordionItem>
         
         {session.transcript && (
-           <Card as={AccordionItem} value="item-5" className="shadow-md">
+           <AccordionItem value="item-5" className="rounded-lg border bg-card text-card-foreground shadow-md">
             <AccordionTrigger className="p-6 hover:no-underline">
               <div className="flex items-center gap-3">
                 <FileText className="h-6 w-6 text-blue-500" />
@@ -180,7 +181,7 @@ export default function FeedbackPage() {
                 <p className="text-sm text-muted-foreground whitespace-pre-wrap">{session.transcript}</p>
               </ScrollArea>
             </AccordionContent>
-          </Card>
+          </AccordionItem>
         )}
       </Accordion>
 
