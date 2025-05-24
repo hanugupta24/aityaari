@@ -12,10 +12,11 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, Info, Video, Mic, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { generateInterviewQuestions, type GenerateInterviewQuestionsInput } from "@/ai/flows/generate-interview-questions";
+// import { generateInterviewQuestions, type GenerateInterviewQuestionsInput } from "@/ai/flows/generate-interview-questions";
 import type { UserProfile, InterviewSession } from "@/types";
 import { doc, setDoc, serverTimestamp, collection, addDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import Link from "next/link";
 
 
 export default function StartInterviewPage() {
@@ -25,10 +26,10 @@ export default function StartInterviewPage() {
   const [duration, setDuration] = useState<"15" | "30" | "45">("30");
   const [permissionsGranted, setPermissionsGranted] = useState(false);
   const [agreedToMonitoring, setAgreedToMonitoring] = useState(false);
-  const [isStartingSession, setIsStartingSession] = useState(false); // Renamed from isLoading for clarity
+  const [isStartingSession, setIsStartingSession] = useState(false);
 
   const handleStartInterview = async () => {
-    if (!user || !userProfile) { // This check should now be mostly redundant due to button's disabled state
+    if (!user || !userProfile) { 
       toast({ title: "Authentication Error", description: "Please ensure you are logged in and your profile is loaded.", variant: "destructive" });
       return;
     }
@@ -40,6 +41,12 @@ export default function StartInterviewPage() {
       toast({ title: "Agreement Required", description: "Please agree to the interview monitoring terms.", variant: "destructive" });
       return;
     }
+     if (!userProfile.role || !userProfile.profileField) {
+      toast({ title: "Profile Incomplete", description: "Please complete your role and profile field in your profile before starting an interview.", variant: "destructive" });
+      router.push("/profile");
+      return;
+    }
+
 
     setIsStartingSession(true);
 
@@ -50,8 +57,9 @@ export default function StartInterviewPage() {
       const initialSessionData: Partial<InterviewSession> = {
         userId: user.uid,
         duration: parseInt(duration) as 15 | 30 | 45,
-        status: "pending", // Status will be updated to 'started' once questions are generated or interview page loads
+        status: "pending", 
         createdAt: new Date().toISOString(), 
+        // Questions will be generated on the interview page or by a backend function
       };
       await setDoc(newInterviewRef, initialSessionData);
       
@@ -78,13 +86,16 @@ export default function StartInterviewPage() {
     }
   };
 
+  const isProfileEssentialDataMissing = userProfile && (!userProfile.role || !userProfile.profileField);
+
   const isButtonDisabled = 
     authLoading || 
     authInitialLoading || 
     isStartingSession || 
     !permissionsGranted || 
     !agreedToMonitoring ||
-    !userProfile || // Ensures profile is loaded before checking limits
+    !userProfile || // Profile not loaded yet
+    isProfileEssentialDataMissing || // Profile loaded but missing key fields
     (userProfile && (userProfile.interviewsTaken || 0) >= 3 && !userProfile.isPlusSubscriber);
 
   return (
@@ -95,6 +106,17 @@ export default function StartInterviewPage() {
           <CardDescription>Choose your preferred interview duration and prepare for a focused session.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {userProfile && isProfileEssentialDataMissing && !authInitialLoading && !authLoading && (
+            <Alert variant="default" className="border-yellow-500 text-yellow-700 dark:border-yellow-400 dark:text-yellow-300">
+              <Info className="h-4 w-4 !text-yellow-500 dark:!text-yellow-400" />
+              <AlertTitle className="text-yellow-700 dark:text-yellow-300">Profile Incomplete</AlertTitle>
+              <AlertDescription className="text-yellow-600 dark:text-yellow-200">
+                Your profile is missing key information like your 'Role' or 'Profile Field'. This is needed for tailored questions. 
+                Please <Link href="/profile" className="font-semibold underline hover:text-yellow-800 dark:hover:text-yellow-100">complete your profile</Link>.
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div>
             <Label className="text-lg font-semibold mb-2 block">Select Interview Duration</Label>
             <RadioGroup defaultValue="30" onValueChange={(value: "15" | "30" | "45") => setDuration(value)} className="flex space-x-4">
@@ -131,7 +153,7 @@ export default function StartInterviewPage() {
                 <p className="text-xs text-muted-foreground">Required for video and conversational questions.</p>
               </div>
               {!permissionsGranted && (
-                <Button variant="outline" size="sm" onClick={requestPermissions} disabled={authLoading || authInitialLoading}>Grant Access</Button>
+                <Button variant="outline" size="sm" onClick={requestPermissions} disabled={authLoading || authInitialLoading || isStartingSession}>Grant Access</Button>
               )}
             </div>
 

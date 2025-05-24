@@ -2,7 +2,7 @@
 "use client";
 
 import type { User as FirebaseUser } from "firebase/auth";
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import { doc, getDoc, DocumentData } from "firebase/firestore";
@@ -15,6 +15,7 @@ interface AuthContextType {
   loading: boolean;
   initialLoading: boolean;
   signOut: () => Promise<void>;
+  refreshUserProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -26,38 +27,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState<boolean>(true);
   const [initialLoading, setInitialLoading] = useState<boolean>(true);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setLoading(true);
-      if (firebaseUser) {
-        setUser(firebaseUser);
-        try {
-          const userDocRef = doc(db, "users", firebaseUser.uid);
-          const userDocSnap = await getDoc(userDocRef);
-          if (userDocSnap.exists()) {
-            const profileData = userDocSnap.data() as UserProfile;
-            setUserProfile(profileData);
-            setIsAdmin(profileData.role === "admin"); // Example admin check
-          } else {
-            setUserProfile(null); // No profile yet
-            setIsAdmin(false);
-          }
-        } catch (error) {
-          console.error("Error fetching user profile:", error);
-          setUserProfile(null);
-          setIsAdmin(false);
-        }
+  const fetchUserProfile = useCallback(async (fbUser: FirebaseUser | null) => {
+    if (!fbUser) {
+      setUserProfile(null);
+      setIsAdmin(false);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const userDocRef = doc(db, "users", fbUser.uid);
+      const userDocSnap = await getDoc(userDocRef);
+      if (userDocSnap.exists()) {
+        const profileData = userDocSnap.data() as UserProfile;
+        setUserProfile(profileData);
+        setIsAdmin(profileData.role === "admin");
       } else {
-        setUser(null);
+        // Profile might not exist yet (e.g., right after signup before profile page)
+        // Or if Firestore rules prevent access, or other error.
+        // Check if it's a new user by looking at metadata (optional refinement)
+        // For now, if doc doesn't exist, profile is null.
         setUserProfile(null);
         setIsAdmin(false);
       }
+    } catch (error) {
+      console.error("Error fetching user profile:", error);
+      setUserProfile(null);
+      setIsAdmin(false);
+    } finally {
       setLoading(false);
-      setInitialLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setInitialLoading(true); // Set initial loading true at the start of auth change
+      setUser(firebaseUser);
+      await fetchUserProfile(firebaseUser);
+      setInitialLoading(false); // Initial load complete after user and profile fetch attempt
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [fetchUserProfile]);
 
   const signOut = async () => {
     setLoading(true);
@@ -68,8 +80,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   };
 
+  const refreshUserProfile = useCallback(async () => {
+    if (user) {
+      await fetchUserProfile(user);
+    }
+  }, [user, fetchUserProfile]);
+
   return (
-    <AuthContext.Provider value={{ user, userProfile, isAdmin, loading, initialLoading, signOut }}>
+    <AuthContext.Provider value={{ user, userProfile, isAdmin, loading, initialLoading, signOut, refreshUserProfile }}>
       {children}
     </AuthContext.Provider>
   );

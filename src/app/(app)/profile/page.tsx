@@ -30,16 +30,15 @@ const profileSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }).max(50),
   profileField: z.string().min(2, { message: "Profile field is required." }).max(100),
   role: z.string().min(2, { message: "Current role is required." }).max(100),
-  company: z.string().max(100).optional(),
+  company: z.string().max(100).optional().nullable(),
   education: z.string().min(2, { message: "Education details are required." }).max(200),
-  phoneNumber: z.string().max(20).optional(),
-  // resume: typeof window === 'undefined' ? z.any().optional() : z.instanceof(FileList).optional(), // For resume upload
+  phoneNumber: z.string().max(20).optional().nullable(),
 });
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
 
 export default function ProfilePage() {
-  const { user, userProfile, loading: authLoading, initialLoading } = useAuth();
+  const { user, userProfile, loading: authLoading, initialLoading, refreshUserProfile } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -58,18 +57,21 @@ export default function ProfilePage() {
   });
 
   useEffect(() => {
-    if (!authLoading && !initialLoading && userProfile) {
-      form.reset({
-        name: userProfile.name || "",
-        profileField: userProfile.profileField || "",
-        role: userProfile.role || "",
-        company: userProfile.company || "",
-        education: userProfile.education || "",
-        phoneNumber: userProfile.phoneNumber || "",
-      });
-      setIsFetchingProfile(false);
-    } else if (!authLoading && !initialLoading && !userProfile) {
-      // User exists but no profile (e.g. fresh signup)
+    if (!initialLoading && !authLoading) { // Check initialLoading and authLoading first
+      if (userProfile) {
+        form.reset({
+          name: userProfile.name || "",
+          profileField: userProfile.profileField || "",
+          role: userProfile.role || "",
+          company: userProfile.company || "",
+          education: userProfile.education || "",
+          phoneNumber: userProfile.phoneNumber || "",
+        });
+      } else {
+        // If userProfile is null but auth is loaded, means no profile or error.
+        // Form will use defaultValues (empty strings).
+        form.reset(form.formState.defaultValues);
+      }
       setIsFetchingProfile(false);
     }
   }, [userProfile, form, authLoading, initialLoading]);
@@ -84,27 +86,33 @@ export default function ProfilePage() {
     try {
       const userDocRef = doc(db, "users", user.uid);
       
-      // Merge with existing data to preserve fields like email, uid, createdAt etc.
+      // Fetch the current profile to ensure we're merging with the latest data
       const currentProfileSnap = await getDoc(userDocRef);
       const currentProfileData = currentProfileSnap.exists() ? currentProfileSnap.data() : {};
 
       const profileDataToSave: Partial<UserProfile> = {
-        ...currentProfileData,
-        ...values,
-        uid: user.uid, // Ensure uid is set
-        email: user.email, // Ensure email is set
+        ...currentProfileData, // Spread existing data (includes fields like interviewsTaken, isPlusSubscriber, createdAt)
+        ...values, // Spread new form values, potentially overwriting name, role etc.
+        uid: user.uid, 
+        email: user.email, 
         updatedAt: new Date().toISOString(),
       };
       
+      // Ensure optional fields that are empty strings from the form are saved as null or omitted if appropriate
+      // For Zod optional strings, empty string is valid. If you want them to be `null` in Firestore:
+      if (profileDataToSave.company === "") profileDataToSave.company = undefined; // Or null
+      if (profileDataToSave.phoneNumber === "") profileDataToSave.phoneNumber = undefined; // Or null
+
       await setDoc(userDocRef, profileDataToSave, { merge: true });
 
       toast({ title: "Profile Updated", description: "Your profile has been successfully updated." });
-      // Optionally, refresh userProfile in AuthContext or trigger a re-fetch
+      await refreshUserProfile(); // Refresh userProfile in AuthContext
     } catch (error: any) {
       console.error("Profile update error:", error);
+      const description = error.message || error.code || "Could not update profile. See browser console for details.";
       toast({
         title: "Update Failed",
-        description: error.message || "Could not update profile.",
+        description: description,
         variant: "destructive",
       });
     } finally {
@@ -112,7 +120,7 @@ export default function ProfilePage() {
     }
   };
 
-  if (authLoading || initialLoading || isFetchingProfile) {
+  if (initialLoading || isFetchingProfile) { // authLoading is covered by initialLoading for the initial fetch
     return <div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin" /></div>;
   }
 
@@ -172,7 +180,7 @@ export default function ProfilePage() {
                 <FormItem>
                   <FormLabel>Current or Target Company (Optional)</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., Google, Acme Corp" {...field} />
+                    <Input placeholder="e.g., Google, Acme Corp" {...field} value={field.value ?? ""} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -199,30 +207,14 @@ export default function ProfilePage() {
                 <FormItem>
                   <FormLabel>Phone Number (Optional)</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., +1 555-123-4567" {...field} />
+                    <Input placeholder="e.g., +1 555-123-4567" {...field} value={field.value ?? ""} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            {/* 
-            <FormField
-              control={form.control}
-              name="resume"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Resume (Optional)</FormLabel>
-                  <FormControl>
-                    <Input type="file" accept=".pdf,.doc,.docx" onChange={(e) => field.onChange(e.target.files)} />
-                  </FormControl>
-                  <FormDescription>Upload your resume (PDF, DOC, DOCX).</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            */}
-            <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
-              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button type="submit" disabled={isSubmitting || authLoading} className="w-full sm:w-auto">
+              {(isSubmitting || authLoading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save Changes
             </Button>
           </form>
