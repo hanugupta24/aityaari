@@ -14,23 +14,42 @@ const firebaseConfig: FirebaseOptions = {
 
 // --- BEGIN DIAGNOSTIC LOG ---
 console.log("Firebase Config being used by the app:", firebaseConfig);
-if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "YOUR_API_KEY") {
+
+if (!firebaseConfig.apiKey) {
   console.error(
-    "Firebase API Key is missing or using a placeholder value. " +
-    "Please ensure NEXT_PUBLIC_FIREBASE_API_KEY is correctly set in your .env file."
+    "CRITICAL: Firebase API Key is MISSING. " +
+    "Please ensure NEXT_PUBLIC_FIREBASE_API_KEY is correctly set in your .env file and the server is restarted."
+  );
+} else if (firebaseConfig.apiKey === "YOUR_API_KEY") {
+  console.error(
+    "CRITICAL: Firebase API Key is still the placeholder 'YOUR_API_KEY'. " +
+    "Please REPLACE 'YOUR_API_KEY' with your actual Firebase Web API Key in the .env file and restart your development server."
   );
 }
+
 if (!firebaseConfig.projectId) {
   console.error(
-    "Firebase Project ID is missing. " +
-    "Please ensure NEXT_PUBLIC_FIREBASE_PROJECT_ID is correctly set in your .env file."
+    "CRITICAL: Firebase Project ID is MISSING. " +
+    "Please ensure NEXT_PUBLIC_FIREBASE_PROJECT_ID is correctly set in your .env file and the server is restarted."
   );
 }
 // --- END DIAGNOSTIC LOG ---
 
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+let app;
+if (!getApps().length) {
+  try {
+    app = initializeApp(firebaseConfig);
+  } catch (error) {
+    console.error("CRITICAL: Firebase initialization failed!", error);
+    // You might want to throw the error or handle it in a way that stops the app
+    // from proceeding if Firebase is essential.
+    throw error;
+  }
+} else {
+  app = getApp();
+}
+
 const auth = getAuth(app);
 const db = getFirestore(app);
 
 export { app, auth, db };
-
