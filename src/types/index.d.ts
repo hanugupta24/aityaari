@@ -13,6 +13,7 @@ export interface UserProfile {
   interviewsTaken?: number;
   isPlusSubscriber?: boolean;
   isAdmin?: boolean; // For admin role
+  updatedAt?: string; // Added from profile page save
 }
 
 export interface InterviewSession {
@@ -31,7 +32,7 @@ export interface GeneratedQuestion {
   id: string;
   text: string;
   stage: "oral" | "technical_written";
-  type: "behavioral" | "technical" | "coding" | "conversational";
+  type: "behavioral" | "technical" | "coding" | "conversational"; // 'conversational' for general oral questions
   answer?: string; // User's answer for this question
   // May include expected answer hints or difficulty
 }
@@ -39,8 +40,9 @@ export interface GeneratedQuestion {
 export interface InterviewFeedback {
   overallScore?: number; // 0-100
   overallFeedback: string;
-  correctAnswersSummary: string;
-  incorrectAnswersSummary: string;
+  correctAnswersSummary: string; // Renamed from correctAnswers
+  incorrectAnswersSummary: string; // Renamed from incorrectAnswers
   areasForImprovement: string;
   // Could also include detailed feedback per question
 }
+
