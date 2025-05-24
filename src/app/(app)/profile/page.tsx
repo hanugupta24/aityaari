@@ -33,7 +33,7 @@ const profileSchema = z.object({
   company: z.string().max(100).optional().nullable(),
   education: z.string().min(2, { message: "Education details are required." }).max(200),
   phoneNumber: z.string().max(20).optional().nullable(),
-  resumeText: z.string().optional().nullable(), // Removed max length constraint
+  resumeText: z.string().optional().nullable(),
 });
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
@@ -103,18 +103,32 @@ export default function ProfilePage() {
     }
   }, [user, userProfile, form, authLoading, initialLoading]);
 
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    form.setValue("resumeText", userProfile?.resumeText || "", { shouldValidate: true }); // Reset to old value or empty
+  const revertToSavedResumeState = () => {
     setSelectedFileName(userProfile?.resumeText ? "Resume on file (upload new to replace)" : null);
-    if (fileInputRef.current) fileInputRef.current.value = ""; // Clear the file input visually
+    form.setValue("resumeText", userProfile?.resumeText || "", { shouldValidate: true });
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""; // Clear the file input so user can re-select
+    }
+  };
 
 
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    
+
     if (!file) {
-      // No file selected, state already reset above
+      // User cancelled file dialog or cleared selection (if browser supports it via UI)
+      // Clear the input's value to allow re-selecting the same file if needed.
+      // Do not change form.resumeText or selectedFileName here, as they might reflect a saved state.
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
       return;
     }
+
+    // A new file has been selected. Prepare for processing.
+    setIsReadingFile(true);
+    setSelectedFileName(null); // Clear current display name while reading new one
+    form.setValue("resumeText", "", {shouldValidate: false}); // Clear form's resume text for the new file
 
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
        toast({
@@ -122,7 +136,8 @@ export default function ProfilePage() {
         description: `Please upload a file smaller than ${MAX_FILE_SIZE_MB}MB. Your file is ${(file.size / (1024*1024)).toFixed(2)}MB.`,
         variant: "destructive",
       });
-      // State already reset, file input cleared.
+      revertToSavedResumeState();
+      setIsReadingFile(false);
       return;
     }
 
@@ -132,13 +147,10 @@ export default function ProfilePage() {
         description: `Please upload a supported file type (${ACCEPT_FILE_EXTENSIONS}). You uploaded: ${file.name} (type: ${file.type || 'unknown'}).`,
         variant: "destructive",
       });
-      // State already reset, file input cleared.
+      revertToSavedResumeState();
+      setIsReadingFile(false);
       return;
     }
-    
-    setIsReadingFile(true);
-    setSelectedFileName(null); // Clear current file name while reading new one
-    form.setValue("resumeText", "", {shouldValidate: false}); // Clear form value while reading
     
     if (['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.type)) {
       toast({
@@ -155,13 +167,14 @@ export default function ProfilePage() {
       setSelectedFileName(file.name);
       setIsReadingFile(false);
       toast({ title: "Resume Content Loaded", description: `Text from ${file.name} has been loaded into the form.`});
+      if (fileInputRef.current) { // Clear input after successful load to allow re-upload of same file
+        fileInputRef.current.value = "";
+      }
     };
     reader.onerror = (e) => {
         console.error("Error reading file:", e);
         toast({ title: "File Read Error", description: "Could not read the resume file content.", variant: "destructive"});
-        form.setValue("resumeText", userProfile?.resumeText || "", { shouldValidate: true }); // Restore old if any
-        setSelectedFileName(userProfile?.resumeText ? "Resume on file (upload new to replace)" : null);
-        if (fileInputRef.current) fileInputRef.current.value = "";
+        revertToSavedResumeState();
         setIsReadingFile(false);
     };
     reader.readAsText(file); 
@@ -196,7 +209,6 @@ export default function ProfilePage() {
         updatedAt: new Date().toISOString(),
       };
       
-      // Ensure optional fields that are empty strings are stored as undefined or not at all
       if (profileDataToSave.company === "") profileDataToSave.company = undefined;
       if (profileDataToSave.phoneNumber === "") profileDataToSave.phoneNumber = undefined;
       if (profileDataToSave.resumeText === null || profileDataToSave.resumeText === "") {
@@ -207,13 +219,9 @@ export default function ProfilePage() {
       await setDoc(userDocRef, profileDataToSave, { merge: true });
 
       toast({ title: "Profile Updated", description: "Your profile has been successfully updated." });
-      await refreshUserProfile(); // Refresh context
+      await refreshUserProfile(); 
       
-      // Update UI based on saved data
       if (values.resumeText) {
-        // If a file was just uploaded and its text is now saved, selectedFileName would be its name.
-        // If it's existing resumeText that was saved, we should indicate it's on file.
-        // For simplicity, if there's resumeText, mark it as "on file".
         setSelectedFileName("Resume on file (upload new to replace)");
       } else {
         setSelectedFileName(null);
@@ -222,7 +230,7 @@ export default function ProfilePage() {
 
     } catch (error: any) {
       console.error("Profile update error:", error);
-      const description = error.message || error.code || "Could not update profile. See browser console for details.";
+      const description = error.code ? `${error.message} (Code: ${error.code})` : error.message || "Could not update profile. See browser console for details.";
       toast({
         title: "Update Failed",
         description: description,
