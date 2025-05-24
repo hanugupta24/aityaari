@@ -8,7 +8,7 @@ export interface UserProfile {
   company?: string;
   education?: string;
   phoneNumber?: string;
-  // resumeUrl?: string; // Optional resume upload
+  resumeText?: string; // Optional resume content as text
   createdAt: string;
   interviewsTaken?: number;
   isPlusSubscriber?: boolean;

@@ -10,7 +10,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, Info, Video, Mic, AlertTriangle, UserX } from "lucide-react";
+import { Loader2, Info, Video, Mic, AlertTriangle, UserX, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { generateInterviewQuestions, type GenerateInterviewQuestionsInput } from "@/ai/flows/generate-interview-questions";
 import type { UserProfile, InterviewSession, GeneratedQuestion } from "@/types";
@@ -20,7 +20,7 @@ import Link from "next/link";
 
 
 export default function StartInterviewPage() {
-  const { user, userProfile, loading: authLoading, initialLoading: authInitialLoading } = useAuth();
+  const { user, userProfile, loading: authLoading, initialLoading: authInitialLoading, refreshUserProfile } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const [duration, setDuration] = useState<"15" | "30" | "45">("30");
@@ -56,11 +56,12 @@ export default function StartInterviewPage() {
         profileField: userProfile.profileField,
         role: userProfile.role,
         interviewDuration: duration,
+        resumeText: userProfile.resumeText || undefined, // Pass resume text if available
       };
       const questionGenOutput = await generateInterviewQuestions(questionGenInput);
 
       if (!questionGenOutput.questions || questionGenOutput.questions.length === 0) {
-        toast({ title: "Question Generation Failed", description: "Could not generate interview questions. Please try again.", variant: "destructive" });
+        toast({ title: "Question Generation Failed", description: "Could not generate interview questions. Please try again or check your profile details.", variant: "destructive" });
         setIsStartingSession(false);
         return;
       }
@@ -73,9 +74,9 @@ export default function StartInterviewPage() {
         id: interviewId,
         userId: user.uid,
         duration: parseInt(duration) as 15 | 30 | 45,
-        status: "questions_generated", // Status indicating questions are ready
+        status: "questions_generated", 
         createdAt: new Date().toISOString(),
-        questions: questionGenOutput.questions as GeneratedQuestion[], // Store structured questions
+        questions: questionGenOutput.questions as GeneratedQuestion[], 
       };
       await setDoc(newInterviewRef, initialSessionData);
       
@@ -84,7 +85,7 @@ export default function StartInterviewPage() {
 
     } catch (error: any) {
       console.error("Error starting interview:", error);
-      toast({ title: "Failed to Start Interview", description: error.message || "An unexpected error occurred while generating questions or setting up the session.", variant: "destructive" });
+      toast({ title: "Failed to Start Interview", description: error.message || "An unexpected error occurred.", variant: "destructive" });
       setIsStartingSession(false);
     }
   };
@@ -92,7 +93,7 @@ export default function StartInterviewPage() {
   const requestPermissions = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      stream.getTracks().forEach(track => track.stop()); // Stop tracks immediately after permission grant
+      stream.getTracks().forEach(track => track.stop()); 
       setPermissionsGranted(true);
       toast({ title: "Permissions Granted", description: "Camera and microphone access enabled." });
     } catch (err) {
@@ -102,8 +103,15 @@ export default function StartInterviewPage() {
     }
   };
 
+  useEffect(() => {
+    // Check if user profile exists when auth state is resolved
+    if (!authInitialLoading && user && !userProfile) {
+        refreshUserProfile(); // Attempt to refresh profile if not loaded initially
+    }
+  }, [authInitialLoading, user, userProfile, refreshUserProfile]);
+
   const isProfileEssentialDataMissing = userProfile && (!userProfile.role || !userProfile.profileField);
-  const isProfileNotLoaded = !authInitialLoading && user && !userProfile;
+  const isProfileNotLoadedAndAuthChecked = !authInitialLoading && user && !userProfile && !authLoading;
   const interviewLimitReached = userProfile && (userProfile.interviewsTaken || 0) >= 3 && !userProfile.isPlusSubscriber;
 
   const isButtonDisabled = 
@@ -112,8 +120,7 @@ export default function StartInterviewPage() {
     isStartingSession || 
     !permissionsGranted || 
     !agreedToMonitoring ||
-    isProfileNotLoaded || 
-    !userProfile || 
+    !userProfile || // Disable if profile is generally not loaded
     isProfileEssentialDataMissing || 
     interviewLimitReached;
 
@@ -131,15 +138,16 @@ export default function StartInterviewPage() {
               <p>Loading your information...</p>
             </div>
           )}
-
-          {!authInitialLoading && user && !userProfile && ( // Profile fetch might have failed or new user
-            <Alert variant="destructive">
+          
+          {isProfileNotLoadedAndAuthChecked && (
+             <Alert variant="destructive">
               <UserX className="h-4 w-4" />
-              <AlertTitle>Profile Not Found or Incomplete</AlertTitle>
+              <AlertTitle>Profile Not Loaded</AlertTitle>
               <AlertDescription>
-                We couldn't load your complete profile data, or it's missing essential fields (like Role and Profile Field). Please 
-                <Link href="/profile" className="font-semibold underline hover:text-destructive-foreground/80"> visit your profile page</Link> to create or complete it. 
-                This information is crucial for tailoring your interview questions.
+                We couldn't load your profile data. Please ensure you have created a profile. 
+                <Link href="/profile" className="font-semibold underline hover:text-destructive-foreground/80 ml-1">
+                  Go to Profile
+                </Link>
               </AlertDescription>
             </Alert>
           )}
@@ -154,6 +162,16 @@ export default function StartInterviewPage() {
               </AlertDescription>
             </Alert>
           )}
+          
+          <Alert>
+            <FileText className="h-4 w-4" />
+            <AlertTitle>Personalized Questions</AlertTitle>
+            <AlertDescription>
+              Interview questions will be based on your targeted role and profile field. Adding your resume in the 
+              <Link href="/profile" className="font-semibold underline hover:text-foreground/80"> profile section</Link> can further tailor the questions to your experience, making your practice more fruitful!
+            </AlertDescription>
+          </Alert>
+
 
           <div>
             <Label className="text-lg font-semibold mb-2 block">Select Interview Duration</Label>
@@ -182,9 +200,9 @@ export default function StartInterviewPage() {
 
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Permissions & Agreements</h3>
-            <div className={`flex items-center space-x-3 p-3 border rounded-md ${permissionsGranted ? 'border-green-500' : 'border-destructive'}`}>
+            <div className={`flex items-center space-x-3 p-3 border rounded-md ${permissionsGranted ? 'border-green-500 bg-green-500/10' : 'border-destructive bg-destructive/10'}`}>
               <div className="flex-shrink-0">
-                {permissionsGranted ? <Video className="h-6 w-6 text-green-500" /> : <Video className="h-6 w-6 text-destructive" />}
+                {permissionsGranted ? <Video className="h-6 w-6 text-green-600" /> : <Video className="h-6 w-6 text-destructive" />}
               </div>
               <div className="flex-1">
                 <p className="text-sm font-medium">Camera & Microphone Access</p>
@@ -202,7 +220,7 @@ export default function StartInterviewPage() {
                   I agree to the interview monitoring terms and conditions.
                 </Label>
                 <p className="text-sm text-muted-foreground">
-                  This includes recording for quality and feedback.
+                  This includes recording for quality and feedback. Your data is handled as per our privacy policy.
                 </p>
               </div>
             </div>
@@ -225,8 +243,8 @@ export default function StartInterviewPage() {
             disabled={isButtonDisabled}
             aria-label={`Start ${duration}-Minute Interview ${isButtonDisabled ? '(Disabled)' : ''}`}
           >
-            {(authLoading || authInitialLoading || isStartingSession) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Start {duration}-Minute Interview
+            {(isStartingSession) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {authLoading || authInitialLoading ? 'Loading Profile...' : `Start ${duration}-Minute Interview`}
           </Button>
         </CardFooter>
       </Card>

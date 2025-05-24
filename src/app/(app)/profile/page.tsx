@@ -33,6 +33,7 @@ const profileSchema = z.object({
   company: z.string().max(100).optional().nullable(),
   education: z.string().min(2, { message: "Education details are required." }).max(200),
   phoneNumber: z.string().max(20).optional().nullable(),
+  resumeText: z.string().max(15000, {message: "Resume text should be less than 15000 characters."}).optional().nullable(), // Max 15k chars for resume
 });
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
@@ -53,6 +54,7 @@ export default function ProfilePage() {
       company: "",
       education: "",
       phoneNumber: "",
+      resumeText: "",
     },
   });
 
@@ -67,6 +69,7 @@ export default function ProfilePage() {
           company: userProfile.company || "",
           education: userProfile.education || "",
           phoneNumber: userProfile.phoneNumber || "",
+          resumeText: userProfile.resumeText || "",
         });
       } else {
         // User is loaded, but no userProfile (could be new user or fetch error)
@@ -104,6 +107,8 @@ export default function ProfilePage() {
       
       if (profileDataToSave.company === "") profileDataToSave.company = undefined;
       if (profileDataToSave.phoneNumber === "") profileDataToSave.phoneNumber = undefined;
+      if (profileDataToSave.resumeText === "") profileDataToSave.resumeText = undefined;
+
 
       await setDoc(userDocRef, profileDataToSave, { merge: true });
 
@@ -198,6 +203,25 @@ export default function ProfilePage() {
                     <Textarea placeholder="e.g., B.S. in Computer Science from Example University" {...field} />
                   </FormControl>
                   <FormDescription>Your highest relevant education.</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+             <FormField
+              control={form.control}
+              name="resumeText"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Resume (Optional)</FormLabel>
+                  <FormControl>
+                    <Textarea 
+                      placeholder="Paste your resume content here. This will help in generating more personalized interview questions." 
+                      {...field} 
+                      value={field.value ?? ""}
+                      rows={10} 
+                    />
+                  </FormControl>
+                  <FormDescription>Pasting your resume can significantly improve question relevance.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
