@@ -8,27 +8,82 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { PlusCircle, BarChartHorizontalBig, History, Loader2, AlertTriangle } from "lucide-react";
 import Image from "next/image";
-import { db } from "@/lib/firebase";
-import { collection, query, where, orderBy, getDocs, Timestamp, limit } from "firebase/firestore";
+// import { db } from "@/lib/firebase"; // No longer needed for static data
+// import { collection, query, where, orderBy, getDocs, Timestamp, limit } from "firebase/firestore"; // No longer needed
 import type { InterviewSession } from "@/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 
+// Mock data for past interviews
+const mockPastInterviews: InterviewSession[] = [
+  {
+    id: "mock1",
+    userId: "mockUser",
+    duration: 30,
+    status: "completed",
+    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), // 2 days ago
+    questions: [
+      { id: "q1", text: "Tell me about yourself.", stage: "oral", type: "conversational", answer: "I am a..." },
+      { id: "q2", text: "Why this role?", stage: "oral", type: "conversational", answer: "Because..." },
+    ],
+    feedback: {
+      overallScore: 85,
+      overallFeedback: "Good performance overall, clear communication.",
+      correctAnswersSummary: "Answered behavioral questions well.",
+      incorrectAnswersSummary: "Could elaborate more on technical examples.",
+      areasForImprovement: "Practice STAR method for technical scenarios.",
+    },
+    transcript: "AI: Tell me about yourself.\nYou: I am a...\nAI: Why this role?\nYou: Because..."
+  },
+  {
+    id: "mock2",
+    userId: "mockUser",
+    duration: 15,
+    status: "completed",
+    createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), // 5 days ago
+    questions: [
+       { id: "q1", text: "Describe a challenging project.", stage: "oral", type: "behavioral", answer: "It was..." },
+    ],
+    feedback: {
+      overallScore: 78,
+      overallFeedback: "Solid answers, good examples provided.",
+      correctAnswersSummary: "Provided a good example for the challenge.",
+      incorrectAnswersSummary: "A bit hesitant at the start.",
+      areasForImprovement: "Speak with more confidence.",
+    },
+  },
+];
+
+
 export default function DashboardPage() {
   const { user, userProfile, loading: authLoading, initialLoading: authInitialLoading, refreshUserProfile } = useAuth();
   const [fetchedPastInterviews, setFetchedPastInterviews] = useState<InterviewSession[]>([]);
-  const [interviewsLoading, setInterviewsLoading] = useState<boolean>(false); // Default to false
+  const [interviewsLoading, setInterviewsLoading] = useState<boolean>(false); // Default to false for static data
   const [interviewsError, setInterviewsError] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
     if (user) {
-      // This refreshes the user profile data (like interviewsTaken count)
-      // It doesn't directly refetch the interviews list here.
       refreshUserProfile();
     }
   }, [user, refreshUserProfile]);
 
+  // UseEffect to set static mock data for past interviews
+  useEffect(() => {
+    setInterviewsLoading(true);
+    // Simulate a short delay as if fetching data
+    const timer = setTimeout(() => {
+      setFetchedPastInterviews(mockPastInterviews);
+      setInterviewsLoading(false);
+      setInterviewsError(null); // Clear any previous errors
+    }, 500); // 0.5 second delay
+
+    return () => clearTimeout(timer);
+  }, []); // Empty dependency array means this runs once on mount
+
+
+  /*
+  // --- ORIGINAL FIRESTORE FETCHING LOGIC - COMMENTED OUT ---
   useEffect(() => {
     const fetchInterviews = async () => {
       if (!user) {
@@ -38,8 +93,8 @@ export default function DashboardPage() {
         return;
       }
 
-      setInterviewsLoading(true); 
-      setInterviewsError(null); 
+      setInterviewsLoading(true);
+      setInterviewsError(null);
 
       try {
         const interviewsRef = collection(db, "users", user.uid, "interviews");
@@ -56,23 +111,19 @@ export default function DashboardPage() {
         });
         setFetchedPastInterviews(interviews);
       } catch (error: any) {
-        // Ensure loading is set to false before setting the error
-        setInterviewsLoading(false); 
-
+        setInterviewsLoading(false);
         const errorMessage = error.message || "Failed to load past interviews. This might be due to a missing database index. Please check Firebase console if this persists.";
         setInterviewsError(errorMessage);
-        setFetchedPastInterviews([]); // Clear any potentially stale data
+        setFetchedPastInterviews([]);
         
-        console.error("Error fetching past interviews:", error); 
+        console.error("Error fetching past interviews:", error);
         toast({
           title: "Error Loading Interviews",
           description: "Could not fetch past interview data. If this issue continues, a database index might be required. See console for details or the message on the dashboard.",
           variant: "destructive",
         });
       } finally {
-        // Ensure loading is false if it hasn't been set by the catch block
-        // (e.g. on successful fetch)
-        if (interviewsLoading) { // Check if it's still true (i.e., no error caught that set it to false)
+        if (interviewsLoading) { 
            setInterviewsLoading(false);
         }
       }
@@ -85,7 +136,9 @@ export default function DashboardPage() {
       setInterviewsError(null);
       setFetchedPastInterviews([]);
     }
-  }, [user, authLoading, authInitialLoading, toast]); // Added toast back as it was used in catch
+  }, [user, authLoading, authInitialLoading, toast, refreshUserProfile]); // refreshUserProfile was in original, kept if it was intentional
+  // --- END OF ORIGINAL FIRESTORE FETCHING LOGIC ---
+  */
 
   if (authInitialLoading || authLoading) {
     return (
@@ -163,7 +216,7 @@ export default function DashboardPage() {
           <CardTitle className="text-xl flex items-center gap-2">
             <History className="h-5 w-5" /> Past Interviews
           </CardTitle>
-          <CardDescription>Review your previous interview performance and feedback.</CardDescription>
+          <CardDescription>Review your previous interview performance and feedback. (Displaying static data)</CardDescription>
         </CardHeader>
         <CardContent>
           {interviewsLoading ? (
@@ -171,24 +224,40 @@ export default function DashboardPage() {
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <p className="mt-2 text-muted-foreground">Loading past interviews...</p>
             </div>
-          ) : interviewsError ? (
+          ) : interviewsError ? ( // This error state will likely not be hit with static data unless you simulate an error
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
               <AlertTitle>Failed to Load Past Interviews</AlertTitle>
               <AlertDescription>
                 {interviewsError}
-                <br />
-                {interviewsError.includes("query requires an index") && (
-                  <>
-                    <strong className="my-2 block">This usually means a Firestore index is required.</strong>
-                    <Link href="https://console.firebase.google.com/v1/r/project/tyaari-e0307/firestore/indexes?create_composite=Ck9wcm9qZWN0cy90eWFhcmktZTAzMDcvZGF0YWJhc2VzLyhkZWZhdWx0KS9jb2xsZWN0aW9uR3JvdXBzL2ludGVydmlld3MvaW5kZXhlcy9fEAEaCgoGc3RhdHVzEAEaDQoJY3JlYXRlZEF0EAIaDAoIX19uYW1lX18QAg" target="_blank" rel="noopener noreferrer" className="underline hover:text-destructive-foreground">
-                      Click here to create the required Firestore index in the Firebase Console.
-                    </Link>
-                    This process may take a few minutes to build after creation. Please ensure the index status is "Enabled".
-                  </>
-                )}
               </AlertDescription>
             </Alert>
+          ) :
+          fetchedPastInterviews.length > 0 ? (
+            <div className="space-y-4">
+              {fetchedPastInterviews.map((interview) => (
+                <Card key={interview.id} className="hover:shadow-md transition-shadow">
+                  <CardHeader>
+                    <CardTitle className="text-lg">Interview on {new Date(interview.createdAt).toLocaleDateString()}</CardTitle>
+                    <CardDescription>
+                      Duration: {interview.duration} mins | Score: {interview.feedback?.overallScore !== undefined ? `${interview.feedback.overallScore}%` : "N/A"}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground truncate">
+                      {interview.feedback?.overallFeedback ?
+                        (interview.feedback.overallFeedback.substring(0,150) + (interview.feedback.overallFeedback.length > 150 ? "..." : ""))
+                        : "Feedback not available for mock data."}
+                    </p>
+                  </CardContent>
+                  <CardFooter>
+                    <Link href={`/feedback/${interview.id}`} passHref>
+                      <Button variant="outline" size="sm">View Detailed Feedback</Button>
+                    </Link>
+                  </CardFooter>
+                </Card>
+              ))}
+            </div>
           ) :  (
             <div className="text-center py-10">
               <Image
@@ -199,7 +268,7 @@ export default function DashboardPage() {
                 className="mx-auto mb-4 rounded-md"
                 data-ai-hint="empty state illustration"
               />
-              <p className="text-muted-foreground mb-4">You haven't completed any interviews yet, or we couldn't load them.</p>
+              <p className="text-muted-foreground mb-4">You haven't completed any interviews yet (or showing static data).</p>
               <Link href="/interview/start" passHref>
                 <Button>Start Your First Interview</Button>
               </Link>
@@ -210,5 +279,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    
