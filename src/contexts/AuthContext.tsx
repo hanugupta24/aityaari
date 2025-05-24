@@ -12,8 +12,8 @@ interface AuthContextType {
   user: FirebaseUser | null;
   userProfile: UserProfile | null;
   isAdmin: boolean;
-  loading: boolean;
-  initialLoading: boolean;
+  loading: boolean; // For user profile fetching specifically
+  initialLoading: boolean; // For initial auth state resolution
   signOut: () => Promise<void>;
   refreshUserProfile: () => Promise<void>;
 }
@@ -24,65 +24,90 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [initialLoading, setInitialLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(false); // Profile fetch loading
+  const [initialLoading, setInitialLoading] = useState<boolean>(true); // Auth state loading
 
   const fetchUserProfile = useCallback(async (fbUser: FirebaseUser | null) => {
     if (!fbUser) {
+      console.log("AuthContext: fetchUserProfile called with no Firebase user. Clearing profile.");
       setUserProfile(null);
       setIsAdmin(false);
-      setLoading(false);
+      // setLoading(false); // This loading is for profile fetch, managed below
       return;
     }
 
-    setLoading(true);
+    console.log(`AuthContext: Attempting to fetch profile for UID: ${fbUser.uid}`);
+    setLoading(true); // Indicate profile fetch is starting
     try {
       const userDocRef = doc(db, "users", fbUser.uid);
       const userDocSnap = await getDoc(userDocRef);
+      console.log(`AuthContext: getDoc completed for UID: ${fbUser.uid}. Exists: ${userDocSnap.exists()}`);
+
       if (userDocSnap.exists()) {
         const profileData = userDocSnap.data() as UserProfile;
         setUserProfile(profileData);
         setIsAdmin(profileData.role === "admin");
+        console.log(`AuthContext: Profile loaded for UID: ${fbUser.uid}`, profileData);
       } else {
-        // Profile might not exist yet (e.g., right after signup before profile page)
-        // Or if Firestore rules prevent access, or other error.
-        // Check if it's a new user by looking at metadata (optional refinement)
-        // For now, if doc doesn't exist, profile is null.
         setUserProfile(null);
         setIsAdmin(false);
+        console.warn(`AuthContext: User profile document not found for UID: ${fbUser.uid}`);
       }
-    } catch (error) {
-      console.error("Error fetching user profile:", error);
+    } catch (error: any) {
+      console.error(`AuthContext: Error fetching user profile for UID: ${fbUser.uid}. Message: ${error.message}, Code: ${error.code}`, error);
       setUserProfile(null);
       setIsAdmin(false);
     } finally {
-      setLoading(false);
+      console.log(`AuthContext: fetchUserProfile finally block for UID: ${fbUser.uid}. Setting profile loading to false.`);
+      setLoading(false); // Indicate profile fetch is complete (success or fail)
     }
   }, []);
 
   useEffect(() => {
+    console.log("AuthContext: Mounting and setting up onAuthStateChanged listener.");
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setInitialLoading(true); // Set initial loading true at the start of auth change
+      console.log("AuthContext: onAuthStateChanged triggered. User:", firebaseUser ? firebaseUser.uid : 'null');
+      setInitialLoading(true); // Mark that we are processing auth state
       setUser(firebaseUser);
-      await fetchUserProfile(firebaseUser);
-      setInitialLoading(false); // Initial load complete after user and profile fetch attempt
+
+      if (firebaseUser) {
+        console.log("AuthContext: Firebase user detected, calling fetchUserProfile.");
+        await fetchUserProfile(firebaseUser);
+        console.log("AuthContext: fetchUserProfile call completed (or errored).");
+      } else {
+        console.log("AuthContext: No Firebase user. Clearing profile, admin status, and profile loading state.");
+        setUserProfile(null);
+        setIsAdmin(false);
+        setLoading(false); // Ensure profile-specific loading is also false
+      }
+      setInitialLoading(false); // Mark auth state processing as complete
+      console.log("AuthContext: initialLoading set to false. Current states: user loaded:", !!user, "profile loaded:", !!userProfile, "profile fetch loading:", loading);
     });
 
-    return () => unsubscribe();
-  }, [fetchUserProfile]);
+    return () => {
+      console.log("AuthContext: Unmounting and unsubscribing from onAuthStateChanged.");
+      unsubscribe();
+    };
+  }, [fetchUserProfile]); // user, loading, initialLoading removed from deps as they cause loops or are set inside
 
   const signOut = async () => {
-    setLoading(true);
+    console.log("AuthContext: signOut called.");
+    setLoading(true); // Can indicate a general loading state for sign out
     await firebaseSignOut(auth);
     setUser(null);
     setUserProfile(null);
     setIsAdmin(false);
     setLoading(false);
+    setInitialLoading(false); // After sign out, initial auth state is resolved (no user)
+    console.log("AuthContext: SignOut complete.");
   };
 
   const refreshUserProfile = useCallback(async () => {
     if (user) {
+      console.log("AuthContext: refreshUserProfile called for user:", user.uid);
       await fetchUserProfile(user);
+    } else {
+      console.log("AuthContext: refreshUserProfile called but no user is logged in.");
     }
   }, [user, fetchUserProfile]);
 

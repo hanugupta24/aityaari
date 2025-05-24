@@ -33,7 +33,7 @@ const mockPastInterviews: InterviewSession[] = [
       incorrectAnswersSummary: "Could elaborate more on technical examples.",
       areasForImprovement: "Practice STAR method for technical scenarios.",
     },
-    transcript: "AI: Tell me about yourself.\nYou: I am a...\nAI: Why this role?\nYou: Because..."
+    transcript: "AI: Tell me about yourself.\\nYou: I am a...\\nAI: Why this role?\\nYou: Because..."
   },
   {
     id: "mock2",
@@ -58,89 +58,39 @@ const mockPastInterviews: InterviewSession[] = [
 export default function DashboardPage() {
   const { user, userProfile, loading: authLoading, initialLoading: authInitialLoading, refreshUserProfile } = useAuth();
   const [fetchedPastInterviews, setFetchedPastInterviews] = useState<InterviewSession[]>([]);
-  const [interviewsLoading, setInterviewsLoading] = useState<boolean>(false); // Default to false for static data
+  const [interviewsLoading, setInterviewsLoading] = useState<boolean>(false);
   const [interviewsError, setInterviewsError] = useState<string | null>(null);
   const { toast } = useToast();
 
+  console.log("DashboardPage: authInitialLoading:", authInitialLoading, "authLoading (profile fetch):", authLoading, "user:", !!user, "userProfile:", !!userProfile);
+
   useEffect(() => {
-    if (user) {
+    // This effect is for refreshing the user profile if the user object is available
+    // and user.uid specifically, to avoid re-runs if user object identity changes but uid is same
+    if (user?.uid) {
+      console.log("DashboardPage: User detected, attempting to refresh profile once on mount if needed.");
       refreshUserProfile();
     }
-  }, [user, refreshUserProfile]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid]); // refreshUserProfile is memoized, user.uid ensures it runs when actual user identity changes
 
   // UseEffect to set static mock data for past interviews
   useEffect(() => {
+    console.log("DashboardPage: Setting mock past interviews data.");
     setInterviewsLoading(true);
-    // Simulate a short delay as if fetching data
     const timer = setTimeout(() => {
       setFetchedPastInterviews(mockPastInterviews);
       setInterviewsLoading(false);
-      setInterviewsError(null); // Clear any previous errors
-    }, 500); // 0.5 second delay
+      setInterviewsError(null);
+      console.log("DashboardPage: Mock past interviews data set.");
+    }, 300); // Reduced delay for mock data
 
     return () => clearTimeout(timer);
-  }, []); // Empty dependency array means this runs once on mount
+  }, []);
 
 
-  /*
-  // --- ORIGINAL FIRESTORE FETCHING LOGIC - COMMENTED OUT ---
-  useEffect(() => {
-    const fetchInterviews = async () => {
-      if (!user) {
-        setFetchedPastInterviews([]);
-        setInterviewsLoading(false);
-        setInterviewsError(null);
-        return;
-      }
-
-      setInterviewsLoading(true);
-      setInterviewsError(null);
-
-      try {
-        const interviewsRef = collection(db, "users", user.uid, "interviews");
-        const q = query(interviewsRef, where("status", "==", "completed"), orderBy("createdAt", "desc"), limit(10));
-        const querySnapshot = await getDocs(q);
-        const interviews: InterviewSession[] = [];
-        querySnapshot.forEach((doc) => {
-          const data = doc.data() as Omit<InterviewSession, 'id' | 'createdAt'> & { createdAt: Timestamp | string };
-          interviews.push({
-            ...data,
-            id: doc.id,
-            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt
-          } as InterviewSession);
-        });
-        setFetchedPastInterviews(interviews);
-      } catch (error: any) {
-        setInterviewsLoading(false);
-        const errorMessage = error.message || "Failed to load past interviews. This might be due to a missing database index. Please check Firebase console if this persists.";
-        setInterviewsError(errorMessage);
-        setFetchedPastInterviews([]);
-        
-        console.error("Error fetching past interviews:", error);
-        toast({
-          title: "Error Loading Interviews",
-          description: "Could not fetch past interview data. If this issue continues, a database index might be required. See console for details or the message on the dashboard.",
-          variant: "destructive",
-        });
-      } finally {
-        if (interviewsLoading) { 
-           setInterviewsLoading(false);
-        }
-      }
-    };
-
-    if (!authInitialLoading && !authLoading && user) {
-      fetchInterviews();
-    } else if (!authInitialLoading && !authLoading && !user) {
-      setInterviewsLoading(false);
-      setInterviewsError(null);
-      setFetchedPastInterviews([]);
-    }
-  }, [user, authLoading, authInitialLoading, toast, refreshUserProfile]); // refreshUserProfile was in original, kept if it was intentional
-  // --- END OF ORIGINAL FIRESTORE FETCHING LOGIC ---
-  */
-
-  if (authInitialLoading || authLoading) {
+  if (authInitialLoading) {
+    console.log("DashboardPage: Rendering initial auth loading state.");
     return (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-100px)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -149,15 +99,17 @@ export default function DashboardPage() {
     );
   }
 
-  if (!user || !userProfile) {
+  // After initial auth, check if user object exists.
+  // authLoading refers to the profile fetching state.
+  if (!user) {
+    console.log("DashboardPage: No user authenticated after initial load. Showing auth error.");
     return (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-100px)]">
         <Alert variant="destructive" className="max-w-md">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
+          <AlertTitle>Authentication Error</AlertTitle>
           <AlertDescription>
-            Could not load your user profile. Please try logging out and logging back in.
-            If the problem persists, contact support.
+            Could not verify your login status. Please try logging out and logging back in.
           </AlertDescription>
         </Alert>
          <Link href="/login" className="mt-4">
@@ -167,6 +119,41 @@ export default function DashboardPage() {
     );
   }
 
+  // User is authenticated, now check if profile is loading or failed to load
+  if (authLoading) { // This 'authLoading' is specifically for the profile fetch
+    console.log("DashboardPage: User authenticated, profile is loading.");
+     return (
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-100px)]">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="mt-4 text-muted-foreground">Loading your profile...</p>
+      </div>
+    );
+  }
+
+  if (!userProfile) {
+    console.log("DashboardPage: User authenticated, but profile not loaded. Showing profile error.");
+    return (
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-100px)]">
+        <Alert variant="destructive" className="max-w-md">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Profile Loading Error</AlertTitle>
+          <AlertDescription>
+            Could not load your user profile. This might be due to a connection issue or if the profile hasn't been created yet.
+            Please ensure your internet connection is stable and Firebase services are correctly configured for this project.
+            You can try to <Button variant="link" className="p-0 h-auto inline" onClick={refreshUserProfile}>refresh</Button> or
+            <Link href="/profile" className="font-semibold underline hover:text-destructive-foreground/80 mx-1">visit your profile page</Link> to create/update it.
+            If the problem persists, contact support.
+          </AlertDescription>
+        </Alert>
+         <Link href="/login" className="mt-4"> {/* Changed to /login, implies re-auth might help */}
+          <Button variant="outline">Logout and Login Again</Button>
+        </Link>
+      </div>
+    );
+  }
+
+  // If we reach here, user and userProfile are loaded.
+  console.log("DashboardPage: Rendering main content with userProfile:", userProfile);
   const interviewsRemaining = userProfile ? Math.max(0, 3 - (userProfile.interviewsTaken || 0)) : 3;
 
   return (
@@ -216,7 +203,7 @@ export default function DashboardPage() {
           <CardTitle className="text-xl flex items-center gap-2">
             <History className="h-5 w-5" /> Past Interviews
           </CardTitle>
-          <CardDescription>Review your previous interview performance and feedback. (Displaying static data)</CardDescription>
+          <CardDescription>Review your previous interview performance and feedback. (Displaying static mock data)</CardDescription>
         </CardHeader>
         <CardContent>
           {interviewsLoading ? (
@@ -224,12 +211,13 @@ export default function DashboardPage() {
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <p className="mt-2 text-muted-foreground">Loading past interviews...</p>
             </div>
-          ) : interviewsError ? ( // This error state will likely not be hit with static data unless you simulate an error
+          ) : interviewsError ? ( 
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
               <AlertTitle>Failed to Load Past Interviews</AlertTitle>
               <AlertDescription>
                 {interviewsError}
+                This app is currently configured to show static mock data for past interviews. If you are expecting live data, please check the Firestore setup and code.
               </AlertDescription>
             </Alert>
           ) :
@@ -279,3 +267,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
