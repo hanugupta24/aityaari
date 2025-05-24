@@ -26,6 +26,7 @@ declare global {
   interface Window {
     SpeechRecognition: any;
     webkitSpeechRecognition: any;
+    speechSynthesis: SpeechSynthesis;
   }
 }
 
@@ -45,18 +46,19 @@ export default function InterviewPage() {
   const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
   const [isEndingInterview, setIsEndingInterview] = useState(false);
   const [transcript, setTranscript] = useState<string[]>([]);
-  const [isAIDictating, setIsAIDictating] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
-  const dictationTimerRef = useRef<NodeJS.Timeout | null>(null);
-
 
   // Speech Recognition State
   const [isListening, setIsListening] = useState(false);
   const [speechRecognitionSupported, setSpeechRecognitionSupported] = useState(false);
   const [speechError, setSpeechError] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null); // SpeechRecognition instance
+
+  // AI Speech Synthesis State
+  const [isAISpeaking, setIsAISpeaking] = useState(false);
+
 
   const stopMediaTracks = useCallback(() => {
     if (mediaStreamRef.current) {
@@ -73,9 +75,16 @@ export default function InterviewPage() {
   
   const stopSpeechRecognition = useCallback(() => {
     if (recognitionRef.current) {
-      recognitionRef.current.stop(); // This should trigger 'onend'
+      recognitionRef.current.stop(); 
     }
-    setIsListening(false); // Force set to false for immediate UI update
+    setIsListening(false); 
+  }, []);
+
+  const cancelSpeechSynthesis = useCallback(() => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      setIsAISpeaking(false); // Ensure UI reflects stoppage
+      window.speechSynthesis.cancel();
+    }
   }, []);
 
 
@@ -107,6 +116,7 @@ export default function InterviewPage() {
 
         if (data.status === "completed" || data.status === "cancelled") {
           toast({ title: "Interview Ended", description: "This interview session is no longer active."});
+          cancelSpeechSynthesis();
           stopMediaTracks();
           stopSpeechRecognition();
           router.push("/dashboard");
@@ -119,18 +129,19 @@ export default function InterviewPage() {
             .sort((a, b) => (parseInt(a.id.substring(1)) || 0) - (parseInt(b.id.substring(1)) || 0));
           
           setAllQuestions(sortedQuestions);
-          // Update currentQuestionIndex based on the first unanswered question or last question if all answered
           const firstUnansweredIndex = sortedQuestions.findIndex(q => !q.answer);
           setCurrentQuestionIndex(firstUnansweredIndex > -1 ? firstUnansweredIndex : (data.questions.length > 0 ? data.questions.length -1 : 0));
 
         } else {
           toast({ title: "Error", description: "No questions found for this session. Please start a new interview.", variant: "destructive" });
+          cancelSpeechSynthesis();
           stopMediaTracks();
           stopSpeechRecognition();
           router.push("/interview/start");
         }
       } else {
         toast({ title: "Error", description: "Interview session not found.", variant: "destructive" });
+        cancelSpeechSynthesis();
         stopMediaTracks();
         stopSpeechRecognition();
         router.push("/dashboard");
@@ -150,46 +161,58 @@ export default function InterviewPage() {
         toast({ title: "Media Error", description: "Could not access camera/microphone. Please check permissions.", variant: "destructive" });
       });
     
-    // Cleanup function
     return () => {
       unsubscribe();
+      cancelSpeechSynthesis();
       stopMediaTracks();
       stopSpeechRecognition();
-       if (dictationTimerRef.current) {
-        clearTimeout(dictationTimerRef.current);
-      }
     };
-  }, [user, interviewId, router, toast, stopMediaTracks, stopSpeechRecognition]);
+  }, [user, interviewId, router, toast, stopMediaTracks, stopSpeechRecognition, cancelSpeechSynthesis]);
 
   const currentQuestion = allQuestions[currentQuestionIndex];
 
+  // Effect for AI Speech Synthesis
   useEffect(() => {
-    // Clear any existing dictation timer if currentQuestion changes or interview ends
-    if (dictationTimerRef.current) {
-      clearTimeout(dictationTimerRef.current);
-      dictationTimerRef.current = null;
-      // If currentQuestion is changing, we want the new dictation logic to take over, so set isAIDictating to false immediately
-      // unless the new question itself will set it true.
-      setIsAIDictating(false);
+    // Always cancel previous speech if currentQuestion or interview status changes
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
     }
 
     if (currentQuestion && currentQuestion.stage === 'oral' && !currentQuestion.answer && !isEndingInterview) {
-      setIsAIDictating(true); // Show "AI is asking..."
-      dictationTimerRef.current = setTimeout(() => {
-        setIsAIDictating(false); // Hide "AI is asking..." and show question text
-        dictationTimerRef.current = null;
-      }, 2500); // Adjust delay as needed
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        const utterance = new SpeechSynthesisUtterance(currentQuestion.text);
+        utterance.lang = 'en-US';
+        utterance.rate = 0.9; // Adjust rate as needed
+
+        utterance.onstart = () => {
+          setIsAISpeaking(true);
+        };
+        utterance.onend = () => {
+          setIsAISpeaking(false);
+        };
+        utterance.onerror = (event) => {
+          console.error('SpeechSynthesis Error:', event);
+          setIsAISpeaking(false);
+          toast({ title: "AI Voice Error", description: "Could not play AI voice.", variant: "destructive" });
+        };
+        
+        window.speechSynthesis.speak(utterance);
+      } else {
+        // Fallback if speech synthesis is not available: don't show "AI is speaking" indefinitely
+        setIsAISpeaking(false); 
+      }
     } else {
-      setIsAIDictating(false); // Not an oral question needing dictation, or interview ending
+      setIsAISpeaking(false); // Not an oral question requiring speech, or already answered, or interview ending
     }
 
-    // Cleanup timer on component unmount or if dependencies change triggering effect cleanup
+    // Cleanup function for this effect
     return () => {
-      if (dictationTimerRef.current) {
-        clearTimeout(dictationTimerRef.current);
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        setIsAISpeaking(false); // Reset on cleanup
+        window.speechSynthesis.cancel();
       }
     };
-  }, [currentQuestion, isEndingInterview]);
+  }, [currentQuestion, isEndingInterview, toast]);
 
 
   const handleToggleListening = useCallback(() => {
@@ -202,7 +225,7 @@ export default function InterviewPage() {
       if (recognitionRef.current) {
         recognitionRef.current.stop();
       }
-      setIsListening(false); // Immediately update UI
+      setIsListening(false); 
     } else {
       const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!recognitionRef.current) { 
@@ -216,7 +239,7 @@ export default function InterviewPage() {
           setSpeechError(null);
         };
 
-        let currentFinalTranscript = userAnswer; // Start with existing answer if any (e.g. if user stops and restarts)
+        let currentFinalTranscript = ""; 
         recognitionRef.current.onresult = (event: any) => {
           let interimTranscript = '';
           for (let i = event.resultIndex; i < event.results.length; ++i) {
@@ -226,7 +249,7 @@ export default function InterviewPage() {
               interimTranscript += event.results[i][0].transcript;
             }
           }
-          setUserAnswer(currentFinalTranscript + interimTranscript);
+          setUserAnswer(currentFinalTranscript.trim() + (interimTranscript ? ' ' + interimTranscript : ''));
         };
 
         recognitionRef.current.onerror = (event: any) => {
@@ -247,13 +270,15 @@ export default function InterviewPage() {
       setUserAnswer(''); 
       recognitionRef.current.start();
     }
-  }, [isListening, speechRecognitionSupported, toast, userAnswer]);
+  }, [isListening, speechRecognitionSupported, toast]);
 
 
   const handleNextQuestion = async () => {
     if (!session || !allQuestions.length || currentQuestionIndex >= allQuestions.length) return;
     
-    if (isListening) stopSpeechRecognition(); // Stop listening if active for an oral question
+    if (isListening) stopSpeechRecognition();
+    if (isAISpeaking) cancelSpeechSynthesis();
+
     setIsSubmittingAnswer(true);
 
     const updatedQuestions = [...allQuestions];
@@ -283,9 +308,7 @@ export default function InterviewPage() {
 
     if (nextQuestionIndex < allQuestions.length) {
       setCurrentQuestionIndex(nextQuestionIndex);
-      // The useEffect hook dependent on `currentQuestion` will handle dictation for the next question.
     } else {
-      // Call end interview with the latest transcript array
       await handleEndInterview(updatedQuestions, updatedTranscriptArray.join('\n'));
     }
     setIsSubmittingAnswer(false);
@@ -300,6 +323,7 @@ export default function InterviewPage() {
     setIsEndingInterview(true);
     toast({ title: "Interview Complete", description: "Finalizing and analyzing your feedback..." });
 
+    cancelSpeechSynthesis();
     stopSpeechRecognition();
     stopMediaTracks(); 
 
@@ -383,7 +407,6 @@ export default function InterviewPage() {
     );
   }
   
-  // currentQuestion is now defined outside useEffect, so it's available here
   const totalQuestions = allQuestions.length;
   const progress = totalQuestions > 0 ? ((currentQuestionIndex +1) / totalQuestions) * 100 : 0;
   const currentStage = currentQuestion?.stage;
@@ -426,13 +449,13 @@ export default function InterviewPage() {
                 <span className="text-sm text-muted-foreground capitalize">Stage: {currentStage?.replace('_', ' ')} ({currentQuestionType})</span>
             </div>
             <Progress value={progress} className="w-full h-2" />
-            {isAIDictating && currentStage === 'oral' && (
+            {isAISpeaking && currentStage === 'oral' && (
                 <div className="flex items-center text-primary pt-4">
                     <Volume2 className="h-5 w-5 mr-2 animate-pulse" />
                     <p className="text-lg">AI is asking the question...</p>
                 </div>
             )}
-            {(!isAIDictating || currentStage !== 'oral') && currentQuestion && (
+            {(!isAISpeaking || currentStage !== 'oral') && currentQuestion && (
                 <CardDescription className="text-lg pt-4 whitespace-pre-wrap">{currentQuestion.text}</CardDescription>
             )}
           </CardHeader>
@@ -446,9 +469,9 @@ export default function InterviewPage() {
                   <Textarea
                     placeholder={isListening ? "Listening... Your transcribed answer will appear here." : (userAnswer ? userAnswer : "Click the mic to start speaking. Your transcribed answer will be displayed here.")}
                     value={userAnswer}
-                    readOnly // Strictly non-editable for oral questions as content comes from speech-to-text
+                    readOnly 
                     className="text-base min-h-[100px] mb-4 bg-background/70 cursor-not-allowed"
-                    disabled={isSubmittingAnswer || isEndingInterview || isAIDictating}
+                    disabled={isSubmittingAnswer || isEndingInterview || isAISpeaking}
                   />
                   {speechError && <Alert variant="destructive" className="mb-2"><AlertTriangle className="h-4 w-4" /><AlertTitle>Speech Error</AlertTitle><AlertDescription>{speechError}</AlertDescription></Alert>}
                 </div>
@@ -456,11 +479,11 @@ export default function InterviewPage() {
                     <Button 
                         variant="outline" 
                         onClick={handleToggleListening} 
-                        disabled={isSubmittingAnswer || isEndingInterview || isAIDictating || !speechRecognitionSupported}
+                        disabled={isSubmittingAnswer || isEndingInterview || isAISpeaking || !speechRecognitionSupported}
                         className={isListening ? "border-red-500 text-red-500 hover:bg-red-500/10" : ""}
                     >
                       {isListening ? <MicOff className="mr-2 h-4 w-4" /> : <Mic className="mr-2 h-4 w-4" />}
-                      {isListening ? "Stop Listening" : "Start Listening"}
+                      {isListening ? "Stop Listening" : (userAnswer ? "Listen Again (clears previous)" : "Start Listening")}
                     </Button>
                     {!speechRecognitionSupported && <p className="text-xs text-destructive">Voice input not supported by your browser.</p>}
                  </div>
@@ -477,7 +500,7 @@ export default function InterviewPage() {
                   value={userAnswer}
                   onChange={(e) => setUserAnswer(e.target.value)} 
                   onPaste={handlePaste}
-                  disabled={isSubmittingAnswer || isEndingInterview || isAIDictating}
+                  disabled={isSubmittingAnswer || isEndingInterview || isAISpeaking}
                 />
               </div>
             )}
@@ -487,7 +510,7 @@ export default function InterviewPage() {
             <div>
               <Button 
                   onClick={handleNextQuestion} 
-                  disabled={isSubmittingAnswer || isEndingInterview || isAIDictating || isListening || (currentStage === 'technical_written' && !userAnswer.trim())}
+                  disabled={isSubmittingAnswer || isEndingInterview || isAISpeaking || isListening || (currentStage === 'technical_written' && !userAnswer.trim())}
               >
                 {isSubmittingAnswer ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4"/>}
                 {currentQuestionIndex < totalQuestions - 1 ? "Next Question" : "End Interview & Get Feedback"}
@@ -515,6 +538,4 @@ export default function InterviewPage() {
     </div>
   );
 }
-    
-
     
