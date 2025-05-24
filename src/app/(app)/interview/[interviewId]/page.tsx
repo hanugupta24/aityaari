@@ -58,6 +58,8 @@ export default function InterviewPage() {
 
   // AI Speech Synthesis State
   const [isAISpeaking, setIsAISpeaking] = useState(false);
+  const [hasSpokenCurrentQuestion, setHasSpokenCurrentQuestion] = useState(false);
+  const previousQuestionIdRef = useRef<string | null>(null);
 
 
   const stopMediaTracks = useCallback(() => {
@@ -176,28 +178,38 @@ export default function InterviewPage() {
   // Effect for AI Speech Synthesis
   useEffect(() => {
     if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.cancel(); 
+      window.speechSynthesis.cancel();
     }
 
-    if (currentQuestion && currentQuestion.stage === 'oral' && !currentQuestion.answer && !isEndingInterview && session?.status !== 'completed' && !isListening) {
+    if (currentQuestion?.id !== previousQuestionIdRef.current) {
+      setHasSpokenCurrentQuestion(false); // Reset speaking status for new question
+      previousQuestionIdRef.current = currentQuestion?.id || null;
+    }
+
+    if (currentQuestion && currentQuestion.stage === 'oral' && !currentQuestion.answer && !isEndingInterview && session?.status !== 'completed' && !isListening && !hasSpokenCurrentQuestion) {
       if (typeof window !== 'undefined' && window.speechSynthesis) {
         const utterance = new SpeechSynthesisUtterance(currentQuestion.text);
         utterance.lang = 'en-US';
-        utterance.rate = 0.9; 
+        utterance.rate = 0.9;
 
         utterance.onstart = () => setIsAISpeaking(true);
-        utterance.onend = () => setIsAISpeaking(false);
+        utterance.onend = () => {
+          setIsAISpeaking(false);
+          setHasSpokenCurrentQuestion(true);
+        };
         utterance.onerror = (event) => {
           console.error('SpeechSynthesis Error:', event);
           setIsAISpeaking(false);
+          setHasSpokenCurrentQuestion(true); // Mark as spoken even on error to prevent loop
           toast({ title: "AI Voice Error", description: "Could not play AI voice.", variant: "destructive" });
         };
         
         window.speechSynthesis.speak(utterance);
       } else {
-        setIsAISpeaking(false); 
+        setIsAISpeaking(false);
       }
-    } else {
+    } else if (currentQuestion?.stage !== 'oral' || currentQuestion?.answer || hasSpokenCurrentQuestion) {
+      // If not an oral question, already answered, or already spoken, ensure AI is not marked as speaking
       setIsAISpeaking(false);
     }
 
@@ -207,7 +219,7 @@ export default function InterviewPage() {
         setIsAISpeaking(false);
       }
     };
-  }, [currentQuestion, isEndingInterview, toast, session?.status, isListening]);
+  }, [currentQuestion, isEndingInterview, session?.status, toast, isListening, hasSpokenCurrentQuestion]);
 
 
   const handleToggleListening = useCallback(() => {
@@ -223,9 +235,12 @@ export default function InterviewPage() {
       setIsListening(false); 
     } else { // User wants to start listening
       if (window.speechSynthesis?.speaking) {
-        window.speechSynthesis.cancel(); // Stop AI speaking if it is
+        window.speechSynthesis.cancel(); 
         setIsAISpeaking(false);
       }
+
+      setUserAnswer(''); // Clear previous answer from Textarea before starting new recognition
+      setSpeechError(null); // Clear previous speech errors
 
       const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!recognitionRef.current) { 
@@ -248,22 +263,20 @@ export default function InterviewPage() {
               if (segment.isFinal) {
                   finalSegments.push(segment[0].transcript);
               } else {
-                  latestInterim = segment[0].transcript; // Keep updating with the latest interim
+                  latestInterim = segment[0].transcript; 
               }
           }
           
-          // Join all final segments with a space.
-          // If there are multiple final segments, they likely represent distinct utterances or corrections.
-          const finalTranscript = finalSegments.join(' ').trim(); 
+          const finalTranscriptPortion = finalSegments.join(' ').trim();
           
-          let combined = finalTranscript;
+          let combinedAnswer = finalTranscriptPortion;
           if (latestInterim) {
-              if (combined.length > 0 && !combined.endsWith(' ')) {
-                  combined += ' '; // Add space before interim if final part exists and doesn't end with space
+              if (combinedAnswer.length > 0 && !combinedAnswer.endsWith(' ')) {
+                  combinedAnswer += ' '; 
               }
-              combined += latestInterim;
+              combinedAnswer += latestInterim;
           }
-          setUserAnswer(combined.trim());
+          setUserAnswer(combinedAnswer.trim());
         };
 
         recognitionRef.current.onerror = (event: any) => {
@@ -281,8 +294,6 @@ export default function InterviewPage() {
         };
       }
       
-      setUserAnswer(''); // Clear previous answer from Textarea before starting new recognition
-      setSpeechError(null); // Clear previous speech errors
       recognitionRef.current.start();
     }
   }, [isListening, speechRecognitionSupported, toast]);
@@ -322,6 +333,7 @@ export default function InterviewPage() {
 
     setUserAnswer(""); 
     setSpeechError(null);
+    setHasSpokenCurrentQuestion(false); // Reset for next question
     const nextQuestionIndex = currentQuestionIndex + 1;
 
     if (nextQuestionIndex < allQuestions.length) {
@@ -488,7 +500,7 @@ export default function InterviewPage() {
                     Your transcribed answer will appear below. Click the mic to speak.
                   </p>
                   <Textarea
-                    placeholder={isListening ? "Listening... Speak now." : (userAnswer ? userAnswer : "Transcribed answer will appear here...")}
+                    placeholder={isListening ? "Listening... Speak now." : (userAnswer ? userAnswer : "Your transcribed answer will appear here...")}
                     value={userAnswer}
                     readOnly 
                     className="text-base min-h-[100px] mb-4 bg-background/70 cursor-not-allowed"
@@ -559,6 +571,8 @@ export default function InterviewPage() {
     </div>
   );
 }
+    
+
     
 
     
