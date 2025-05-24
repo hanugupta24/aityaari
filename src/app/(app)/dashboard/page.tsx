@@ -9,48 +9,52 @@ import Link from "next/link";
 import { PlusCircle, BarChartHorizontalBig, History, Loader2 } from "lucide-react";
 import Image from "next/image";
 import { db } from "@/lib/firebase";
-import { collection, query, where, orderBy, getDocs, Timestamp } from "firebase/firestore";
+import { collection, query, where, orderBy, getDocs, Timestamp, limit } from "firebase/firestore";
 import type { InterviewSession } from "@/types";
 
 export default function DashboardPage() {
-  const { user, userProfile } = useAuth();
+  const { user, userProfile, refreshUserProfile } = useAuth(); // Added refreshUserProfile
   const [fetchedPastInterviews, setFetchedPastInterviews] = useState<InterviewSession[]>([]);
   const [interviewsLoading, setInterviewsLoading] = useState<boolean>(true);
   
   useEffect(() => {
+    // Refresh user profile to get latest interviewsTaken count when component mounts or user changes
     if (user) {
-      const fetchInterviews = async () => {
-        setInterviewsLoading(true);
-        try {
-          const interviewsRef = collection(db, "users", user.uid, "interviews");
-          const q = query(interviewsRef, where("status", "==", "completed"), orderBy("createdAt", "desc"));
-          const querySnapshot = await getDocs(q);
-          const interviews: InterviewSession[] = [];
-          querySnapshot.forEach((doc) => {
-            // Ensure createdAt is consistently a string when setting state, or handle as Timestamp
-            const data = doc.data() as Omit<InterviewSession, 'id' | 'createdAt'> & { createdAt: Timestamp | string };
-            interviews.push({ 
-              ...data, 
-              id: doc.id,
-              // Convert Firestore Timestamp to ISO string if it's a Timestamp object
-              createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt 
-            } as InterviewSession);
-          });
-          setFetchedPastInterviews(interviews);
-        } catch (error) {
-          console.error("Error fetching past interviews:", error);
-          // Optionally set an error state here
-        } finally {
-          setInterviewsLoading(false);
-        }
-      };
-      fetchInterviews();
-    } else {
-      // If no user, clear interviews and set loading to false (or handle as appropriate)
-      setFetchedPastInterviews([]);
-      setInterviewsLoading(false);
+        refreshUserProfile();
     }
-  }, [user]);
+
+    const fetchInterviews = async () => {
+      if (!user) {
+        setFetchedPastInterviews([]);
+        setInterviewsLoading(false);
+        return;
+      }
+      setInterviewsLoading(true);
+      try {
+        const interviewsRef = collection(db, "users", user.uid, "interviews");
+        // Query for completed interviews, ordered by creation date, limit to recent ones if needed
+        const q = query(interviewsRef, where("status", "==", "completed"), orderBy("createdAt", "desc"), limit(10));
+        const querySnapshot = await getDocs(q);
+        const interviews: InterviewSession[] = [];
+        querySnapshot.forEach((doc) => {
+          const data = doc.data() as Omit<InterviewSession, 'id' | 'createdAt'> & { createdAt: Timestamp | string };
+          interviews.push({ 
+            ...data, 
+            id: doc.id,
+            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt 
+          } as InterviewSession);
+        });
+        setFetchedPastInterviews(interviews);
+      } catch (error) {
+        console.error("Error fetching past interviews:", error);
+        // Optionally set an error state here
+      } finally {
+        setInterviewsLoading(false);
+      }
+    };
+    
+    fetchInterviews();
+  }, [user, refreshUserProfile]); // Add refreshUserProfile to dependencies
 
   const interviewsRemaining = userProfile ? Math.max(0, 3 - (userProfile.interviewsTaken || 0)) : 3;
 
@@ -70,7 +74,7 @@ export default function DashboardPage() {
                 <CardContent>
                     <div className="text-2xl font-bold">{userProfile?.interviewsTaken || 0}</div>
                     <p className="text-xs text-muted-foreground">
-                      {interviewsRemaining > 0 ? `${interviewsRemaining} free interviews remaining.` : "Upgrade to Plus for more."}
+                      {userProfile?.isPlusSubscriber ? "Unlimited interviews." : (interviewsRemaining > 0 ? `${interviewsRemaining} free interviews remaining.` : "Upgrade to Plus for more.")}
                     </p>
                 </CardContent>
             </Card>
@@ -115,7 +119,7 @@ export default function DashboardPage() {
                   <CardHeader>
                     <CardTitle className="text-lg">Interview on {new Date(interview.createdAt).toLocaleDateString()}</CardTitle>
                     <CardDescription>
-                      Duration: {interview.duration} mins | Score: {interview.feedback?.overallScore ? `${interview.feedback.overallScore}%` : "Pending"}
+                      Duration: {interview.duration} mins | Score: {interview.feedback?.overallScore !== undefined ? `${interview.feedback.overallScore}%` : "Pending"}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -141,7 +145,7 @@ export default function DashboardPage() {
                 width={300} 
                 height={200} 
                 className="mx-auto mb-4 rounded-md"
-                data-ai-hint="empty state"
+                data-ai-hint="empty state illustration"
               />
               <p className="text-muted-foreground mb-4">You haven't completed any interviews yet.</p>
               <Link href="/interview/start" passHref>

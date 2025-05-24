@@ -12,8 +12,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, Info, Video, Mic, AlertTriangle, UserX } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-// import { generateInterviewQuestions, type GenerateInterviewQuestionsInput } from "@/ai/flows/generate-interview-questions";
-import type { UserProfile, InterviewSession } from "@/types";
+import { generateInterviewQuestions, type GenerateInterviewQuestionsInput } from "@/ai/flows/generate-interview-questions";
+import type { UserProfile, InterviewSession, GeneratedQuestion } from "@/types";
 import { doc, setDoc, serverTimestamp, collection, addDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import Link from "next/link";
@@ -47,29 +47,44 @@ export default function StartInterviewPage() {
       return;
     }
 
-
     setIsStartingSession(true);
+    toast({ title: "Preparing Interview", description: "Generating questions, please wait..." });
 
     try {
+      // 1. Generate Questions
+      const questionGenInput: GenerateInterviewQuestionsInput = {
+        profileField: userProfile.profileField,
+        role: userProfile.role,
+        interviewDuration: duration,
+      };
+      const questionGenOutput = await generateInterviewQuestions(questionGenInput);
+
+      if (!questionGenOutput.questions || questionGenOutput.questions.length === 0) {
+        toast({ title: "Question Generation Failed", description: "Could not generate interview questions. Please try again.", variant: "destructive" });
+        setIsStartingSession(false);
+        return;
+      }
+
+      // 2. Create Interview Session Document
       const newInterviewRef = doc(collection(db, "users", user.uid, "interviews"));
       const interviewId = newInterviewRef.id;
 
-      const initialSessionData: Partial<InterviewSession> = {
+      const initialSessionData: InterviewSession = {
         id: interviewId,
         userId: user.uid,
         duration: parseInt(duration) as 15 | 30 | 45,
-        status: "pending", 
-        createdAt: new Date().toISOString(), 
-        // Questions will be generated on the interview page or by a backend function
+        status: "questions_generated", // Status indicating questions are ready
+        createdAt: new Date().toISOString(),
+        questions: questionGenOutput.questions as GeneratedQuestion[], // Store structured questions
       };
       await setDoc(newInterviewRef, initialSessionData);
       
-      toast({ title: "Interview Starting", description: "Preparing your session..." });
+      toast({ title: "Interview Ready!", description: "Redirecting to your session..." });
       router.push(`/interview/${interviewId}`);
 
     } catch (error: any) {
       console.error("Error starting interview:", error);
-      toast({ title: "Failed to Start Interview", description: error.message || "An unexpected error occurred.", variant: "destructive" });
+      toast({ title: "Failed to Start Interview", description: error.message || "An unexpected error occurred while generating questions or setting up the session.", variant: "destructive" });
       setIsStartingSession(false);
     }
   };
@@ -97,8 +112,8 @@ export default function StartInterviewPage() {
     isStartingSession || 
     !permissionsGranted || 
     !agreedToMonitoring ||
-    isProfileNotLoaded || // Explicitly disable if profile couldn't be loaded for a logged-in user
-    !userProfile || // Profile not loaded yet (catches cases where user is null too, covered by authInitialLoading as well)
+    isProfileNotLoaded || 
+    !userProfile || 
     isProfileEssentialDataMissing || 
     interviewLimitReached;
 
@@ -117,14 +132,14 @@ export default function StartInterviewPage() {
             </div>
           )}
 
-          {!authInitialLoading && user && !userProfile && (
+          {!authInitialLoading && user && !userProfile && ( // Profile fetch might have failed or new user
             <Alert variant="destructive">
               <UserX className="h-4 w-4" />
-              <AlertTitle>Profile Not Found</AlertTitle>
+              <AlertTitle>Profile Not Found or Incomplete</AlertTitle>
               <AlertDescription>
-                We couldn't load your profile data. Please 
+                We couldn't load your complete profile data, or it's missing essential fields (like Role and Profile Field). Please 
                 <Link href="/profile" className="font-semibold underline hover:text-destructive-foreground/80"> visit your profile page</Link> to create or complete it. 
-                If this issue persists, please try logging out and back in.
+                This information is crucial for tailoring your interview questions.
               </AlertDescription>
             </Alert>
           )}
@@ -158,9 +173,9 @@ export default function StartInterviewPage() {
             <AlertDescription>
               <ul className="list-disc list-inside space-y-1 mt-2 text-sm">
                 <li>Ensure you are in a quiet environment with a stable internet connection.</li>
-                <li>The interview will be recorded for feedback purposes.</li>
-                <li>Be prepared to answer behavioral, technical, and potentially coding questions.</li>
-                <li>Some questions will be conversational; speak clearly into your microphone.</li>
+                <li>The interview will be recorded for feedback purposes (video & audio for oral part).</li>
+                <li>For technical roles, be prepared for an initial oral section followed by written technical/coding questions.</li>
+                <li>Speak clearly. Your answers will be transcribed.</li>
               </ul>
             </AlertDescription>
           </Alert>
@@ -173,7 +188,7 @@ export default function StartInterviewPage() {
               </div>
               <div className="flex-1">
                 <p className="text-sm font-medium">Camera & Microphone Access</p>
-                <p className="text-xs text-muted-foreground">Required for video and conversational questions.</p>
+                <p className="text-xs text-muted-foreground">Required for video and oral answers.</p>
               </div>
               {!permissionsGranted && (
                 <Button variant="outline" size="sm" onClick={requestPermissions} disabled={authLoading || authInitialLoading || isStartingSession}>Grant Access</Button>
@@ -197,7 +212,7 @@ export default function StartInterviewPage() {
               <AlertTriangle className="h-4 w-4" />
               <AlertTitle>Free Interview Limit Reached</AlertTitle>
               <AlertDescription>
-                You have used all {userProfile.interviewsTaken} free interviews. Please <Button variant="link" className="p-0 h-auto text-destructive-foreground underline" onClick={() => router.push('/subscription')}>upgrade to Plus</Button> for unlimited interviews.
+                You have used all {userProfile.interviewsTaken || 0} free interviews. Please <Button variant="link" className="p-0 h-auto text-destructive-foreground underline" onClick={() => router.push('/subscription')}>upgrade to Plus</Button> for unlimited interviews.
               </AlertDescription>
             </Alert>
           )}
@@ -218,5 +233,3 @@ export default function StartInterviewPage() {
     </div>
   );
 }
-
-    
