@@ -10,7 +10,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, Info, Video, Mic, AlertTriangle } from "lucide-react";
+import { Loader2, Info, Video, Mic, AlertTriangle, UserX } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 // import { generateInterviewQuestions, type GenerateInterviewQuestionsInput } from "@/ai/flows/generate-interview-questions";
 import type { UserProfile, InterviewSession } from "@/types";
@@ -55,6 +55,7 @@ export default function StartInterviewPage() {
       const interviewId = newInterviewRef.id;
 
       const initialSessionData: Partial<InterviewSession> = {
+        id: interviewId,
         userId: user.uid,
         duration: parseInt(duration) as 15 | 30 | 45,
         status: "pending", 
@@ -76,7 +77,7 @@ export default function StartInterviewPage() {
   const requestPermissions = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      stream.getTracks().forEach(track => track.stop());
+      stream.getTracks().forEach(track => track.stop()); // Stop tracks immediately after permission grant
       setPermissionsGranted(true);
       toast({ title: "Permissions Granted", description: "Camera and microphone access enabled." });
     } catch (err) {
@@ -87,6 +88,8 @@ export default function StartInterviewPage() {
   };
 
   const isProfileEssentialDataMissing = userProfile && (!userProfile.role || !userProfile.profileField);
+  const isProfileNotLoaded = !authInitialLoading && user && !userProfile;
+  const interviewLimitReached = userProfile && (userProfile.interviewsTaken || 0) >= 3 && !userProfile.isPlusSubscriber;
 
   const isButtonDisabled = 
     authLoading || 
@@ -94,18 +97,38 @@ export default function StartInterviewPage() {
     isStartingSession || 
     !permissionsGranted || 
     !agreedToMonitoring ||
-    !userProfile || // Profile not loaded yet
-    isProfileEssentialDataMissing || // Profile loaded but missing key fields
-    (userProfile && (userProfile.interviewsTaken || 0) >= 3 && !userProfile.isPlusSubscriber);
+    isProfileNotLoaded || // Explicitly disable if profile couldn't be loaded for a logged-in user
+    !userProfile || // Profile not loaded yet (catches cases where user is null too, covered by authInitialLoading as well)
+    isProfileEssentialDataMissing || 
+    interviewLimitReached;
 
   return (
-    <div className="max-w-2xl mx-auto space-y-8">
+    <div className="max-w-2xl mx-auto space-y-8 py-8">
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="text-2xl">Start Your Interview</CardTitle>
           <CardDescription>Choose your preferred interview duration and prepare for a focused session.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {authInitialLoading && (
+            <div className="flex items-center justify-center p-4">
+              <Loader2 className="h-6 w-6 animate-spin mr-2" />
+              <p>Loading your information...</p>
+            </div>
+          )}
+
+          {!authInitialLoading && user && !userProfile && (
+            <Alert variant="destructive">
+              <UserX className="h-4 w-4" />
+              <AlertTitle>Profile Not Found</AlertTitle>
+              <AlertDescription>
+                We couldn't load your profile data. Please 
+                <Link href="/profile" className="font-semibold underline hover:text-destructive-foreground/80"> visit your profile page</Link> to create or complete it. 
+                If this issue persists, please try logging out and back in.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {userProfile && isProfileEssentialDataMissing && !authInitialLoading && !authLoading && (
             <Alert variant="default" className="border-yellow-500 text-yellow-700 dark:border-yellow-400 dark:text-yellow-300">
               <Info className="h-4 w-4 !text-yellow-500 dark:!text-yellow-400" />
@@ -119,7 +142,7 @@ export default function StartInterviewPage() {
 
           <div>
             <Label className="text-lg font-semibold mb-2 block">Select Interview Duration</Label>
-            <RadioGroup defaultValue="30" onValueChange={(value: "15" | "30" | "45") => setDuration(value)} className="flex space-x-4">
+            <RadioGroup defaultValue="30" onValueChange={(value: "15" | "30" | "45") => setDuration(value)} className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
               {["15", "30", "45"].map((d) => (
                 <div key={d} className="flex items-center space-x-2">
                   <RadioGroupItem value={d} id={`duration-${d}`} />
@@ -133,7 +156,7 @@ export default function StartInterviewPage() {
             <Info className="h-4 w-4" />
             <AlertTitle>Interview Instructions</AlertTitle>
             <AlertDescription>
-              <ul className="list-disc list-inside space-y-1 mt-2">
+              <ul className="list-disc list-inside space-y-1 mt-2 text-sm">
                 <li>Ensure you are in a quiet environment with a stable internet connection.</li>
                 <li>The interview will be recorded for feedback purposes.</li>
                 <li>Be prepared to answer behavioral, technical, and potentially coding questions.</li>
@@ -144,7 +167,7 @@ export default function StartInterviewPage() {
 
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Permissions & Agreements</h3>
-            <div className="flex items-center space-x-3 p-3 border rounded-md">
+            <div className={`flex items-center space-x-3 p-3 border rounded-md ${permissionsGranted ? 'border-green-500' : 'border-destructive'}`}>
               <div className="flex-shrink-0">
                 {permissionsGranted ? <Video className="h-6 w-6 text-green-500" /> : <Video className="h-6 w-6 text-destructive" />}
               </div>
@@ -157,7 +180,7 @@ export default function StartInterviewPage() {
               )}
             </div>
 
-            <div className="items-top flex space-x-2">
+            <div className="items-top flex space-x-2 p-3 border rounded-md">
               <Checkbox id="terms" checked={agreedToMonitoring} onCheckedChange={(checked) => setAgreedToMonitoring(!!checked)} />
               <div className="grid gap-1.5 leading-none">
                 <Label htmlFor="terms" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
@@ -169,12 +192,12 @@ export default function StartInterviewPage() {
               </div>
             </div>
           </div>
-           {userProfile && (userProfile.interviewsTaken || 0) >= 3 && !userProfile.isPlusSubscriber && (
+           {userProfile && interviewLimitReached && (
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
               <AlertTitle>Free Interview Limit Reached</AlertTitle>
               <AlertDescription>
-                You have used all your free interviews. Please <Button variant="link" className="p-0 h-auto" onClick={() => router.push('/subscription')}>upgrade to Plus</Button> for unlimited interviews.
+                You have used all {userProfile.interviewsTaken} free interviews. Please <Button variant="link" className="p-0 h-auto text-destructive-foreground underline" onClick={() => router.push('/subscription')}>upgrade to Plus</Button> for unlimited interviews.
               </AlertDescription>
             </Alert>
           )}
@@ -185,6 +208,7 @@ export default function StartInterviewPage() {
             className="w-full" 
             onClick={handleStartInterview} 
             disabled={isButtonDisabled}
+            aria-label={`Start ${duration}-Minute Interview ${isButtonDisabled ? '(Disabled)' : ''}`}
           >
             {(authLoading || authInitialLoading || isStartingSession) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Start {duration}-Minute Interview
@@ -194,3 +218,5 @@ export default function StartInterviewPage() {
     </div>
   );
 }
+
+    
