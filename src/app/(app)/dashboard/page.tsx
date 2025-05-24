@@ -38,8 +38,8 @@ export default function DashboardPage() {
         return;
       }
 
-      setInterviewsLoading(true); // Set loading to true right before the fetch attempt
-      setInterviewsError(null); // Clear any previous errors
+      setInterviewsLoading(true); 
+      setInterviewsError(null); 
 
       try {
         const interviewsRef = collection(db, "users", user.uid, "interviews");
@@ -56,31 +56,36 @@ export default function DashboardPage() {
         });
         setFetchedPastInterviews(interviews);
       } catch (error: any) {
-        // Set error state first
+        // Ensure loading is set to false before setting the error
+        setInterviewsLoading(false); 
+
         const errorMessage = error.message || "Failed to load past interviews. This might be due to a missing database index. Please check Firebase console if this persists.";
         setInterviewsError(errorMessage);
-        console.error("Error fetching past interviews:", error); // Log the full error
+        setFetchedPastInterviews([]); // Clear any potentially stale data
+        
+        console.error("Error fetching past interviews:", error); 
         toast({
           title: "Error Loading Interviews",
           description: "Could not fetch past interview data. If this issue continues, a database index might be required. See console for details or the message on the dashboard.",
           variant: "destructive",
         });
-        setFetchedPastInterviews([]); // Clear any potentially stale data
       } finally {
-        setInterviewsLoading(false); // Always set loading to false after attempt
+        // Ensure loading is false if it hasn't been set by the catch block
+        // (e.g. on successful fetch)
+        if (interviewsLoading) { // Check if it's still true (i.e., no error caught that set it to false)
+           setInterviewsLoading(false);
+        }
       }
     };
 
-    // Only fetch interviews if auth is not loading and user exists
     if (!authInitialLoading && !authLoading && user) {
       fetchInterviews();
     } else if (!authInitialLoading && !authLoading && !user) {
-      // No user, so not loading interviews, ensure states are reset
       setInterviewsLoading(false);
       setInterviewsError(null);
       setFetchedPastInterviews([]);
     }
-  }, [user, authLoading, authInitialLoading]); // Dependency array simplified
+  }, [user, authLoading, authInitialLoading, toast]); // Added toast back as it was used in catch
 
   if (authInitialLoading || authLoading) {
     return (
@@ -173,11 +178,15 @@ export default function DashboardPage() {
               <AlertDescription>
                 {interviewsError}
                 <br />
-                <strong className="my-2 block">This usually means a Firestore index is required.</strong>
-                <Link href="https://console.firebase.google.com/v1/r/project/tyaari-e0307/firestore/indexes?create_composite=Ck9wcm9qZWN0cy90eWFhcmktZTAzMDcvZGF0YWJhc2VzLyhkZWZhdWx0KS9jb2xsZWN0aW9uR3JvdXBzL2ludGVydmlld3MvaW5kZXhlcy9fEAEaCgoGc3RhdHVzEAEaDQoJY3JlYXRlZEF0EAIaDAoIX19uYW1lX18QAg" target="_blank" rel="noopener noreferrer" className="underline hover:text-destructive-foreground">
-                  Click here to create the required Firestore index in the Firebase Console.
-                </Link>
-                 This process may take a few minutes to build after creation. Please ensure the index status is "Enabled".
+                {interviewsError.includes("query requires an index") && (
+                  <>
+                    <strong className="my-2 block">This usually means a Firestore index is required.</strong>
+                    <Link href="https://console.firebase.google.com/v1/r/project/tyaari-e0307/firestore/indexes?create_composite=Ck9wcm9qZWN0cy90eWFhcmktZTAzMDcvZGF0YWJhc2VzLyhkZWZhdWx0KS9jb2xsZWN0aW9uR3JvdXBzL2ludGVydmlld3MvaW5kZXhlcy9fEAEaCgoGc3RhdHVzEAEaDQoJY3JlYXRlZEF0EAIaDAoIX19uYW1lX18QAg" target="_blank" rel="noopener noreferrer" className="underline hover:text-destructive-foreground">
+                      Click here to create the required Firestore index in the Firebase Console.
+                    </Link>
+                    This process may take a few minutes to build after creation. Please ensure the index status is "Enabled".
+                  </>
+                )}
               </AlertDescription>
             </Alert>
           ) : fetchedPastInterviews.length > 0 ? (
@@ -226,3 +235,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
