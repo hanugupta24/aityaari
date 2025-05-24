@@ -32,7 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log("AuthContext: fetchUserProfile called with no Firebase user. Clearing profile.");
       setUserProfile(null);
       setIsAdmin(false);
-      // setLoading(false); // This loading is for profile fetch, managed below
+      setLoading(false); // Explicitly set profile loading to false
       return;
     }
 
@@ -58,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUserProfile(null);
       setIsAdmin(false);
     } finally {
-      console.log(`AuthContext: fetchUserProfile finally block for UID: ${fbUser.uid}. Setting profile loading to false.`);
+      console.log(`AuthContext: fetchUserProfile finally block for UID: ${fbUser?.uid}. Setting profile loading to false.`);
       setLoading(false); // Indicate profile fetch is complete (success or fail)
     }
   }, []);
@@ -67,38 +67,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log("AuthContext: Mounting and setting up onAuthStateChanged listener.");
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       console.log("AuthContext: onAuthStateChanged triggered. User:", firebaseUser ? firebaseUser.uid : 'null');
-      setInitialLoading(true); // Mark that we are processing auth state
-      setUser(firebaseUser);
-
-      if (firebaseUser) {
-        console.log("AuthContext: Firebase user detected, calling fetchUserProfile.");
-        await fetchUserProfile(firebaseUser);
-        console.log("AuthContext: fetchUserProfile call completed (or errored).");
-      } else {
-        console.log("AuthContext: No Firebase user. Clearing profile, admin status, and profile loading state.");
-        setUserProfile(null);
-        setIsAdmin(false);
-        setLoading(false); // Ensure profile-specific loading is also false
+      try {
+        if (firebaseUser) {
+          setUser(firebaseUser);
+          console.log("AuthContext: Firebase user detected, calling fetchUserProfile.");
+          await fetchUserProfile(firebaseUser);
+          console.log("AuthContext: fetchUserProfile call completed (or errored).");
+        } else {
+          console.log("AuthContext: No Firebase user. Clearing user, profile, admin status, and profile loading state.");
+          setUser(null);
+          setUserProfile(null);
+          setIsAdmin(false);
+          setLoading(false); // Ensure profile-specific loading is also false if no user
+        }
+      } catch (error) {
+         console.error("AuthContext: Critical error during onAuthStateChanged processing:", error);
+         // Reset all auth-related states to ensure a clean slate on error
+         setUser(null);
+         setUserProfile(null);
+         setIsAdmin(false);
+         setLoading(false);
+      } finally {
+        // This is crucial: initialLoading MUST be set to false after the first auth check and profile fetch attempt.
+        setInitialLoading(false);
+        console.log("AuthContext: initialLoading set to false after auth state processing. User:", !!user, "Profile Loaded:", !!userProfile, "Profile Fetch Loading:", loading);
       }
-      setInitialLoading(false); // Mark auth state processing as complete
-      console.log("AuthContext: initialLoading set to false. Current states: user loaded:", !!user, "profile loaded:", !!userProfile, "profile fetch loading:", loading);
     });
 
     return () => {
       console.log("AuthContext: Unmounting and unsubscribing from onAuthStateChanged.");
       unsubscribe();
     };
-  }, [fetchUserProfile]); // user, loading, initialLoading removed from deps as they cause loops or are set inside
+  }, [fetchUserProfile]); // fetchUserProfile is memoized and its dependencies are stable.
 
   const signOut = async () => {
     console.log("AuthContext: signOut called.");
-    setLoading(true); // Can indicate a general loading state for sign out
+    setLoading(true); 
     await firebaseSignOut(auth);
     setUser(null);
     setUserProfile(null);
     setIsAdmin(false);
     setLoading(false);
-    setInitialLoading(false); // After sign out, initial auth state is resolved (no user)
+    setInitialLoading(false); 
     console.log("AuthContext: SignOut complete.");
   };
 

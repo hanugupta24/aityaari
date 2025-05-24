@@ -75,18 +75,18 @@ export default function DashboardPage() {
   }, [user?.uid]); // refreshUserProfile is memoized, user.uid ensures it runs when actual user identity changes
 
   // UseEffect to set static mock data for past interviews
-  useEffect(() => {
-    console.log("DashboardPage: Setting mock past interviews data.");
-    setInterviewsLoading(true);
-    const timer = setTimeout(() => {
-      setFetchedPastInterviews(mockPastInterviews);
-      setInterviewsLoading(false);
-      setInterviewsError(null);
-      console.log("DashboardPage: Mock past interviews data set.");
-    }, 300); // Reduced delay for mock data
+  // useEffect(() => {
+  //   console.log("DashboardPage: Setting mock past interviews data.");
+  //   setInterviewsLoading(true);
+  //   const timer = setTimeout(() => {
+  //     setFetchedPastInterviews(mockPastInterviews);
+  //     setInterviewsLoading(false);
+  //     setInterviewsError(null);
+  //     console.log("DashboardPage: Mock past interviews data set.");
+  //   }, 300); // Reduced delay for mock data
 
-    return () => clearTimeout(timer);
-  }, []);
+  //   return () => clearTimeout(timer);
+  // }, []);
 
 
   if (authInitialLoading) {
