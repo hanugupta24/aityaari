@@ -45,7 +45,7 @@ export default function InterviewPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
   const [isEndingInterview, setIsEndingInterview] = useState(false);
-  const [transcriptLog, setTranscriptLog] = useState<string[]>([]); // Renamed from transcript for clarity
+  const [transcriptLog, setTranscriptLog] = useState<string[]>([]); 
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -83,8 +83,8 @@ export default function InterviewPage() {
   const cancelSpeechSynthesis = useCallback(() => {
     if (typeof window !== 'undefined' && window.speechSynthesis) {
       window.speechSynthesis.cancel();
-      setIsAISpeaking(false); // Ensure UI reflects stoppage
     }
+    setIsAISpeaking(false); 
   }, []);
 
 
@@ -176,10 +176,10 @@ export default function InterviewPage() {
   // Effect for AI Speech Synthesis
   useEffect(() => {
     if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.cancel(); // Always cancel previous speech
+      window.speechSynthesis.cancel(); 
     }
 
-    if (currentQuestion && currentQuestion.stage === 'oral' && !currentQuestion.answer && !isEndingInterview && session?.status !== 'completed') {
+    if (currentQuestion && currentQuestion.stage === 'oral' && !currentQuestion.answer && !isEndingInterview && session?.status !== 'completed' && !isListening) {
       if (typeof window !== 'undefined' && window.speechSynthesis) {
         const utterance = new SpeechSynthesisUtterance(currentQuestion.text);
         utterance.lang = 'en-US';
@@ -207,7 +207,7 @@ export default function InterviewPage() {
         setIsAISpeaking(false);
       }
     };
-  }, [currentQuestion, isEndingInterview, toast, session?.status]);
+  }, [currentQuestion, isEndingInterview, toast, session?.status, isListening]);
 
 
   const handleToggleListening = useCallback(() => {
@@ -216,16 +216,21 @@ export default function InterviewPage() {
       return;
     }
 
-    if (isListening) {
+    if (isListening) { // User wants to stop listening
       if (recognitionRef.current) {
         recognitionRef.current.stop();
       }
       setIsListening(false); 
-    } else { // Start listening
+    } else { // User wants to start listening
+      if (window.speechSynthesis?.speaking) {
+        window.speechSynthesis.cancel(); // Stop AI speaking if it is
+        setIsAISpeaking(false);
+      }
+
       const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!recognitionRef.current) { 
         recognitionRef.current = new SpeechRecognitionAPI();
-        recognitionRef.current.continuous = true; // Allows for pauses
+        recognitionRef.current.continuous = true; 
         recognitionRef.current.interimResults = true; 
         recognitionRef.current.lang = 'en-US';
 
@@ -235,16 +240,30 @@ export default function InterviewPage() {
         };
         
         recognitionRef.current.onresult = (event: any) => {
-          let fullFinalTranscript = "";
-          let latestInterimTranscript = "";
+          let finalSegments: string[] = [];
+          let latestInterim = '';
+
           for (let i = 0; i < event.results.length; i++) {
-            if (event.results[i].isFinal) {
-              fullFinalTranscript += event.results[i][0].transcript + " ";
-            } else {
-              latestInterimTranscript = event.results[i][0].transcript;
-            }
+              const segment = event.results[i];
+              if (segment.isFinal) {
+                  finalSegments.push(segment[0].transcript);
+              } else {
+                  latestInterim = segment[0].transcript; // Keep updating with the latest interim
+              }
           }
-          setUserAnswer(fullFinalTranscript.trim() + (latestInterimTranscript ? " " + latestInterimTranscript.trim() : ""));
+          
+          // Join all final segments with a space.
+          // If there are multiple final segments, they likely represent distinct utterances or corrections.
+          const finalTranscript = finalSegments.join(' ').trim(); 
+          
+          let combined = finalTranscript;
+          if (latestInterim) {
+              if (combined.length > 0 && !combined.endsWith(' ')) {
+                  combined += ' '; // Add space before interim if final part exists and doesn't end with space
+              }
+              combined += latestInterim;
+          }
+          setUserAnswer(combined.trim());
         };
 
         recognitionRef.current.onerror = (event: any) => {
@@ -263,6 +282,7 @@ export default function InterviewPage() {
       }
       
       setUserAnswer(''); // Clear previous answer from Textarea before starting new recognition
+      setSpeechError(null); // Clear previous speech errors
       recognitionRef.current.start();
     }
   }, [isListening, speechRecognitionSupported, toast]);
@@ -451,13 +471,13 @@ export default function InterviewPage() {
             <Progress value={progress} className="w-full h-2" />
             
             {isAISpeaking && currentStage === 'oral' && (
-                <div className="flex items-center text-primary pt-2 pb-2">
+                <div className="flex items-center text-primary pt-2">
                     <Volume2 className="h-5 w-5 mr-2 animate-pulse" />
                     <p className="text-md font-medium">AI is asking the question...</p>
                 </div>
             )}
             {currentQuestion && (
-                <CardDescription className="text-lg pt-2 whitespace-pre-wrap">{currentQuestion.text}</CardDescription>
+                <CardDescription className={`text-lg pt-2 whitespace-pre-wrap ${isAISpeaking && currentStage === 'oral' ? 'pb-1' : 'pb-0'}`}>{currentQuestion.text}</CardDescription>
             )}
           </CardHeader>
           <CardContent className="flex-grow flex flex-col">
@@ -465,10 +485,10 @@ export default function InterviewPage() {
               <div className="flex-grow flex flex-col justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground mb-2">
-                    Answer orally. Your transcribed answer will appear below.
+                    Your transcribed answer will appear below. Click the mic to speak.
                   </p>
                   <Textarea
-                    placeholder={isListening ? "Listening... Your transcribed answer will appear here." : (userAnswer ? userAnswer : "Click the mic to start speaking.")}
+                    placeholder={isListening ? "Listening... Speak now." : (userAnswer ? userAnswer : "Transcribed answer will appear here...")}
                     value={userAnswer}
                     readOnly 
                     className="text-base min-h-[100px] mb-4 bg-background/70 cursor-not-allowed"
@@ -539,6 +559,8 @@ export default function InterviewPage() {
     </div>
   );
 }
+    
+
     
 
     
