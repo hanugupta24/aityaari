@@ -7,7 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { db } from "@/lib/firebase";
 import { doc, getDoc, updateDoc, onSnapshot } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Mic, Send, Video, MessageCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -300,3 +300,4 @@ async function generateQuestionsForSession(userProfile: UserProfile, duration: "
     { id: "gen_q3", text: "Explain the concept of closures in JavaScript.", type: "technical" },
   ];
 }
+
