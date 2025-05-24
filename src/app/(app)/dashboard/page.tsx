@@ -17,12 +17,14 @@ import { useToast } from "@/hooks/use-toast";
 export default function DashboardPage() {
   const { user, userProfile, loading: authLoading, initialLoading: authInitialLoading, refreshUserProfile } = useAuth();
   const [fetchedPastInterviews, setFetchedPastInterviews] = useState<InterviewSession[]>([]);
-  const [interviewsLoading, setInterviewsLoading] = useState<boolean>(true);
+  const [interviewsLoading, setInterviewsLoading] = useState<boolean>(false); // Default to false
   const [interviewsError, setInterviewsError] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
     if (user) {
+      // This refreshes the user profile data (like interviewsTaken count)
+      // It doesn't directly refetch the interviews list here.
       refreshUserProfile();
     }
   }, [user, refreshUserProfile]);
@@ -35,8 +37,10 @@ export default function DashboardPage() {
         setInterviewsError(null);
         return;
       }
-      setInterviewsLoading(true);
-      setInterviewsError(null);
+
+      setInterviewsLoading(true); // Set loading to true right before the fetch attempt
+      setInterviewsError(null); // Clear any previous errors
+
       try {
         const interviewsRef = collection(db, "users", user.uid, "interviews");
         const q = query(interviewsRef, where("status", "==", "completed"), orderBy("createdAt", "desc"), limit(10));
@@ -52,16 +56,18 @@ export default function DashboardPage() {
         });
         setFetchedPastInterviews(interviews);
       } catch (error: any) {
-        console.error("Error fetching past interviews:", error);
-        setInterviewsError(error.message || "Failed to load past interviews. This might be due to a missing database index. Please check Firebase console if this persists.");
+        // Set error state first
+        const errorMessage = error.message || "Failed to load past interviews. This might be due to a missing database index. Please check Firebase console if this persists.";
+        setInterviewsError(errorMessage);
+        console.error("Error fetching past interviews:", error); // Log the full error
         toast({
           title: "Error Loading Interviews",
-          description: "Could not fetch past interview data. If this issue continues, a database index might be required. See console for details.",
+          description: "Could not fetch past interview data. If this issue continues, a database index might be required. See console for details or the message on the dashboard.",
           variant: "destructive",
         });
         setFetchedPastInterviews([]); // Clear any potentially stale data
       } finally {
-        setInterviewsLoading(false);
+        setInterviewsLoading(false); // Always set loading to false after attempt
       }
     };
 
@@ -69,12 +75,12 @@ export default function DashboardPage() {
     if (!authInitialLoading && !authLoading && user) {
       fetchInterviews();
     } else if (!authInitialLoading && !authLoading && !user) {
-      // No user, so not loading interviews
+      // No user, so not loading interviews, ensure states are reset
       setInterviewsLoading(false);
       setInterviewsError(null);
       setFetchedPastInterviews([]);
     }
-  }, [user, authLoading, authInitialLoading, toast]);
+  }, [user, authLoading, authInitialLoading]); // Dependency array simplified
 
   if (authInitialLoading || authLoading) {
     return (
@@ -86,7 +92,6 @@ export default function DashboardPage() {
   }
 
   if (!user || !userProfile) {
-     // This case might be hit if profile fetch failed after auth succeeded
     return (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-100px)]">
         <Alert variant="destructive" className="max-w-md">
@@ -103,7 +108,6 @@ export default function DashboardPage() {
       </div>
     );
   }
-
 
   const interviewsRemaining = userProfile ? Math.max(0, 3 - (userProfile.interviewsTaken || 0)) : 3;
 
@@ -169,9 +173,11 @@ export default function DashboardPage() {
               <AlertDescription>
                 {interviewsError}
                 <br />
+                <strong className="my-2 block">This usually means a Firestore index is required.</strong>
                 <Link href="https://console.firebase.google.com/v1/r/project/tyaari-e0307/firestore/indexes?create_composite=Ck9wcm9qZWN0cy90eWFhcmktZTAzMDcvZGF0YWJhc2VzLyhkZWZhdWx0KS9jb2xsZWN0aW9uR3JvdXBzL2ludGVydmlld3MvaW5kZXhlcy9fEAEaCgoGc3RhdHVzEAEaDQoJY3JlYXRlZEF0EAIaDAoIX19uYW1lX18QAg" target="_blank" rel="noopener noreferrer" className="underline hover:text-destructive-foreground">
-                  Click here to create the required Firestore index
-                </Link> if you haven't already. This may take a few minutes to build after creation.
+                  Click here to create the required Firestore index in the Firebase Console.
+                </Link>
+                 This process may take a few minutes to build after creation. Please ensure the index status is "Enabled".
               </AlertDescription>
             </Alert>
           ) : fetchedPastInterviews.length > 0 ? (
