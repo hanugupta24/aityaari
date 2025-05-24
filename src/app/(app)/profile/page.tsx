@@ -33,7 +33,7 @@ const profileSchema = z.object({
   company: z.string().max(100).optional().nullable(),
   education: z.string().min(2, { message: "Education details are required." }).max(200),
   phoneNumber: z.string().max(20).optional().nullable(),
-  resumeText: z.string().max(25000, {message: "Resume text should be less than 25000 characters."}).optional().nullable(),
+  resumeText: z.string().max(50000, {message: "Resume text should be less than 50,000 characters."}).optional().nullable(),
 });
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
@@ -90,13 +90,11 @@ export default function ProfilePage() {
             setSelectedFileName(null);
         }
       } else {
-        // User is logged in but no profile data, reset to defaults
         form.reset(form.formState.defaultValues);
         setSelectedFileName(null);
       }
       setIsFetchingProfile(false);
     } else if (!initialLoading && !authLoading && !user) {
-      // No user logged in
       setIsFetchingProfile(false);
       form.reset(form.formState.defaultValues);
       setSelectedFileName(null);
@@ -106,27 +104,15 @@ export default function ProfilePage() {
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     
-    // Clear previous resume state regardless of what happens next
-    form.setValue("resumeText", "", { shouldValidate: false }); // Don't validate empty string yet
+    form.setValue("resumeText", "", { shouldValidate: false });
     setSelectedFileName(null);
 
     if (!file) {
-      if (fileInputRef.current) fileInputRef.current.value = ""; // Ensure input is cleared
-      // If there was a resume previously (from userProfile), set the "Resume on file" message back
+      if (fileInputRef.current) fileInputRef.current.value = "";
       if (userProfile?.resumeText) {
           setSelectedFileName("Resume on file (upload new to replace)");
-          form.setValue("resumeText", userProfile.resumeText, {shouldValidate: true}); // Restore old value
+          form.setValue("resumeText", userProfile.resumeText, {shouldValidate: true});
       }
-      return;
-    }
-
-    if (!ACCEPTED_MIME_TYPES.includes(file.type)) {
-      toast({
-        title: "Unsupported File Type",
-        description: `Please upload a supported file type (${ACCEPT_FILE_EXTENSIONS}). You uploaded: ${file.type || 'unknown'}.`,
-        variant: "destructive",
-      });
-      if (fileInputRef.current) fileInputRef.current.value = ""; // Clear the input
       return;
     }
 
@@ -136,7 +122,21 @@ export default function ProfilePage() {
         description: `Please upload a file smaller than ${MAX_FILE_SIZE_MB}MB. Your file is ${(file.size / (1024*1024)).toFixed(2)}MB.`,
         variant: "destructive",
       });
-      if (fileInputRef.current) fileInputRef.current.value = ""; // Clear the input
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      form.setValue("resumeText", userProfile?.resumeText || "", { shouldValidate: true }); // Restore old value if any
+      setSelectedFileName(userProfile?.resumeText ? "Resume on file (upload new to replace)" : null);
+      return;
+    }
+
+    if (!ACCEPTED_MIME_TYPES.includes(file.type)) {
+      toast({
+        title: "Unsupported File Type",
+        description: `Please upload a supported file type (${ACCEPT_FILE_EXTENSIONS}). You uploaded: ${file.type || 'unknown'}.`,
+        variant: "destructive",
+      });
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      form.setValue("resumeText", userProfile?.resumeText || "", { shouldValidate: true }); // Restore old value if any
+      setSelectedFileName(userProfile?.resumeText ? "Resume on file (upload new to replace)" : null);
       return;
     }
     
@@ -154,16 +154,16 @@ export default function ProfilePage() {
     reader.onload = (e) => {
       const text = e.target?.result as string;
       form.setValue("resumeText", text, { shouldValidate: true });
-      setSelectedFileName(file.name); // Show the name of the newly selected file
+      setSelectedFileName(file.name);
       setIsReadingFile(false);
       toast({ title: "Resume Content Loaded", description: `Text from ${file.name} has been loaded into the form.`});
     };
     reader.onerror = (e) => {
         console.error("Error reading file:", e);
         toast({ title: "File Read Error", description: "Could not read the resume file content.", variant: "destructive"});
-        form.setValue("resumeText", "", { shouldValidate: true }); // Clear from form
-        setSelectedFileName(null); // Clear display name
-        if (fileInputRef.current) fileInputRef.current.value = ""; // Clear file input
+        form.setValue("resumeText", userProfile?.resumeText || "", { shouldValidate: true });
+        setSelectedFileName(userProfile?.resumeText ? "Resume on file (upload new to replace)" : null);
+        if (fileInputRef.current) fileInputRef.current.value = "";
         setIsReadingFile(false);
     };
     reader.readAsText(file); 
@@ -173,7 +173,7 @@ export default function ProfilePage() {
     form.setValue("resumeText", "", { shouldValidate: true });
     setSelectedFileName(null);
     if (fileInputRef.current) {
-      fileInputRef.current.value = ""; // Clear the file input
+      fileInputRef.current.value = "";
     }
     toast({ title: "Resume Cleared", description: "Resume text has been removed from the form."});
   }
@@ -213,7 +213,7 @@ export default function ProfilePage() {
         setSelectedFileName("Resume on file (upload new to replace)");
       } else {
         setSelectedFileName(null);
-        if (fileInputRef.current) fileInputRef.current.value = ""; // Ensure file input is also cleared if resumeText is cleared by save
+        if (fileInputRef.current) fileInputRef.current.value = ""; 
       }
 
     } catch (error: any) {
@@ -375,4 +375,6 @@ export default function ProfilePage() {
     </Card>
   );
 }
+    
+
     
