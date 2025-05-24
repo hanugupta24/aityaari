@@ -6,55 +6,104 @@ import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { PlusCircle, BarChartHorizontalBig, History, Loader2 } from "lucide-react";
+import { PlusCircle, BarChartHorizontalBig, History, Loader2, AlertTriangle } from "lucide-react";
 import Image from "next/image";
 import { db } from "@/lib/firebase";
 import { collection, query, where, orderBy, getDocs, Timestamp, limit } from "firebase/firestore";
 import type { InterviewSession } from "@/types";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useToast } from "@/hooks/use-toast";
 
 export default function DashboardPage() {
-  const { user, userProfile, refreshUserProfile } = useAuth(); // Added refreshUserProfile
+  const { user, userProfile, loading: authLoading, initialLoading: authInitialLoading, refreshUserProfile } = useAuth();
   const [fetchedPastInterviews, setFetchedPastInterviews] = useState<InterviewSession[]>([]);
   const [interviewsLoading, setInterviewsLoading] = useState<boolean>(true);
-  
-  useEffect(() => {
-    // Refresh user profile to get latest interviewsTaken count when component mounts or user changes
-    if (user) {
-        refreshUserProfile();
-    }
+  const [interviewsError, setInterviewsError] = useState<string | null>(null);
+  const { toast } = useToast();
 
+  useEffect(() => {
+    if (user) {
+      refreshUserProfile();
+    }
+  }, [user, refreshUserProfile]);
+
+  useEffect(() => {
     const fetchInterviews = async () => {
       if (!user) {
         setFetchedPastInterviews([]);
         setInterviewsLoading(false);
+        setInterviewsError(null);
         return;
       }
       setInterviewsLoading(true);
+      setInterviewsError(null);
       try {
         const interviewsRef = collection(db, "users", user.uid, "interviews");
-        // Query for completed interviews, ordered by creation date, limit to recent ones if needed
         const q = query(interviewsRef, where("status", "==", "completed"), orderBy("createdAt", "desc"), limit(10));
         const querySnapshot = await getDocs(q);
         const interviews: InterviewSession[] = [];
         querySnapshot.forEach((doc) => {
           const data = doc.data() as Omit<InterviewSession, 'id' | 'createdAt'> & { createdAt: Timestamp | string };
-          interviews.push({ 
-            ...data, 
+          interviews.push({
+            ...data,
             id: doc.id,
-            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt 
+            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt
           } as InterviewSession);
         });
         setFetchedPastInterviews(interviews);
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error fetching past interviews:", error);
-        // Optionally set an error state here
+        setInterviewsError(error.message || "Failed to load past interviews. This might be due to a missing database index. Please check Firebase console if this persists.");
+        toast({
+          title: "Error Loading Interviews",
+          description: "Could not fetch past interview data. If this issue continues, a database index might be required. See console for details.",
+          variant: "destructive",
+        });
+        setFetchedPastInterviews([]); // Clear any potentially stale data
       } finally {
         setInterviewsLoading(false);
       }
     };
-    
-    fetchInterviews();
-  }, [user, refreshUserProfile]); // Add refreshUserProfile to dependencies
+
+    // Only fetch interviews if auth is not loading and user exists
+    if (!authInitialLoading && !authLoading && user) {
+      fetchInterviews();
+    } else if (!authInitialLoading && !authLoading && !user) {
+      // No user, so not loading interviews
+      setInterviewsLoading(false);
+      setInterviewsError(null);
+      setFetchedPastInterviews([]);
+    }
+  }, [user, authLoading, authInitialLoading, toast]);
+
+  if (authInitialLoading || authLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-100px)]">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="mt-4 text-muted-foreground">Loading your dashboard...</p>
+      </div>
+    );
+  }
+
+  if (!user || !userProfile) {
+     // This case might be hit if profile fetch failed after auth succeeded
+    return (
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-100px)]">
+        <Alert variant="destructive" className="max-w-md">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>
+            Could not load your user profile. Please try logging out and logging back in.
+            If the problem persists, contact support.
+          </AlertDescription>
+        </Alert>
+         <Link href="/login" className="mt-4">
+          <Button variant="outline">Go to Login</Button>
+        </Link>
+      </div>
+    );
+  }
+
 
   const interviewsRemaining = userProfile ? Math.max(0, 3 - (userProfile.interviewsTaken || 0)) : 3;
 
@@ -109,9 +158,22 @@ export default function DashboardPage() {
         </CardHeader>
         <CardContent>
           {interviewsLoading ? (
-            <div className="flex justify-center items-center py-10">
+            <div className="flex flex-col items-center justify-center py-10">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="mt-2 text-muted-foreground">Loading past interviews...</p>
             </div>
+          ) : interviewsError ? (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Failed to Load Past Interviews</AlertTitle>
+              <AlertDescription>
+                {interviewsError}
+                <br />
+                <Link href="https://console.firebase.google.com/v1/r/project/tyaari-e0307/firestore/indexes?create_composite=Ck9wcm9qZWN0cy90eWFhcmktZTAzMDcvZGF0YWJhc2VzLyhkZWZhdWx0KS9jb2xsZWN0aW9uR3JvdXBzL2ludGVydmlld3MvaW5kZXhlcy9fEAEaCgoGc3RhdHVzEAEaDQoJY3JlYXRlZEF0EAIaDAoIX19uYW1lX18QAg" target="_blank" rel="noopener noreferrer" className="underline hover:text-destructive-foreground">
+                  Click here to create the required Firestore index
+                </Link> if you haven't already. This may take a few minutes to build after creation.
+              </AlertDescription>
+            </Alert>
           ) : fetchedPastInterviews.length > 0 ? (
             <div className="space-y-4">
               {fetchedPastInterviews.map((interview) => (
@@ -124,7 +186,7 @@ export default function DashboardPage() {
                   </CardHeader>
                   <CardContent>
                     <p className="text-sm text-muted-foreground truncate">
-                      {interview.feedback?.overallFeedback ? 
+                      {interview.feedback?.overallFeedback ?
                         (interview.feedback.overallFeedback.substring(0,150) + (interview.feedback.overallFeedback.length > 150 ? "..." : ""))
                         : "Feedback processing or not available."}
                     </p>
@@ -139,15 +201,15 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="text-center py-10">
-              <Image 
-                src="https://placehold.co/300x200.png?text=No+Interviews+Yet" 
-                alt="No interviews" 
-                width={300} 
-                height={200} 
+              <Image
+                src="https://placehold.co/300x200.png?text=No+Interviews+Yet"
+                alt="No interviews"
+                width={300}
+                height={200}
                 className="mx-auto mb-4 rounded-md"
                 data-ai-hint="empty state illustration"
               />
-              <p className="text-muted-foreground mb-4">You haven't completed any interviews yet.</p>
+              <p className="text-muted-foreground mb-4">You haven't completed any interviews yet, or we couldn't load them.</p>
               <Link href="/interview/start" passHref>
                 <Button>Start Your First Interview</Button>
               </Link>
