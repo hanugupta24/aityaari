@@ -33,13 +33,20 @@ const profileSchema = z.object({
   company: z.string().max(100).optional().nullable(),
   education: z.string().min(2, { message: "Education details are required." }).max(200),
   phoneNumber: z.string().max(20).optional().nullable(),
-  resumeText: z.string().max(25000, {message: "Resume text should be less than 25000 characters."}).optional().nullable(), // Max 25k chars for resume
+  resumeText: z.string().max(25000, {message: "Resume text should be less than 25000 characters."}).optional().nullable(),
 });
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
 
-const ACCEPTED_FILE_TYPES = ['text/plain', 'text/markdown'];
-const MAX_FILE_SIZE_MB = 2; // Max 2MB for resume text file
+const ACCEPTED_MIME_TYPES = [
+  'text/plain', 
+  'text/markdown', 
+  'application/pdf', 
+  'application/msword', // .doc
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document' // .docx
+];
+const ACCEPT_FILE_EXTENSIONS = ".txt,.md,.pdf,.doc,.docx";
+const MAX_FILE_SIZE_MB = 5; // Increased to 5MB for potentially larger office docs
 
 export default function ProfilePage() {
   const { user, userProfile, loading: authLoading, initialLoading, refreshUserProfile } = useAuth();
@@ -79,38 +86,39 @@ export default function ProfilePage() {
         });
         if (userProfile.resumeText) {
             setSelectedFileName("Resume on file (upload new to replace)");
+        } else {
+            setSelectedFileName(null);
         }
       } else {
+        // User is logged in but no profile data, reset to defaults
         form.reset(form.formState.defaultValues);
+        setSelectedFileName(null);
       }
       setIsFetchingProfile(false);
     } else if (!initialLoading && !authLoading && !user) {
+      // No user logged in
       setIsFetchingProfile(false);
+      form.reset(form.formState.defaultValues);
+      setSelectedFileName(null);
     }
   }, [user, userProfile, form, authLoading, initialLoading]);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) {
-      // No file selected or selection cancelled
-      // If user previously had a resume and now clears the input,
-      // we should reflect that. We will clear it if they save without a new file.
-      // For now, just ensure no old filename is stuck if they cancel.
-      // If `form.getValues("resumeText")` has content, `selectedFileName` will be "Resume on file..."
-      // otherwise it's null.
       if (!form.getValues("resumeText")) {
           setSelectedFileName(null);
       }
       return;
     }
 
-    if (!ACCEPTED_FILE_TYPES.includes(file.type)) {
+    if (!ACCEPTED_MIME_TYPES.includes(file.type)) {
       toast({
         title: "Unsupported File Type",
-        description: `Please upload a .txt or .md file. You uploaded a ${file.type} file.`,
+        description: `Please upload a supported file type (${ACCEPT_FILE_EXTENSIONS}). You uploaded: ${file.type || 'unknown'}.`,
         variant: "destructive",
       });
-      if (fileInputRef.current) fileInputRef.current.value = ""; // Reset file input
+      if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
 
@@ -120,35 +128,43 @@ export default function ProfilePage() {
         description: `Please upload a file smaller than ${MAX_FILE_SIZE_MB}MB.`,
         variant: "destructive",
       });
-      if (fileInputRef.current) fileInputRef.current.value = ""; // Reset file input
+      if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
     
     setIsReadingFile(true);
     setSelectedFileName(file.name);
 
+    if (['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.type)) {
+      toast({
+        title: "File Type Notice",
+        description: `Attempting to extract text from ${file.name}. For PDF/Word documents, complex layouts might not be fully preserved as text. A plain text (.txt, .md) version is recommended for the most accurate AI processing of your resume content.`,
+        duration: 7000,
+      });
+    }
+
     const reader = new FileReader();
     reader.onload = (e) => {
       const text = e.target?.result as string;
       form.setValue("resumeText", text, { shouldValidate: true });
       setIsReadingFile(false);
-      toast({ title: "Resume Loaded", description: `${file.name} content has been loaded into the form.`});
+      toast({ title: "Resume Content Loaded", description: `Text from ${file.name} has been loaded into the form.`});
     };
     reader.onerror = (e) => {
         console.error("Error reading file:", e);
-        toast({ title: "File Read Error", description: "Could not read the resume file.", variant: "destructive"});
-        setSelectedFileName(userProfile?.resumeText ? "Resume on file (upload new to replace)" : null); // Revert to previous state
-        if (fileInputRef.current) fileInputRef.current.value = ""; // Reset file input
+        toast({ title: "File Read Error", description: "Could not read the resume file content.", variant: "destructive"});
+        setSelectedFileName(userProfile?.resumeText ? "Resume on file (upload new to replace)" : null);
+        if (fileInputRef.current) fileInputRef.current.value = "";
         setIsReadingFile(false);
     };
-    reader.readAsText(file);
+    reader.readAsText(file); // This will attempt to read all accepted file types as text.
   };
 
   const clearResume = () => {
     form.setValue("resumeText", "", { shouldValidate: true });
     setSelectedFileName(null);
     if (fileInputRef.current) {
-      fileInputRef.current.value = ""; // Clear the file input
+      fileInputRef.current.value = "";
     }
     toast({ title: "Resume Cleared", description: "Resume text has been removed from the form."});
   }
@@ -169,18 +185,15 @@ export default function ProfilePage() {
         ...currentProfileData,
         ...values, 
         uid: user.uid, 
-        email: user.email, 
+        email: user.email || undefined, 
         updatedAt: new Date().toISOString(),
       };
       
       if (profileDataToSave.company === "") profileDataToSave.company = undefined;
       if (profileDataToSave.phoneNumber === "") profileDataToSave.phoneNumber = undefined;
-      // resumeText can be an empty string if user clears it, which is fine.
-      // If it was never set or is null, it can also be undefined.
       if (profileDataToSave.resumeText === null || profileDataToSave.resumeText === "") {
         profileDataToSave.resumeText = undefined;
       }
-
 
       await setDoc(userDocRef, profileDataToSave, { merge: true });
 
@@ -286,7 +299,7 @@ export default function ProfilePage() {
                 <Input 
                   type="file" 
                   ref={fileInputRef}
-                  accept=".txt,.md" 
+                  accept={ACCEPT_FILE_EXTENSIONS}
                   onChange={handleFileChange} 
                   className="block w-full text-sm text-slate-500 dark:text-slate-400
                     file:mr-4 file:py-2 file:px-4
@@ -310,9 +323,9 @@ export default function ProfilePage() {
                 </div>
               )}
               <FormDescription>
-                Upload your resume as a .txt or .md file (max {MAX_FILE_SIZE_MB}MB). This can significantly improve question relevance.
+                Upload your resume ({ACCEPT_FILE_EXTENSIONS}, max {MAX_FILE_SIZE_MB}MB). Text content will be extracted.
+                For PDF/Word files, plain text versions (.txt, .md) provide the best input for AI question generation.
               </FormDescription>
-              {/* Hidden FormField for resumeText to ensure it's part of the form state and validation if needed */}
               <FormField
                 control={form.control}
                 name="resumeText"
@@ -344,6 +357,4 @@ export default function ProfilePage() {
     </Card>
   );
 }
-
-
     
