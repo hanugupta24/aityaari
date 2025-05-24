@@ -12,8 +12,25 @@ const firebaseConfig: FirebaseOptions = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
+// --- BEGIN DIAGNOSTIC LOG ---
+console.log("Firebase Config being used by the app:", firebaseConfig);
+if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "YOUR_API_KEY") {
+  console.error(
+    "Firebase API Key is missing or using a placeholder value. " +
+    "Please ensure NEXT_PUBLIC_FIREBASE_API_KEY is correctly set in your .env file."
+  );
+}
+if (!firebaseConfig.projectId) {
+  console.error(
+    "Firebase Project ID is missing. " +
+    "Please ensure NEXT_PUBLIC_FIREBASE_PROJECT_ID is correctly set in your .env file."
+  );
+}
+// --- END DIAGNOSTIC LOG ---
+
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
 
 export { app, auth, db };
+
