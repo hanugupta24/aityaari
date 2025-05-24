@@ -8,12 +8,17 @@ export interface UserProfile {
   company?: string;
   education?: string;
   phoneNumber?: string;
-  resumeText?: string; // Optional resume content as text
+  
+  resumeFileName?: string; // Original name of the uploaded file
+  resumeFileUrl?: string; // Download URL from Firebase Storage
+  resumeStoragePath?: string; // Full path in Firebase Storage for deletion
+  resumeProcessedText?: string; // Client-side extracted text for AI processing
+
   createdAt: string;
   interviewsTaken?: number;
   isPlusSubscriber?: boolean;
   isAdmin?: boolean; // For admin role
-  updatedAt?: string; // Added from profile page save
+  updatedAt?: string;
 }
 
 export interface InterviewSession {
@@ -32,17 +37,14 @@ export interface GeneratedQuestion {
   id: string;
   text: string;
   stage: "oral" | "technical_written";
-  type: "behavioral" | "technical" | "coding" | "conversational"; // 'conversational' for general oral questions
+  type: "behavioral" | "technical" | "coding" | "conversational" | "resume_based";
   answer?: string; // User's answer for this question
-  // May include expected answer hints or difficulty
 }
 
 export interface InterviewFeedback {
   overallScore?: number; // 0-100
   overallFeedback: string;
-  correctAnswersSummary: string; // Renamed from correctAnswers
-  incorrectAnswersSummary: string; // Renamed from incorrectAnswers
+  correctAnswersSummary: string;
+  incorrectAnswersSummary: string;
   areasForImprovement: string;
-  // Could also include detailed feedback per question
 }
-

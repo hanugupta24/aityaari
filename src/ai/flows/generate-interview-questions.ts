@@ -17,7 +17,7 @@ const GenerateInterviewQuestionsInputSchema = z.object({
   profileField: z.string().describe('The user profile field, e.g., Software Engineering, Data Science.'),
   role: z.string().describe('The user role, e.g., Frontend Developer, Product Manager.'),
   interviewDuration: z.enum(['15', '30', '45']).describe('The selected interview duration in minutes.'),
-  resumeText: z.string().optional().describe('Optional: The full text content of the candidate\'s resume.'),
+  resumeProcessedText: z.string().optional().describe('Optional: The processed text content of the candidate\'s resume.'), // Changed from resumeText
 });
 export type GenerateInterviewQuestionsInput = z.infer<
   typeof GenerateInterviewQuestionsInputSchema
@@ -56,10 +56,10 @@ Candidate Information:
 - Profile Field: {{{profileField}}}
 - Candidate Role: {{{role}}}
 - Interview Duration: {{{interviewDuration}}} minutes
-{{#if resumeText}}
-- Resume Content:
+{{#if resumeProcessedText}}
+- Resume Content (Processed Text):
 ---
-{{{resumeText}}}
+{{{resumeProcessedText}}}
 ---
 {{/if}}
 
@@ -71,7 +71,7 @@ Question Stages & Types:
     *   These questions are for the candidate to answer verbally. The AI (interviewer) will dictate the question.
     *   Focus: Conversational ice-breakers, behavioral questions, general theoretical questions relevant to the role/field, and questions derived from their resume (experiences, projects, skills).
     *   Allowed Types: 'conversational', 'behavioral', 'resume_based'.
-    *   If resumeText is provided, ensure some 'oral' questions are 'resume_based', directly asking about specific points in their resume (e.g., "Tell me more about your project X mentioned in your resume," or "Your resume lists Y skill; can you elaborate on your experience with it in the context of Z?").
+    *   If resumeProcessedText is provided, ensure some 'oral' questions are 'resume_based', directly asking about specific points in their resume (e.g., "Tell me more about your project X mentioned in your resume," or "Your resume lists Y skill; can you elaborate on your experience with it in the context of Z?").
 
 2.  **Technical/Written Stage ('technical_written')**:
     *   This stage is **ONLY for technical roles** and comes AFTER all 'oral' stage questions.
@@ -103,7 +103,7 @@ Ensure a good mix of question types within each stage. Prioritize 'resume_based'
         *   Technical/Written Stage: 2 'technical_written' questions (mix of 'technical', 'coding', or 'resume_based'). Ensure a good mix if multiple.
 
 General Guidelines:
-- All questions MUST be directly relevant to the provided 'profileField', 'role', and 'resumeText' (if available).
+- All questions MUST be directly relevant to the provided 'profileField', 'role', and 'resumeProcessedText' (if available).
 - 'resume_based' questions should refer to specific information from the resume.
 - For 'technical_written' questions of type 'coding', provide a clear, concise problem statement.
 - 'Oral' questions should be open-ended and designed to encourage spoken, detailed responses.
@@ -127,7 +127,7 @@ const generateInterviewQuestionsFlow = ai.defineFlow(
       input.role.toLowerCase().includes(keyword) || input.profileField.toLowerCase().includes(keyword)
     );
 
-    console.log(`Generating questions for ${input.interviewDuration} min interview. Role: ${input.role}, Field: ${input.profileField}. Resume provided: ${!!input.resumeText}. Considered technical by flow: ${isLikelyTechnicalRole}`);
+    console.log(`Generating questions for ${input.interviewDuration} min interview. Role: ${input.role}, Field: ${input.profileField}. Resume provided: ${!!input.resumeProcessedText}. Considered technical by flow: ${isLikelyTechnicalRole}`);
 
     const {output} = await prompt(input);
 
@@ -144,7 +144,13 @@ const generateInterviewQuestionsFlow = ai.defineFlow(
       .sort((a, b) => {
         if (a.stage === 'oral' && b.stage === 'technical_written') return -1;
         if (a.stage === 'technical_written' && b.stage === 'oral') return 1;
-        return (parseInt(a.id.substring(1)) || 0) - (parseInt(b.id.substring(1)) || 0);
+        // Fallback to original ID sorting if stages are the same or IDs are not standard
+        const idA = parseInt(a.id.replace ( /^\D+/g, ''));
+        const idB = parseInt(b.id.replace ( /^\D+/g, ''));
+        if (!isNaN(idA) && !isNaN(idB)) {
+            return idA - idB;
+        }
+        return 0; // Keep original order if IDs are not parseable as q1, q2 etc.
     });
     
     return {
@@ -152,4 +158,3 @@ const generateInterviewQuestionsFlow = ai.defineFlow(
     };
   }
 );
-

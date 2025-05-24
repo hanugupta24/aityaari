@@ -56,7 +56,7 @@ export default function StartInterviewPage() {
         profileField: userProfile.profileField,
         role: userProfile.role,
         interviewDuration: duration,
-        resumeText: userProfile.resumeText || undefined, // Pass resume text if available
+        resumeProcessedText: userProfile.resumeProcessedText || undefined, // Pass processed resume text
       };
       const questionGenOutput = await generateInterviewQuestions(questionGenInput);
 
@@ -104,11 +104,11 @@ export default function StartInterviewPage() {
   };
 
   useEffect(() => {
-    // Check if user profile exists when auth state is resolved
-    if (!authInitialLoading && user && !userProfile) {
-        refreshUserProfile(); // Attempt to refresh profile if not loaded initially
+    if (!authInitialLoading && user && !userProfile && !authLoading) { // Added !authLoading
+        refreshUserProfile(); 
     }
-  }, [authInitialLoading, user, userProfile, refreshUserProfile]);
+  }, [authInitialLoading, user, userProfile, authLoading, refreshUserProfile]);
+
 
   const isProfileEssentialDataMissing = userProfile && (!userProfile.role || !userProfile.profileField);
   const isProfileNotLoadedAndAuthChecked = !authInitialLoading && user && !userProfile && !authLoading;
@@ -120,7 +120,8 @@ export default function StartInterviewPage() {
     isStartingSession || 
     !permissionsGranted || 
     !agreedToMonitoring ||
-    !userProfile || // Disable if profile is generally not loaded
+    isProfileNotLoadedAndAuthChecked || // Disable if profile context is still loading/missing after auth resolved
+    !userProfile || // General check for profile existence
     isProfileEssentialDataMissing || 
     interviewLimitReached;
 
@@ -144,7 +145,7 @@ export default function StartInterviewPage() {
               <UserX className="h-4 w-4" />
               <AlertTitle>Profile Not Loaded</AlertTitle>
               <AlertDescription>
-                We couldn't load your profile data. Please ensure you have created a profile. 
+                We couldn't load your profile data. Please ensure you have created or completed your profile. 
                 <Link href="/profile" className="font-semibold underline hover:text-destructive-foreground/80 ml-1">
                   Go to Profile
                 </Link>
@@ -167,7 +168,7 @@ export default function StartInterviewPage() {
             <FileText className="h-4 w-4" />
             <AlertTitle>Personalized Questions</AlertTitle>
             <AlertDescription>
-              Interview questions will be based on your targeted role and profile field. Adding your resume in the 
+              Interview questions will be based on your targeted role and profile field. Uploading your resume in the 
               <Link href="/profile" className="font-semibold underline hover:text-foreground/80"> profile section</Link> can further tailor the questions to your experience, making your practice more fruitful!
             </AlertDescription>
           </Alert>
@@ -243,8 +244,8 @@ export default function StartInterviewPage() {
             disabled={isButtonDisabled}
             aria-label={`Start ${duration}-Minute Interview ${isButtonDisabled ? '(Disabled)' : ''}`}
           >
-            {(isStartingSession) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {authLoading || authInitialLoading ? 'Loading Profile...' : `Start ${duration}-Minute Interview`}
+            {(isStartingSession || authLoading || authInitialLoading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {authLoading || authInitialLoading ? 'Loading Profile...' : (isStartingSession ? 'Starting Session...' : `Start ${duration}-Minute Interview`)}
           </Button>
         </CardFooter>
       </Card>

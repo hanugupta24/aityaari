@@ -2,6 +2,7 @@
 import { initializeApp, getApps, getApp, type FirebaseOptions } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage"; // Added
 
 const firebaseConfig: FirebaseOptions = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -15,15 +16,10 @@ const firebaseConfig: FirebaseOptions = {
 // --- BEGIN DIAGNOSTIC LOG ---
 console.log("Firebase Config being used by the app:", firebaseConfig);
 
-if (!firebaseConfig.apiKey) {
+if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "YOUR_API_KEY") {
   console.error(
-    "CRITICAL: Firebase API Key is MISSING. " +
-    "Please ensure NEXT_PUBLIC_FIREBASE_API_KEY is correctly set in your .env file and the server is restarted."
-  );
-} else if (firebaseConfig.apiKey === "YOUR_API_KEY") {
-  console.error(
-    "CRITICAL: Firebase API Key is still the placeholder 'YOUR_API_KEY'. " +
-    "Please REPLACE 'YOUR_API_KEY' with your actual Firebase Web API Key in the .env file and restart your development server."
+    "CRITICAL: Firebase API Key is MISSING or is still the placeholder 'YOUR_API_KEY'. " +
+    "Please ensure NEXT_PUBLIC_FIREBASE_API_KEY is correctly set in your .env file with your actual Firebase Web API Key and the server is restarted."
   );
 }
 
@@ -41,8 +37,6 @@ if (!getApps().length) {
     app = initializeApp(firebaseConfig);
   } catch (error) {
     console.error("CRITICAL: Firebase initialization failed!", error);
-    // You might want to throw the error or handle it in a way that stops the app
-    // from proceeding if Firebase is essential.
     throw error;
   }
 } else {
@@ -51,5 +45,6 @@ if (!getApps().length) {
 
 const auth = getAuth(app);
 const db = getFirestore(app);
+const storage = getStorage(app); // Added
 
-export { app, auth, db };
+export { app, auth, db, storage }; // Added storage
