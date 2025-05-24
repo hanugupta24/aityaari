@@ -17,7 +17,7 @@ const GenerateInterviewQuestionsInputSchema = z.object({
   profileField: z.string().describe('The user profile field, e.g., Software Engineering, Data Science.'),
   role: z.string().describe('The user role, e.g., Frontend Developer, Product Manager.'),
   interviewDuration: z.enum(['15', '30', '45']).describe('The selected interview duration in minutes.'),
-  resumeProcessedText: z.string().optional().describe('Optional: The processed text content of the candidate\'s resume.'), // Changed from resumeText
+  resumeProcessedText: z.string().optional().describe('Optional: The client-side processed text content of the candidate\'s resume.'), // Name updated for clarity
 });
 export type GenerateInterviewQuestionsInput = z.infer<
   typeof GenerateInterviewQuestionsInputSchema
@@ -50,14 +50,14 @@ const prompt = ai.definePrompt({
   input: {schema: GenerateInterviewQuestionsInputSchema},
   output: {schema: GenerateInterviewQuestionsOutputSchema},
   prompt: `You are an expert AI Interview Question Generator. Your primary task is to create a set of the best, most relevant, and frequently asked interview questions.
-These questions MUST be tailored to the candidate's profile field, role, the total interview duration, and their resume content (if provided).
+These questions MUST be tailored to the candidate's profile field, role, the total interview duration, and their resume content (if provided from resumeProcessedText).
 
 Candidate Information:
 - Profile Field: {{{profileField}}}
 - Candidate Role: {{{role}}}
 - Interview Duration: {{{interviewDuration}}} minutes
 {{#if resumeProcessedText}}
-- Resume Content (Processed Text):
+- Resume Content (Processed Text from client-side):
 ---
 {{{resumeProcessedText}}}
 ---
@@ -85,21 +85,21 @@ Question Distribution and Types based on Duration:
 Ensure a good mix of question types within each stage. Prioritize 'resume_based' questions if a resume is provided, integrating them naturally into both oral and technical stages where appropriate.
 
 *   **15 minutes:**
-    *   Non-technical roles: 3-4 'oral' questions (mix of 'conversational', 'behavioral', and 'resume_based' if resume exists).
+    *   Non-technical roles: 3-4 'oral' questions (mix of 'conversational', 'behavioral', and 'resume_based' if resumeProcessedText exists).
     *   Technical roles:
-        *   Oral Stage: 2 'oral' questions (mix of 'conversational', 'behavioral', 'resume_based' if resume exists).
-        *   Technical/Written Stage: 1 'technical_written' question (can be 'technical', 'coding', or 'resume_based', highly relevant to {{{role}}}, {{{profileField}}}, and resume if exists).
+        *   Oral Stage: 2 'oral' questions (mix of 'conversational', 'behavioral', 'resume_based' if resumeProcessedText exists).
+        *   Technical/Written Stage: 1 'technical_written' question (can be 'technical', 'coding', or 'resume_based', highly relevant to {{{role}}}, {{{profileField}}}, and resume if resumeProcessedText exists).
 
 *   **30 minutes:**
-    *   Non-technical roles: 5-6 'oral' questions (mix of 'conversational', 'behavioral', and 'resume_based' if resume exists).
+    *   Non-technical roles: 5-6 'oral' questions (mix of 'conversational', 'behavioral', and 'resume_based' if resumeProcessedText exists).
     *   Technical roles:
-        *   Oral Stage: 3 'oral' questions (mix of 'conversational', 'behavioral', 'resume_based' if resume exists).
+        *   Oral Stage: 3 'oral' questions (mix of 'conversational', 'behavioral', 'resume_based' if resumeProcessedText exists).
         *   Technical/Written Stage: 1-2 'technical_written' questions (mix of 'technical', 'coding', or 'resume_based').
 
 *   **45 minutes:**
-    *   Non-technical roles: 7-8 'oral' questions (mix of 'conversational', 'behavioral', and 'resume_based' if resume exists).
+    *   Non-technical roles: 7-8 'oral' questions (mix of 'conversational', 'behavioral', and 'resume_based' if resumeProcessedText exists).
     *   Technical roles:
-        *   Oral Stage: 3-4 'oral' questions (mix of 'conversational', 'behavioral', 'resume_based' if resume exists).
+        *   Oral Stage: 3-4 'oral' questions (mix of 'conversational', 'behavioral', 'resume_based' if resumeProcessedText exists).
         *   Technical/Written Stage: 2 'technical_written' questions (mix of 'technical', 'coding', or 'resume_based'). Ensure a good mix if multiple.
 
 General Guidelines:
@@ -111,7 +111,7 @@ General Guidelines:
 - Each question MUST have a unique 'id' (e.g., "q1", "q2", "q3"...), its 'text', its designated 'stage', and its 'type'.
 
 Generate the questions array according to these guidelines. Ensure questions are challenging yet appropriate for the experience level implied by the role, field, and resume.
-If no resume is provided, generate questions based on role and field only.
+If no resumeProcessedText is provided, generate questions based on role and field only.
 `,
 });
 
@@ -127,7 +127,7 @@ const generateInterviewQuestionsFlow = ai.defineFlow(
       input.role.toLowerCase().includes(keyword) || input.profileField.toLowerCase().includes(keyword)
     );
 
-    console.log(`Generating questions for ${input.interviewDuration} min interview. Role: ${input.role}, Field: ${input.profileField}. Resume provided: ${!!input.resumeProcessedText}. Considered technical by flow: ${isLikelyTechnicalRole}`);
+    console.log(`Generating questions for ${input.interviewDuration} min interview. Role: ${input.role}, Field: ${input.profileField}. Resume text provided (from localStorage): ${!!input.resumeProcessedText}. Considered technical by flow: ${isLikelyTechnicalRole}`);
 
     const {output} = await prompt(input);
 

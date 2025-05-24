@@ -18,6 +18,7 @@ import { doc, setDoc, serverTimestamp, collection, addDoc } from "firebase/fires
 import { db } from "@/lib/firebase";
 import Link from "next/link";
 
+const LS_RESUME_TEXT_KEY = 'tyaariResumeProcessedText'; // Define localStorage key
 
 export default function StartInterviewPage() {
   const { user, userProfile, loading: authLoading, initialLoading: authInitialLoading, refreshUserProfile } = useAuth();
@@ -51,12 +52,15 @@ export default function StartInterviewPage() {
     toast({ title: "Preparing Interview", description: "Generating questions, please wait..." });
 
     try {
+      // Retrieve resume text from localStorage
+      const resumeProcessedTextFromLocalStorage = localStorage.getItem(LS_RESUME_TEXT_KEY);
+
       // 1. Generate Questions
       const questionGenInput: GenerateInterviewQuestionsInput = {
         profileField: userProfile.profileField,
         role: userProfile.role,
         interviewDuration: duration,
-        resumeProcessedText: userProfile.resumeProcessedText || undefined, // Pass processed resume text
+        resumeProcessedText: resumeProcessedTextFromLocalStorage || undefined, 
       };
       const questionGenOutput = await generateInterviewQuestions(questionGenInput);
 
@@ -104,7 +108,7 @@ export default function StartInterviewPage() {
   };
 
   useEffect(() => {
-    if (!authInitialLoading && user && !userProfile && !authLoading) { // Added !authLoading
+    if (!authInitialLoading && user && !userProfile && !authLoading) { 
         refreshUserProfile(); 
     }
   }, [authInitialLoading, user, userProfile, authLoading, refreshUserProfile]);
@@ -120,8 +124,8 @@ export default function StartInterviewPage() {
     isStartingSession || 
     !permissionsGranted || 
     !agreedToMonitoring ||
-    isProfileNotLoadedAndAuthChecked || // Disable if profile context is still loading/missing after auth resolved
-    !userProfile || // General check for profile existence
+    isProfileNotLoadedAndAuthChecked || 
+    !userProfile || 
     isProfileEssentialDataMissing || 
     interviewLimitReached;
 
@@ -169,7 +173,7 @@ export default function StartInterviewPage() {
             <AlertTitle>Personalized Questions</AlertTitle>
             <AlertDescription>
               Interview questions will be based on your targeted role and profile field. Uploading your resume in the 
-              <Link href="/profile" className="font-semibold underline hover:text-foreground/80"> profile section</Link> can further tailor the questions to your experience, making your practice more fruitful!
+              <Link href="/profile" className="font-semibold underline hover:text-foreground/80"> profile section</Link> (stored locally in your browser) can further tailor the questions to your experience, making your practice more fruitful!
             </AlertDescription>
           </Alert>
 

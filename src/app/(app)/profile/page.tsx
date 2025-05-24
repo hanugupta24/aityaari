@@ -7,9 +7,9 @@ import { z } from "zod";
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
-import { db, storage } from "@/lib/firebase"; // Added storage
+import { db } from "@/lib/firebase"; // storage removed
 import { doc, setDoc, getDoc } from "firebase/firestore";
-import { ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage"; // Storage imports
+// Firebase Storage imports removed
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -24,9 +24,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, FileText, UploadCloud, XCircle, Download } from "lucide-react";
+import { Loader2, FileText, UploadCloud, XCircle } from "lucide-react";
 import type { UserProfile } from "@/types";
-import { Progress } from "@/components/ui/progress"; // For upload progress
+// Progress import removed as no upload progress to show
 
 const profileSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }).max(50),
@@ -35,11 +35,7 @@ const profileSchema = z.object({
   company: z.string().max(100).optional().nullable(),
   education: z.string().min(2, { message: "Education details are required." }).max(200),
   phoneNumber: z.string().max(20).optional().nullable(),
-  
-  resumeFileName: z.string().optional().nullable(),
-  resumeFileUrl: z.string().url().optional().nullable(),
-  resumeStoragePath: z.string().optional().nullable(),
-  resumeProcessedText: z.string().optional().nullable(),
+  // Resume fields removed from Zod schema as they are not part of Firestore submission
 });
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
@@ -54,6 +50,10 @@ const ACCEPTED_MIME_TYPES = [
 const ACCEPT_FILE_EXTENSIONS = ".txt,.md,.pdf,.doc,.docx";
 const MAX_FILE_SIZE_MB = 5;
 
+// localStorage keys
+const LS_RESUME_TEXT_KEY = 'tyaariResumeProcessedText';
+const LS_RESUME_FILENAME_KEY = 'tyaariResumeFileName';
+
 export default function ProfilePage() {
   const { user, userProfile, loading: authLoading, initialLoading, refreshUserProfile } = useAuth();
   const router = useRouter();
@@ -61,11 +61,10 @@ export default function ProfilePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFetchingProfile, setIsFetchingProfile] = useState(true);
   
-  const [selectedFile, setSelectedFile] = useState<File | null>(null); // Stores the File object for upload
-  const [displayedFileName, setDisplayedFileName] = useState<string | null>(null); // For UI display
-  const [isProcessingFile, setIsProcessingFile] = useState(false); // For client-side text extraction spinner
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null); // Stores the File object for current interaction
+  const [displayedFileName, setDisplayedFileName] = useState<string | null>(null); // For UI display, from localStorage or current upload
+  const [currentResumeTextForAI, setCurrentResumeTextForAI] = useState<string | null>(null); // Holds text for AI
+  const [isProcessingFile, setIsProcessingFile] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -78,10 +77,6 @@ export default function ProfilePage() {
       company: "",
       education: "",
       phoneNumber: "",
-      resumeFileName: "",
-      resumeFileUrl: "",
-      resumeStoragePath: "",
-      resumeProcessedText: "",
     },
   });
 
@@ -95,44 +90,44 @@ export default function ProfilePage() {
           company: userProfile.company || "",
           education: userProfile.education || "",
           phoneNumber: userProfile.phoneNumber || "",
-          resumeFileName: userProfile.resumeFileName || "",
-          resumeFileUrl: userProfile.resumeFileUrl || "",
-          resumeStoragePath: userProfile.resumeStoragePath || "",
-          resumeProcessedText: userProfile.resumeProcessedText || "",
         });
-        setDisplayedFileName(userProfile.resumeFileName || null);
       } else {
         form.reset(form.formState.defaultValues);
-        setDisplayedFileName(null);
+      }
+      // Load resume info from localStorage
+      const storedFileName = localStorage.getItem(LS_RESUME_FILENAME_KEY);
+      const storedResumeText = localStorage.getItem(LS_RESUME_TEXT_KEY);
+      if (storedFileName) {
+        setDisplayedFileName(storedFileName);
+      }
+      if (storedResumeText) {
+        setCurrentResumeTextForAI(storedResumeText);
       }
       setIsFetchingProfile(false);
     } else if (!initialLoading && !authLoading && !user) {
       setIsFetchingProfile(false);
       form.reset(form.formState.defaultValues);
       setDisplayedFileName(null);
+      setCurrentResumeTextForAI(null);
     }
   }, [user, userProfile, form, authLoading, initialLoading]);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     
-    if (fileInputRef.current) { // Always clear the actual input element's value
-        fileInputRef.current.value = "";
+    if (fileInputRef.current) {
+        fileInputRef.current.value = ""; // Clear input to allow re-selection of the same file
     }
 
-    if (!file) { // User cancelled dialog
-      setSelectedFile(null); 
-      // Do not clear form fields here, they might hold saved data.
-      // If user *had* a file selected for upload and then cancels, selectedFile becomes null.
-      // If they then save, nothing new gets uploaded regarding the resume.
-      // If they had a saved resume, it remains unless cleared explicitly.
+    if (!file) { // User cancelled dialog or no file selected
+      // Do not clear existing localStorage or displayedFileName if user just cancels
       return;
     }
 
     setIsProcessingFile(true);
-    setSelectedFile(file); // Store the File object
-    setDisplayedFileName(file.name); // Display new file name immediately
-    form.setValue("resumeProcessedText", ""); // Clear previously extracted text
+    setSelectedFile(file); 
+    setDisplayedFileName(file.name); // Show new file name immediately
+    setCurrentResumeTextForAI(""); // Clear previous text for AI
 
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
       toast({
@@ -140,8 +135,9 @@ export default function ProfilePage() {
         description: `Please upload a file smaller than ${MAX_FILE_SIZE_MB}MB. Your file is ${(file.size / (1024*1024)).toFixed(2)}MB.`,
         variant: "destructive",
       });
-      setSelectedFile(null); // Clear invalid file
-      setDisplayedFileName(form.getValues("resumeFileName") || null); // Revert to saved file name if any
+      setSelectedFile(null);
+      setDisplayedFileName(localStorage.getItem(LS_RESUME_FILENAME_KEY) || null); // Revert to stored name
+      setCurrentResumeTextForAI(localStorage.getItem(LS_RESUME_TEXT_KEY) || null); // Revert to stored text
       setIsProcessingFile(false);
       return;
     }
@@ -153,7 +149,8 @@ export default function ProfilePage() {
         variant: "destructive",
       });
       setSelectedFile(null);
-      setDisplayedFileName(form.getValues("resumeFileName") || null);
+      setDisplayedFileName(localStorage.getItem(LS_RESUME_FILENAME_KEY) || null);
+      setCurrentResumeTextForAI(localStorage.getItem(LS_RESUME_TEXT_KEY) || null);
       setIsProcessingFile(false);
       return;
     }
@@ -169,61 +166,34 @@ export default function ProfilePage() {
     const reader = new FileReader();
     reader.onload = (e) => {
       const text = e.target?.result as string;
-      form.setValue("resumeProcessedText", text, { shouldValidate: true });
-      toast({ title: "Resume Content Processed", description: `Text from ${file.name} has been processed for AI use.`});
+      setCurrentResumeTextForAI(text);
+      localStorage.setItem(LS_RESUME_TEXT_KEY, text);
+      localStorage.setItem(LS_RESUME_FILENAME_KEY, file.name);
+      setDisplayedFileName(file.name); // Ensure this is set on successful load
+      toast({ title: "Resume Content Processed", description: `Text from ${file.name} has been processed and stored locally for AI use.`});
       setIsProcessingFile(false);
     };
     reader.onerror = (e) => {
         console.error("Error reading file:", e);
-        toast({ title: "File Read Error", description: "Could not read the resume file content for AI processing.", variant: "destructive"});
-        form.setValue("resumeProcessedText", ""); // Clear if read fails
+        toast({ title: "File Read Error", description: "Could not read the resume file content.", variant: "destructive"});
+        setCurrentResumeTextForAI(localStorage.getItem(LS_RESUME_TEXT_KEY) || null); // Revert
+        setDisplayedFileName(localStorage.getItem(LS_RESUME_FILENAME_KEY) || null); // Revert
         setIsProcessingFile(false);
     };
     reader.readAsText(file); 
   };
 
   const clearResume = async () => {
-    if (!user) return;
-    setIsSubmitting(true); // Use submitting state to disable buttons
-    const currentStoragePath = form.getValues("resumeStoragePath");
-
-    if (currentStoragePath) {
-      try {
-        const fileRef = storageRef(storage, currentStoragePath);
-        await deleteObject(fileRef);
-        toast({ title: "Resume Deleted", description: "Previous resume file removed from storage." });
-      } catch (error: any) {
-        console.error("Error deleting old resume from storage:", error);
-        toast({ title: "Storage Error", description: `Could not delete previous resume: ${error.message}`, variant: "destructive" });
-        // Do not halt, attempt to clear DB fields anyway
-      }
-    }
-
-    form.setValue("resumeFileName", "");
-    form.setValue("resumeFileUrl", "");
-    form.setValue("resumeStoragePath", "");
-    form.setValue("resumeProcessedText", "");
+    localStorage.removeItem(LS_RESUME_TEXT_KEY);
+    localStorage.removeItem(LS_RESUME_FILENAME_KEY);
     
     setSelectedFile(null);
     setDisplayedFileName(null);
-
-    // Directly update Firestore to clear resume fields
-    try {
-        const userDocRef = doc(db, "users", user.uid);
-        await setDoc(userDocRef, {
-            resumeFileName: null,
-            resumeFileUrl: null,
-            resumeStoragePath: null,
-            resumeProcessedText: null,
-            updatedAt: new Date().toISOString(),
-        }, { merge: true });
-        await refreshUserProfile();
-        toast({ title: "Resume Cleared", description: "Resume information has been removed." });
-    } catch (error: any) {
-        toast({ title: "Update Error", description: `Failed to clear resume from profile: ${error.message}`, variant: "destructive"});
-    } finally {
-        setIsSubmitting(false);
+    setCurrentResumeTextForAI(null);
+    if (fileInputRef.current) {
+        fileInputRef.current.value = "";
     }
+    toast({ title: "Resume Cleared", description: "Local resume information has been removed." });
   };
 
   const onSubmit = async (values: ProfileFormValues) => {
@@ -232,68 +202,11 @@ export default function ProfilePage() {
       return;
     }
     setIsSubmitting(true);
-    setUploadProgress(null);
 
-    let newResumeData: Partial<UserProfile> = {};
-
-    if (selectedFile) { // A new file was selected for upload
-      setIsUploading(true);
-      const oldStoragePath = userProfile?.resumeStoragePath; // Path of the file currently in DB
-      if (oldStoragePath) {
-        try {
-          const oldFileRef = storageRef(storage, oldStoragePath);
-          await deleteObject(oldFileRef);
-          console.log("Old resume deleted from storage:", oldStoragePath);
-        } catch (error: any) {
-          // Log error but continue, user might be trying to replace a non-existent/broken link file
-          console.error("Error deleting old resume from storage (continuing upload):", error);
-        }
-      }
-
-      const filePath = `users/${user.uid}/resumes/${selectedFile.name}`;
-      const fileRef = storageRef(storage, filePath);
-      const uploadTask = uploadBytesResumable(fileRef, selectedFile);
-
-      try {
-        await new Promise<void>((resolve, reject) => {
-          uploadTask.on('state_changed',
-            (snapshot) => {
-              const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-              setUploadProgress(progress);
-            },
-            (error) => {
-              console.error("Upload error:", error);
-              toast({ title: "Upload Failed", description: `Could not upload resume: ${error.message}`, variant: "destructive" });
-              reject(error);
-            },
-            async () => {
-              const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-              newResumeData = {
-                resumeFileName: selectedFile.name,
-                resumeFileUrl: downloadURL,
-                resumeStoragePath: filePath,
-                // resumeProcessedText is already in 'values' from client-side extraction
-              };
-              resolve();
-            }
-          );
-        });
-      } catch (error) { // Catch error from the promise new Promise created
-        setIsSubmitting(false);
-        setIsUploading(false);
-        setUploadProgress(null);
-        return; // Stop submission if upload fails
-      }
-    } else {
-      // No new file selected, keep existing resumeProcessedText from form (if any)
-      // If user cleared via UI but didn't save, selectedFile is null.
-      // If `values` contains old URLs, they will be saved. If they were cleared by `clearResume` they won't.
-    }
-    
-    // Merge form values (which include client-extracted resumeProcessedText) 
-    // with newResumeData (from file upload)
+    // Resume data is not part of 'values' from the form, it's handled by localStorage
+    // Only user profile fields are saved to Firestore
     const profileDataToSave: UserProfile = {
-      ...userProfile, // Start with existing profile to ensure fields not in form are preserved
+      ...userProfile, 
       uid: user.uid,
       email: user.email || undefined,
       name: values.name,
@@ -302,42 +215,28 @@ export default function ProfilePage() {
       company: values.company || undefined,
       education: values.education,
       phoneNumber: values.phoneNumber || undefined,
-      
-      // Apply new file data if a file was uploaded, otherwise values from form (could be nullified by clearResume)
-      resumeFileName: selectedFile ? newResumeData.resumeFileName : values.resumeFileName,
-      resumeFileUrl: selectedFile ? newResumeData.resumeFileUrl : values.resumeFileUrl,
-      resumeStoragePath: selectedFile ? newResumeData.resumeStoragePath : values.resumeStoragePath,
-      resumeProcessedText: values.resumeProcessedText || undefined, // ensure it's undefined if empty
-
       updatedAt: new Date().toISOString(),
+      // No resume fields here
     };
     
-    // Ensure optional fields are set to undefined if empty string, rather than empty string
     if (profileDataToSave.company === "") profileDataToSave.company = undefined;
     if (profileDataToSave.phoneNumber === "") profileDataToSave.phoneNumber = undefined;
-
 
     try {
       const userDocRef = doc(db, "users", user.uid);
       await setDoc(userDocRef, profileDataToSave, { merge: true });
       toast({ title: "Profile Updated", description: "Your profile has been successfully updated." });
       await refreshUserProfile(); 
-      setSelectedFile(null); // Clear selected file after successful save & upload
-      // displayedFileName is already updated via userProfile effect or handleFileChange
+      // selectedFile is for current interaction, not long-term state after save
+      // displayedFileName and currentResumeTextForAI are already updated from localStorage or file change
     } catch (error: any) {
       console.error("Profile update error:", error);
       const description = error.code ? `${error.message} (Code: ${error.code})` : error.message || "Could not update profile.";
       toast({ title: "Update Failed", description: description, variant: "destructive" });
     } finally {
       setIsSubmitting(false);
-      setIsUploading(false);
-      setUploadProgress(null);
     }
   };
-
-  const currentResumeUrl = form.watch("resumeFileUrl");
-  const currentResumeFileNameForDisplay = displayedFileName || form.watch("resumeFileName");
-
 
   return (
     <Card className="max-w-2xl mx-auto shadow-lg">
@@ -348,7 +247,6 @@ export default function ProfilePage() {
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            {/* Other form fields remain the same */}
             <FormField control={form.control} name="name" render={({ field }) => (<FormItem><FormLabel>Full Name</FormLabel><FormControl><Input placeholder="e.g., Ada Lovelace" {...field} /></FormControl><FormMessage /></FormItem>)} />
             <FormField control={form.control} name="profileField" render={({ field }) => (<FormItem><FormLabel>Profile Field</FormLabel><FormControl><Input placeholder="e.g., Software Engineering, Product Management" {...field} /></FormControl><FormDescription>Your primary area of expertise.</FormDescription><FormMessage /></FormItem>)} />
             <FormField control={form.control} name="role" render={({ field }) => (<FormItem><FormLabel>Current or Target Role</FormLabel><FormControl><Input placeholder="e.g., Senior Frontend Developer" {...field} /></FormControl><FormMessage /></FormItem>)} />
@@ -356,7 +254,7 @@ export default function ProfilePage() {
             <FormField control={form.control} name="education" render={({ field }) => (<FormItem><FormLabel>Education</FormLabel><FormControl><Textarea placeholder="e.g., B.S. in Computer Science from Example University" {...field} /></FormControl><FormDescription>Your highest relevant education.</FormDescription><FormMessage /></FormItem>)} />
 
             <FormItem>
-              <FormLabel>Resume (Optional)</FormLabel>
+              <FormLabel>Resume (Optional, stored locally in your browser)</FormLabel>
               <div className="flex items-center gap-2">
                 <FormControl>
                   <Input 
@@ -370,52 +268,35 @@ export default function ProfilePage() {
                       file:text-sm file:font-semibold
                       file:bg-primary/10 file:text-primary
                       hover:file:bg-primary/20"
-                    disabled={isProcessingFile || isSubmitting || isUploading}
+                    disabled={isProcessingFile || isSubmitting}
                   />
                 </FormControl>
                 {isProcessingFile && <Loader2 className="h-5 w-5 animate-spin" />}
               </div>
               <FormDescription>
                 Upload your resume ({ACCEPT_FILE_EXTENSIONS}, max {MAX_FILE_SIZE_MB}MB). Text will be extracted for AI.
-                Plain text versions (.txt, .md) are best for AI processing.
+                Plain text versions (.txt, .md) are best for AI processing. This resume is stored only in your browser.
               </FormDescription>
               
-              {isUploading && uploadProgress !== null && (
-                <div className="mt-2">
-                  <Progress value={uploadProgress} className="w-full h-2" />
-                  <p className="text-sm text-muted-foreground text-center">{Math.round(uploadProgress)}% uploaded</p>
-                </div>
-              )}
-
-              {currentResumeFileNameForDisplay && !isProcessingFile && !isUploading && (
+              {displayedFileName && !isProcessingFile && (
                 <div className="mt-2 text-sm text-muted-foreground flex items-center justify-between p-2 border rounded-md bg-secondary/50">
                   <div className="flex items-center gap-2">
                       <FileText className="h-4 w-4 text-primary" />
-                      <span>{currentResumeFileNameForDisplay}</span>
-                      {currentResumeUrl && (
-                        <a href={currentResumeUrl} target="_blank" rel="noopener noreferrer" title="Download saved resume">
-                            <Download className="h-4 w-4 text-primary hover:text-primary/80" />
-                        </a>
-                      )}
+                      <span>{displayedFileName} (loaded from browser)</span>
                   </div>
-                  <Button type="button" variant="ghost" size="sm" onClick={clearResume} title="Clear and remove resume" disabled={isSubmitting || authLoading || isProcessingFile || isUploading}>
+                  <Button type="button" variant="ghost" size="sm" onClick={clearResume} title="Clear resume from browser storage" disabled={isSubmitting || authLoading || isProcessingFile}>
                       <XCircle className="h-4 w-4 text-destructive" />
                   </Button>
                 </div>
               )}
-              {/* Hidden inputs for schema compliance, values managed by logic */}
-              <FormField control={form.control} name="resumeFileName" render={({ field }) => <Input type="hidden" {...field} value={field.value ?? ""} />} />
-              <FormField control={form.control} name="resumeFileUrl" render={({ field }) => <Input type="hidden" {...field} value={field.value ?? ""} />} />
-              <FormField control={form.control} name="resumeStoragePath" render={({ field }) => <Input type="hidden" {...field} value={field.value ?? ""} />} />
-              <FormField control={form.control} name="resumeProcessedText" render={({ field }) => <Input type="hidden" {...field} value={field.value ?? ""} />} />
-              <FormMessage />
+              {/* No hidden inputs needed for resume as it's not part of form submission values to Firestore */}
             </FormItem>
 
             <FormField control={form.control} name="phoneNumber" render={({ field }) => (<FormItem><FormLabel>Phone Number (Optional)</FormLabel><FormControl><Input placeholder="e.g., +1 555-123-4567" {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>)} />
             
-            <Button type="submit" disabled={isSubmitting || authLoading || isProcessingFile || isUploading} className="w-full sm:w-auto">
-              {(isSubmitting || isProcessingFile || isUploading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isUploading ? 'Uploading...' : (isSubmitting ? 'Saving...' : 'Save Changes')}
+            <Button type="submit" disabled={isSubmitting || authLoading || isProcessingFile} className="w-full sm:w-auto">
+              {(isSubmitting || isProcessingFile) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isProcessingFile ? 'Processing File...' : (isSubmitting ? 'Saving Profile...' : 'Save Changes')}
             </Button>
           </form>
         </Form>

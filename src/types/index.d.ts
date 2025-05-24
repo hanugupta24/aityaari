@@ -9,10 +9,11 @@ export interface UserProfile {
   education?: string;
   phoneNumber?: string;
   
-  resumeFileName?: string; // Original name of the uploaded file
-  resumeFileUrl?: string; // Download URL from Firebase Storage
-  resumeStoragePath?: string; // Full path in Firebase Storage for deletion
-  resumeProcessedText?: string; // Client-side extracted text for AI processing
+  // Resume fields removed from Firestore profile
+  // resumeFileName?: string; 
+  // resumeFileUrl?: string; 
+  // resumeStoragePath?: string; 
+  // resumeProcessedText?: string; 
 
   createdAt: string;
   interviewsTaken?: number;
