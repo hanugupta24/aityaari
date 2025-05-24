@@ -5,19 +5,24 @@ import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { PlusCircle, Loader2, AlertTriangle, ListChecks, User, DatabaseZap, ExternalLink } from "lucide-react";
+import { PlusCircle, Loader2, AlertTriangle, ListChecks, User, DatabaseZap, ExternalLink, ShieldCheck, TrendingUp, Sparkles } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { InterviewSession } from "@/types";
 import { useEffect, useState, useCallback } from "react";
 import { collection, query, where, orderBy, limit, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
+import { Progress } from "@/components/ui/progress";
+
+const FREE_INTERVIEW_LIMIT = 3;
 
 function InterviewsErrorAlert({ error }: { error: string | null }) {
   if (!error) return null;
 
   const isIndexError = error.includes("query requires an index");
-  const indexCreationLink = error.substring(error.indexOf("https://"), error.lastIndexOf(")") + 1);
+  const indexCreationLinkMatch = error.match(/https:\/\/console\.firebase\.google\.com\/[^)]+/);
+  const indexCreationLink = indexCreationLinkMatch ? indexCreationLinkMatch[0] : null;
+
 
   return (
     <Alert variant="destructive" className="my-4">
@@ -50,7 +55,7 @@ export default function DashboardPage() {
   const { toast } = useToast();
 
   const [fetchedPastInterviews, setFetchedPastInterviews] = useState<InterviewSession[]>([]);
-  const [interviewsLoading, setInterviewsLoading] = useState(true); // Start true to show loader initially for interviews
+  const [interviewsLoading, setInterviewsLoading] = useState(true);
   const [interviewsError, setInterviewsError] = useState<string | null>(null);
 
 
@@ -58,7 +63,7 @@ export default function DashboardPage() {
     if (!user) {
       console.log("DashboardPage: No user, clearing past interviews and stopping loader.");
       setFetchedPastInterviews([]);
-      setInterviewsLoading(false); // Stop loading if no user
+      setInterviewsLoading(false); 
       setInterviewsError(null);
       return;
     }
@@ -71,12 +76,12 @@ export default function DashboardPage() {
       const interviewsRef = collection(db, "users", user.uid, "interviews");
       const q = query(interviewsRef, where("status", "==", "completed"), orderBy("createdAt", "desc"), limit(10));
       const querySnapshot = await getDocs(q);
-      const interviews: InterviewSession[] = [];
+      const interviewsData: InterviewSession[] = [];
       querySnapshot.forEach((doc) => {
-        interviews.push({ id: doc.id, ...doc.data() } as InterviewSession);
+        interviewsData.push({ id: doc.id, ...doc.data() } as InterviewSession);
       });
-      setFetchedPastInterviews(interviews);
-      console.log("DashboardPage: Successfully fetched interviews:", interviews.length);
+      setFetchedPastInterviews(interviewsData);
+      console.log("DashboardPage: Successfully fetched interviews:", interviewsData.length);
     } catch (error: any) {
       console.error("DashboardPage: Error fetching past interviews:", error);
       const errorMessage = error.message || "An unknown error occurred while fetching interviews.";
@@ -86,19 +91,17 @@ export default function DashboardPage() {
         description: errorMessage,
         variant: "destructive",
       });
-      setFetchedPastInterviews([]); // Clear any potentially stale data
+      setFetchedPastInterviews([]); 
     } finally {
       console.log("DashboardPage: Finished fetching interviews, setting interviewsLoading to false.");
       setInterviewsLoading(false);
     }
-  }, [user, toast]); // Removed refreshUserProfile from here as it might cause loops if not careful
+  }, [user, toast]); 
 
   useEffect(() => {
-    // Fetch interviews only when user is resolved and not in initial auth loading
     if (!authInitialLoading && user) {
         fetchInterviews();
     } else if (!authInitialLoading && !user) {
-        // If auth is resolved and there's no user, ensure loading states are false
         setInterviewsLoading(false);
         setFetchedPastInterviews([]);
         setInterviewsError(null);
@@ -106,7 +109,6 @@ export default function DashboardPage() {
   }, [user, authInitialLoading, fetchInterviews]);
 
 
-  // Enhanced Loading States for Auth & Profile
   if (authInitialLoading) {
     return (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-100px)]">
@@ -132,7 +134,7 @@ export default function DashboardPage() {
   }
   
   if (user && (authLoading || (!userProfile && !authInitialLoading && !authLoading))) {
-     const message = authLoading ? "Loading user profile..." : "Could not load your user profile. Please try again later or contact support.";
+     const message = authLoading ? "Loading user profile..." : "Could not load your user profile. Please try refreshing or check your profile settings.";
      return (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-100px)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -146,7 +148,9 @@ export default function DashboardPage() {
     );
   }
   
-  // Main dashboard content
+  const interviewsTaken = userProfile?.interviewsTaken || 0;
+  const remainingFreeInterviews = FREE_INTERVIEW_LIMIT - interviewsTaken;
+
   return (
     <div className="space-y-6">
       <Card className="shadow-lg">
@@ -169,6 +173,83 @@ export default function DashboardPage() {
           </Link>
         </CardContent>
       </Card>
+
+      {userProfile && !userProfile.isPlusSubscriber && (
+        <Card className="shadow-md">
+          <CardHeader>
+            <CardTitle className="text-xl flex items-center">
+              <TrendingUp className="mr-3 h-6 w-6 text-primary" />
+              Your Free Interview Credits
+            </CardTitle>
+            <CardDescription>Track your usage of free interview sessions.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-2">You have used <span className="font-semibold">{interviewsTaken}</span> of your <span className="font-semibold">{FREE_INTERVIEW_LIMIT}</span> free interviews.</p>
+            <Progress value={(interviewsTaken / FREE_INTERVIEW_LIMIT) * 100} className="mb-2 h-3" />
+            {remainingFreeInterviews > 0 ? (
+              <p className="text-sm text-muted-foreground">You have <span className="font-semibold text-green-600 dark:text-green-400">{remainingFreeInterviews}</span> free {remainingFreeInterviews === 1 ? 'interview' : 'interviews'} remaining.</p>
+            ) : (
+              <p className="text-sm text-amber-600 dark:text-amber-400 font-medium">You've used all your free interviews. Upgrade to Plus for unlimited access!</p>
+            )}
+          </CardContent>
+          {remainingFreeInterviews <= 0 && (
+             <CardFooter>
+                <Link href="/subscription" passHref>
+                    <Button variant="default">
+                        <Sparkles className="mr-2 h-4 w-4" /> Upgrade to Plus
+                    </Button>
+                </Link>
+            </CardFooter>
+          )}
+        </Card>
+      )}
+      
+      {!userProfile?.isPlusSubscriber && (
+         <Card className="shadow-md bg-gradient-to-br from-primary/10 via-background to-background dark:from-primary/20">
+            <CardHeader>
+                <CardTitle className="text-xl flex items-center">
+                <ShieldCheck className="mr-3 h-6 w-6 text-primary" />
+                Unlock Your Full Potential with Plus!
+                </CardTitle>
+                <CardDescription>Go unlimited and access exclusive features to supercharge your preparation.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <ul className="list-disc list-inside space-y-2 text-sm text-muted-foreground">
+                    <li><span className="font-semibold text-foreground">Unlimited</span> interview sessions.</li>
+                    <li>Access to <span className="font-semibold text-foreground">all question types</span> and difficulties.</li>
+                    <li>More <span className="font-semibold text-foreground">detailed performance analytics</span> (coming soon).</li>
+                    <li>Priority <span className="font-semibold text-foreground">AI model access</span> for faster responses.</li>
+                </ul>
+            </CardContent>
+            <CardFooter>
+                 <Link href="/subscription" passHref>
+                    <Button size="lg">
+                         <Sparkles className="mr-2 h-5 w-5" /> Upgrade to aiTyaari Plus
+                    </Button>
+                </Link>
+            </CardFooter>
+        </Card>
+      )}
+      
+      {userProfile?.isPlusSubscriber && (
+         <Card className="shadow-md bg-gradient-to-br from-green-500/10 via-background to-background dark:from-green-600/20">
+            <CardHeader>
+                <CardTitle className="text-xl flex items-center">
+                <ShieldCheck className="mr-3 h-6 w-6 text-green-600 dark:text-green-400" />
+                You are an aiTyaari Plus Member!
+                </CardTitle>
+                <CardDescription>Enjoy unlimited access to all features and prepare without limits.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                 <p className="text-sm text-muted-foreground">Thank you for being a Plus subscriber. You have unlimited interview sessions and access to all current and upcoming premium features.</p>
+                 {/* Optionally add a link to manage subscription if that page exists */}
+                 {/* <Link href="/manage-subscription" className="mt-2 inline-block">
+                    <Button variant="outline" size="sm">Manage Subscription</Button>
+                 </Link> */}
+            </CardContent>
+        </Card>
+      )}
+
 
       <Card className="shadow-lg">
         <CardHeader>
@@ -210,9 +291,9 @@ export default function DashboardPage() {
                   </CardHeader>
                   <CardContent>
                     <p className="text-sm text-muted-foreground">
-                      Feedback: {session.feedback?.overallFeedback?.substring(0, 100) || "Feedback pending..."}...
+                      Feedback: {(session.feedback?.overallFeedback?.substring(0, 100) || "Feedback pending...") + (session.feedback?.overallFeedback && session.feedback.overallFeedback.length > 100 ? "..." : "")}
                     </p>
-                     {session.feedback?.overallScore && (
+                     {session.feedback?.overallScore !== undefined && (
                         <p className="text-sm font-semibold mt-1">Score: {session.feedback.overallScore}/100</p>
                      )}
                   </CardContent>
@@ -232,3 +313,6 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+
+      
