@@ -18,8 +18,6 @@ import { doc, setDoc, serverTimestamp, collection, addDoc } from "firebase/fires
 import { db } from "@/lib/firebase";
 import Link from "next/link";
 
-const LS_RESUME_TEXT_KEY = 'tyaariResumeProcessedText'; // Define localStorage key
-
 export default function StartInterviewPage() {
   const { user, userProfile, loading: authLoading, initialLoading: authInitialLoading, refreshUserProfile } = useAuth();
   const router = useRouter();
@@ -52,15 +50,15 @@ export default function StartInterviewPage() {
     toast({ title: "Preparing Interview", description: "Generating questions, please wait..." });
 
     try {
-      // Retrieve resume text from localStorage
-      const resumeProcessedTextFromLocalStorage = localStorage.getItem(LS_RESUME_TEXT_KEY);
+      // Retrieve resume text from userProfile (which should be from Firestore)
+      const resumeProcessedTextFromProfile = userProfile.resumeProcessedText;
 
       // 1. Generate Questions
       const questionGenInput: GenerateInterviewQuestionsInput = {
         profileField: userProfile.profileField,
         role: userProfile.role,
         interviewDuration: duration,
-        resumeProcessedText: resumeProcessedTextFromLocalStorage || undefined, 
+        resumeProcessedText: resumeProcessedTextFromProfile || undefined, 
       };
       const questionGenOutput = await generateInterviewQuestions(questionGenInput);
 
@@ -137,14 +135,14 @@ export default function StartInterviewPage() {
           <CardDescription>Choose your preferred interview duration and prepare for a focused session.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {authInitialLoading && (
+          {(authInitialLoading || (authLoading && !userProfile)) && (
             <div className="flex items-center justify-center p-4">
               <Loader2 className="h-6 w-6 animate-spin mr-2" />
               <p>Loading your information...</p>
             </div>
           )}
           
-          {isProfileNotLoadedAndAuthChecked && (
+          {isProfileNotLoadedAndAuthChecked && !authInitialLoading && !authLoading && (
              <Alert variant="destructive">
               <UserX className="h-4 w-4" />
               <AlertTitle>Profile Not Loaded</AlertTitle>
@@ -173,7 +171,7 @@ export default function StartInterviewPage() {
             <AlertTitle>Personalized Questions</AlertTitle>
             <AlertDescription>
               Interview questions will be based on your targeted role and profile field. Uploading your resume in the 
-              <Link href="/profile" className="font-semibold underline hover:text-foreground/80"> profile section</Link> (stored locally in your browser) can further tailor the questions to your experience, making your practice more fruitful!
+              <Link href="/profile" className="font-semibold underline hover:text-foreground/80"> profile section</Link> can further tailor the questions to your experience, making your practice more fruitful!
             </AlertDescription>
           </Alert>
 

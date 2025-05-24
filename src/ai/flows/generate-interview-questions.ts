@@ -127,7 +127,7 @@ const generateInterviewQuestionsFlow = ai.defineFlow(
       input.role.toLowerCase().includes(keyword) || input.profileField.toLowerCase().includes(keyword)
     );
 
-    console.log(`Generating questions for ${input.interviewDuration} min interview. Role: ${input.role}, Field: ${input.profileField}. Resume text provided (from localStorage): ${!!input.resumeProcessedText}. Considered technical by flow: ${isLikelyTechnicalRole}`);
+    console.log(`Generating questions for ${input.interviewDuration} min interview. Role: ${input.role}, Field: ${input.profileField}. Resume text provided: ${!!input.resumeProcessedText}. Considered technical by flow: ${isLikelyTechnicalRole}`);
 
     const {output} = await prompt(input);
 
