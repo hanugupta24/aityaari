@@ -57,7 +57,8 @@ export default function ProfilePage() {
   });
 
   useEffect(() => {
-    if (!initialLoading && !authLoading) { // Check initialLoading and authLoading first
+    // Wait until authentication is resolved and user object is available
+    if (!initialLoading && !authLoading && user) {
       if (userProfile) {
         form.reset({
           name: userProfile.name || "",
@@ -68,13 +69,17 @@ export default function ProfilePage() {
           phoneNumber: userProfile.phoneNumber || "",
         });
       } else {
-        // If userProfile is null but auth is loaded, means no profile or error.
-        // Form will use defaultValues (empty strings).
+        // User is loaded, but no userProfile (could be new user or fetch error)
+        // Reset to default empty values for a new profile.
         form.reset(form.formState.defaultValues);
       }
       setIsFetchingProfile(false);
+    } else if (!initialLoading && !authLoading && !user) {
+      // Auth resolved, but no user (logged out)
+      setIsFetchingProfile(false);
+      // Optionally redirect or show a message if user must be logged in
     }
-  }, [userProfile, form, authLoading, initialLoading]);
+  }, [user, userProfile, form, authLoading, initialLoading]);
 
 
   const onSubmit = async (values: ProfileFormValues) => {
@@ -86,27 +91,24 @@ export default function ProfilePage() {
     try {
       const userDocRef = doc(db, "users", user.uid);
       
-      // Fetch the current profile to ensure we're merging with the latest data
       const currentProfileSnap = await getDoc(userDocRef);
       const currentProfileData = currentProfileSnap.exists() ? currentProfileSnap.data() : {};
 
       const profileDataToSave: Partial<UserProfile> = {
-        ...currentProfileData, // Spread existing data (includes fields like interviewsTaken, isPlusSubscriber, createdAt)
-        ...values, // Spread new form values, potentially overwriting name, role etc.
+        ...currentProfileData,
+        ...values, 
         uid: user.uid, 
         email: user.email, 
         updatedAt: new Date().toISOString(),
       };
       
-      // Ensure optional fields that are empty strings from the form are saved as null or omitted if appropriate
-      // For Zod optional strings, empty string is valid. If you want them to be `null` in Firestore:
-      if (profileDataToSave.company === "") profileDataToSave.company = undefined; // Or null
-      if (profileDataToSave.phoneNumber === "") profileDataToSave.phoneNumber = undefined; // Or null
+      if (profileDataToSave.company === "") profileDataToSave.company = undefined;
+      if (profileDataToSave.phoneNumber === "") profileDataToSave.phoneNumber = undefined;
 
       await setDoc(userDocRef, profileDataToSave, { merge: true });
 
       toast({ title: "Profile Updated", description: "Your profile has been successfully updated." });
-      await refreshUserProfile(); // Refresh userProfile in AuthContext
+      await refreshUserProfile(); 
     } catch (error: any) {
       console.error("Profile update error:", error);
       const description = error.message || error.code || "Could not update profile. See browser console for details.";
@@ -120,7 +122,7 @@ export default function ProfilePage() {
     }
   };
 
-  if (initialLoading || isFetchingProfile) { // authLoading is covered by initialLoading for the initial fetch
+  if (initialLoading || isFetchingProfile) {
     return <div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin" /></div>;
   }
 
