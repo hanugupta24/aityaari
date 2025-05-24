@@ -46,7 +46,7 @@ const ACCEPTED_MIME_TYPES = [
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document' // .docx
 ];
 const ACCEPT_FILE_EXTENSIONS = ".txt,.md,.pdf,.doc,.docx";
-const MAX_FILE_SIZE_MB = 5; // Increased to 5MB for potentially larger office docs
+const MAX_FILE_SIZE_MB = 5;
 
 export default function ProfilePage() {
   const { user, userProfile, loading: authLoading, initialLoading, refreshUserProfile } = useAuth();
@@ -106,6 +106,7 @@ export default function ProfilePage() {
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) {
+      // If no file is selected, but there was a resumeText in form, keep "Resume on file"
       if (!form.getValues("resumeText")) {
           setSelectedFileName(null);
       }
@@ -118,7 +119,7 @@ export default function ProfilePage() {
         description: `Please upload a supported file type (${ACCEPT_FILE_EXTENSIONS}). You uploaded: ${file.type || 'unknown'}.`,
         variant: "destructive",
       });
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      if (fileInputRef.current) fileInputRef.current.value = ""; // Clear the input
       return;
     }
 
@@ -128,12 +129,12 @@ export default function ProfilePage() {
         description: `Please upload a file smaller than ${MAX_FILE_SIZE_MB}MB.`,
         variant: "destructive",
       });
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      if (fileInputRef.current) fileInputRef.current.value = ""; // Clear the input
       return;
     }
     
     setIsReadingFile(true);
-    setSelectedFileName(file.name);
+    setSelectedFileName(file.name); // Show the name of the newly selected file
 
     if (['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.type)) {
       toast({
@@ -153,18 +154,19 @@ export default function ProfilePage() {
     reader.onerror = (e) => {
         console.error("Error reading file:", e);
         toast({ title: "File Read Error", description: "Could not read the resume file content.", variant: "destructive"});
+        // Revert to "Resume on file" if there was one originally, otherwise null
         setSelectedFileName(userProfile?.resumeText ? "Resume on file (upload new to replace)" : null);
         if (fileInputRef.current) fileInputRef.current.value = "";
         setIsReadingFile(false);
     };
-    reader.readAsText(file); // This will attempt to read all accepted file types as text.
+    reader.readAsText(file); 
   };
 
   const clearResume = () => {
     form.setValue("resumeText", "", { shouldValidate: true });
     setSelectedFileName(null);
     if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+      fileInputRef.current.value = ""; // Clear the file input
     }
     toast({ title: "Resume Cleared", description: "Resume text has been removed from the form."});
   }
@@ -182,13 +184,14 @@ export default function ProfilePage() {
       const currentProfileData = currentProfileSnap.exists() ? currentProfileSnap.data() : {};
 
       const profileDataToSave: Partial<UserProfile> = {
-        ...currentProfileData,
+        ...currentProfileData, // Preserve existing fields not in the form
         ...values, 
         uid: user.uid, 
-        email: user.email || undefined, 
+        email: user.email || undefined, // Firebase user email might be null
         updatedAt: new Date().toISOString(),
       };
       
+      // Ensure optional fields that are empty strings are stored as undefined or removed
       if (profileDataToSave.company === "") profileDataToSave.company = undefined;
       if (profileDataToSave.phoneNumber === "") profileDataToSave.phoneNumber = undefined;
       if (profileDataToSave.resumeText === null || profileDataToSave.resumeText === "") {
@@ -199,6 +202,13 @@ export default function ProfilePage() {
 
       toast({ title: "Profile Updated", description: "Your profile has been successfully updated." });
       await refreshUserProfile(); 
+      // If resumeText was updated, reflect this in selectedFileName
+      if (values.resumeText) {
+        setSelectedFileName("Resume on file (upload new to replace)");
+      } else {
+        setSelectedFileName(null);
+      }
+
     } catch (error: any) {
       console.error("Profile update error:", error);
       const description = error.message || error.code || "Could not update profile. See browser console for details.";
@@ -317,7 +327,7 @@ export default function ProfilePage() {
                         <FileText className="h-4 w-4 mr-2 text-primary" />
                         <span>{selectedFileName}</span>
                     </div>
-                    <Button type="button" variant="ghost" size="sm" onClick={clearResume} title="Clear resume">
+                    <Button type="button" variant="ghost" size="sm" onClick={clearResume} title="Clear resume" disabled={isSubmitting || authLoading || isReadingFile}>
                         <XCircle className="h-4 w-4 text-destructive" />
                     </Button>
                 </div>
@@ -329,7 +339,7 @@ export default function ProfilePage() {
               <FormField
                 control={form.control}
                 name="resumeText"
-                render={({ field }) => <Input type="hidden" {...field} />}
+                render={({ field }) => <Input type="hidden" {...field} />} 
               />
               <FormMessage>{form.formState.errors.resumeText?.message}</FormMessage>
             </FormItem>
@@ -357,4 +367,6 @@ export default function ProfilePage() {
     </Card>
   );
 }
+    
+
     
