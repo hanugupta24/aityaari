@@ -33,7 +33,7 @@ const profileSchema = z.object({
   company: z.string().max(100).optional().nullable(),
   education: z.string().min(2, { message: "Education details are required." }).max(200),
   phoneNumber: z.string().max(20).optional().nullable(),
-  resumeText: z.string().max(50000, {message: "Resume text should be less than 50,000 characters."}).optional().nullable(),
+  resumeText: z.string().optional().nullable(), // Removed max length constraint
 });
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
@@ -90,11 +90,13 @@ export default function ProfilePage() {
             setSelectedFileName(null);
         }
       } else {
+        // User is logged in, but no profile exists yet
         form.reset(form.formState.defaultValues);
         setSelectedFileName(null);
       }
       setIsFetchingProfile(false);
     } else if (!initialLoading && !authLoading && !user) {
+      // No user logged in
       setIsFetchingProfile(false);
       form.reset(form.formState.defaultValues);
       setSelectedFileName(null);
@@ -102,17 +104,15 @@ export default function ProfilePage() {
   }, [user, userProfile, form, authLoading, initialLoading]);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    form.setValue("resumeText", userProfile?.resumeText || "", { shouldValidate: true }); // Reset to old value or empty
+    setSelectedFileName(userProfile?.resumeText ? "Resume on file (upload new to replace)" : null);
+    if (fileInputRef.current) fileInputRef.current.value = ""; // Clear the file input visually
+
+
     const file = event.target.files?.[0];
     
-    form.setValue("resumeText", "", { shouldValidate: false });
-    setSelectedFileName(null);
-
     if (!file) {
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      if (userProfile?.resumeText) {
-          setSelectedFileName("Resume on file (upload new to replace)");
-          form.setValue("resumeText", userProfile.resumeText, {shouldValidate: true});
-      }
+      // No file selected, state already reset above
       return;
     }
 
@@ -122,25 +122,23 @@ export default function ProfilePage() {
         description: `Please upload a file smaller than ${MAX_FILE_SIZE_MB}MB. Your file is ${(file.size / (1024*1024)).toFixed(2)}MB.`,
         variant: "destructive",
       });
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      form.setValue("resumeText", userProfile?.resumeText || "", { shouldValidate: true }); // Restore old value if any
-      setSelectedFileName(userProfile?.resumeText ? "Resume on file (upload new to replace)" : null);
+      // State already reset, file input cleared.
       return;
     }
 
-    if (!ACCEPTED_MIME_TYPES.includes(file.type)) {
+    if (!ACCEPTED_MIME_TYPES.includes(file.type) && !ACCEPT_FILE_EXTENSIONS.split(',').some(ext => file.name.toLowerCase().endsWith(ext))) {
       toast({
         title: "Unsupported File Type",
-        description: `Please upload a supported file type (${ACCEPT_FILE_EXTENSIONS}). You uploaded: ${file.type || 'unknown'}.`,
+        description: `Please upload a supported file type (${ACCEPT_FILE_EXTENSIONS}). You uploaded: ${file.name} (type: ${file.type || 'unknown'}).`,
         variant: "destructive",
       });
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      form.setValue("resumeText", userProfile?.resumeText || "", { shouldValidate: true }); // Restore old value if any
-      setSelectedFileName(userProfile?.resumeText ? "Resume on file (upload new to replace)" : null);
+      // State already reset, file input cleared.
       return;
     }
     
     setIsReadingFile(true);
+    setSelectedFileName(null); // Clear current file name while reading new one
+    form.setValue("resumeText", "", {shouldValidate: false}); // Clear form value while reading
     
     if (['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.type)) {
       toast({
@@ -161,7 +159,7 @@ export default function ProfilePage() {
     reader.onerror = (e) => {
         console.error("Error reading file:", e);
         toast({ title: "File Read Error", description: "Could not read the resume file content.", variant: "destructive"});
-        form.setValue("resumeText", userProfile?.resumeText || "", { shouldValidate: true });
+        form.setValue("resumeText", userProfile?.resumeText || "", { shouldValidate: true }); // Restore old if any
         setSelectedFileName(userProfile?.resumeText ? "Resume on file (upload new to replace)" : null);
         if (fileInputRef.current) fileInputRef.current.value = "";
         setIsReadingFile(false);
@@ -198,18 +196,24 @@ export default function ProfilePage() {
         updatedAt: new Date().toISOString(),
       };
       
+      // Ensure optional fields that are empty strings are stored as undefined or not at all
       if (profileDataToSave.company === "") profileDataToSave.company = undefined;
       if (profileDataToSave.phoneNumber === "") profileDataToSave.phoneNumber = undefined;
       if (profileDataToSave.resumeText === null || profileDataToSave.resumeText === "") {
         profileDataToSave.resumeText = undefined;
       }
 
+
       await setDoc(userDocRef, profileDataToSave, { merge: true });
 
       toast({ title: "Profile Updated", description: "Your profile has been successfully updated." });
-      await refreshUserProfile(); 
+      await refreshUserProfile(); // Refresh context
       
+      // Update UI based on saved data
       if (values.resumeText) {
+        // If a file was just uploaded and its text is now saved, selectedFileName would be its name.
+        // If it's existing resumeText that was saved, we should indicate it's on file.
+        // For simplicity, if there's resumeText, mark it as "on file".
         setSelectedFileName("Resume on file (upload new to replace)");
       } else {
         setSelectedFileName(null);
