@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
+import { siteConfig } from "@/config/site";
 
 interface AuthFormProps {
   formSchema: z.ZodSchema<any>;
@@ -32,7 +33,7 @@ export function AuthForm({ formSchema, onSubmit, type, loading }: AuthFormProps)
   });
 
   const cardTitle = type === "login" ? "Welcome Back!" : "Create an Account";
-  const cardDescription = type === "login" ? "Sign in to access your Tyaari Coach dashboard." : "Enter your details to get started.";
+  const cardDescription = type === "login" ? `Sign in to access your ${siteConfig.name} dashboard.` : "Enter your details to get started.";
   const buttonText = type === "login" ? "Login" : "Sign Up";
   const footerLinkHref = type === "login" ? "/signup" : "/login";
   const footerLinkText = type === "login" ? "Don't have an account? Sign Up" : "Already have an account? Login";

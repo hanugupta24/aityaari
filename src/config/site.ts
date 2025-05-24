@@ -8,7 +8,7 @@ export type NavItem = {
 };
 
 export const siteConfig = {
-  name: "Tyaari Coach",
+  name: "aiTyaari",
   description:
     "AI-powered interview preparation platform to help you ace your next job interview.",
   mainNav: [

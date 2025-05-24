@@ -1,22 +1,57 @@
 
 "use client";
 
+import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { PlusCircle, BarChartHorizontalBig, History } from "lucide-react";
+import { PlusCircle, BarChartHorizontalBig, History, Loader2 } from "lucide-react";
 import Image from "next/image";
+import { db } from "@/lib/firebase";
+import { collection, query, where, orderBy, getDocs, Timestamp } from "firebase/firestore";
+import type { InterviewSession } from "@/types";
 
 export default function DashboardPage() {
-  const { userProfile } = useAuth();
-
-  // Placeholder data for past interviews
-  const pastInterviews = [
-    { id: "1", date: "2024-07-15", role: "Software Engineer", score: "85%", feedbackHighlights: "Strong problem-solving skills." },
-    { id: "2", date: "2024-07-10", role: "Product Manager", score: "78%", feedbackHighlights: "Good communication, needs more domain depth." },
-  ];
+  const { user, userProfile } = useAuth();
+  const [fetchedPastInterviews, setFetchedPastInterviews] = useState<InterviewSession[]>([]);
+  const [interviewsLoading, setInterviewsLoading] = useState<boolean>(true);
   
+  useEffect(() => {
+    if (user) {
+      const fetchInterviews = async () => {
+        setInterviewsLoading(true);
+        try {
+          const interviewsRef = collection(db, "users", user.uid, "interviews");
+          const q = query(interviewsRef, where("status", "==", "completed"), orderBy("createdAt", "desc"));
+          const querySnapshot = await getDocs(q);
+          const interviews: InterviewSession[] = [];
+          querySnapshot.forEach((doc) => {
+            // Ensure createdAt is consistently a string when setting state, or handle as Timestamp
+            const data = doc.data() as Omit<InterviewSession, 'id' | 'createdAt'> & { createdAt: Timestamp | string };
+            interviews.push({ 
+              ...data, 
+              id: doc.id,
+              // Convert Firestore Timestamp to ISO string if it's a Timestamp object
+              createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt 
+            } as InterviewSession);
+          });
+          setFetchedPastInterviews(interviews);
+        } catch (error) {
+          console.error("Error fetching past interviews:", error);
+          // Optionally set an error state here
+        } finally {
+          setInterviewsLoading(false);
+        }
+      };
+      fetchInterviews();
+    } else {
+      // If no user, clear interviews and set loading to false (or handle as appropriate)
+      setFetchedPastInterviews([]);
+      setInterviewsLoading(false);
+    }
+  }, [user]);
+
   const interviewsRemaining = userProfile ? Math.max(0, 3 - (userProfile.interviewsTaken || 0)) : 3;
 
   return (
@@ -69,16 +104,26 @@ export default function DashboardPage() {
           <CardDescription>Review your previous interview performance and feedback.</CardDescription>
         </CardHeader>
         <CardContent>
-          {pastInterviews.length > 0 ? (
+          {interviewsLoading ? (
+            <div className="flex justify-center items-center py-10">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : fetchedPastInterviews.length > 0 ? (
             <div className="space-y-4">
-              {pastInterviews.map((interview) => (
+              {fetchedPastInterviews.map((interview) => (
                 <Card key={interview.id} className="hover:shadow-md transition-shadow">
                   <CardHeader>
-                    <CardTitle className="text-lg">{interview.role}</CardTitle>
-                    <CardDescription>Date: {interview.date} | Score: {interview.score}</CardDescription>
+                    <CardTitle className="text-lg">Interview on {new Date(interview.createdAt).toLocaleDateString()}</CardTitle>
+                    <CardDescription>
+                      Duration: {interview.duration} mins | Score: {interview.feedback?.overallScore ? `${interview.feedback.overallScore}%` : "Pending"}
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-sm text-muted-foreground">{interview.feedbackHighlights}</p>
+                    <p className="text-sm text-muted-foreground truncate">
+                      {interview.feedback?.overallFeedback ? 
+                        (interview.feedback.overallFeedback.substring(0,150) + (interview.feedback.overallFeedback.length > 150 ? "..." : ""))
+                        : "Feedback processing or not available."}
+                    </p>
                   </CardContent>
                   <CardFooter>
                     <Link href={`/feedback/${interview.id}`} passHref>

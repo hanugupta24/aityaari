@@ -55,7 +55,7 @@ body {
   }
 
   .dark {
-    --background: 230 57% 37%; /* Dark Desaturated Blue #283593 */
+    --background: 0 0% 7%; /* #121212 */
     --foreground: 230 50% 95%; /* Light Indigo #E8EAF6 */
     
     --card: 232 52% 40%; /* Indigo 600 #303F9F */

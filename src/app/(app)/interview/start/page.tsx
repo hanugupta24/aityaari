@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -19,17 +19,17 @@ import { db } from "@/lib/firebase";
 
 
 export default function StartInterviewPage() {
-  const { user, userProfile } = useAuth();
+  const { user, userProfile, loading: authLoading, initialLoading: authInitialLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const [duration, setDuration] = useState<"15" | "30" | "45">("30");
   const [permissionsGranted, setPermissionsGranted] = useState(false);
   const [agreedToMonitoring, setAgreedToMonitoring] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isStartingSession, setIsStartingSession] = useState(false); // Renamed from isLoading for clarity
 
   const handleStartInterview = async () => {
-    if (!user || !userProfile) {
-      toast({ title: "Authentication Error", description: "Please log in to start an interview.", variant: "destructive" });
+    if (!user || !userProfile) { // This check should now be mostly redundant due to button's disabled state
+      toast({ title: "Authentication Error", description: "Please ensure you are logged in and your profile is loaded.", variant: "destructive" });
       return;
     }
     if (!permissionsGranted) {
@@ -41,53 +41,33 @@ export default function StartInterviewPage() {
       return;
     }
 
-    setIsLoading(true);
+    setIsStartingSession(true);
 
     try {
-      // Placeholder for generating interview ID and saving initial session state
       const newInterviewRef = doc(collection(db, "users", user.uid, "interviews"));
       const interviewId = newInterviewRef.id;
 
       const initialSessionData: Partial<InterviewSession> = {
         userId: user.uid,
         duration: parseInt(duration) as 15 | 30 | 45,
-        status: "pending",
-        createdAt: new Date().toISOString(), // Using client time for now, serverTimestamp for Firestore recommended
+        status: "pending", // Status will be updated to 'started' once questions are generated or interview page loads
+        createdAt: new Date().toISOString(), 
       };
       await setDoc(newInterviewRef, initialSessionData);
       
-      // Note: generateInterviewQuestions is an AI flow.
-      // For a real app, you might call this and then pass questions to the interview page.
-      // Or the interview page itself could fetch/generate them.
-      // For now, we just navigate to the interview page with the ID.
-      // The actual question generation and conversational flow will happen on that page.
-      
-      // Example of calling the AI flow if needed here:
-      /*
-      const questionInput: GenerateInterviewQuestionsInput = {
-        profile: `${userProfile.profileField}, ${userProfile.role}, ${userProfile.education}`,
-        role: userProfile.role || "general",
-        interviewDuration: duration,
-      };
-      const generated = await generateInterviewQuestions(questionInput);
-      await updateDoc(newInterviewRef, { questions: generated.questions, status: "started" });
-      */
-
       toast({ title: "Interview Starting", description: "Preparing your session..." });
       router.push(`/interview/${interviewId}`);
 
     } catch (error: any) {
       console.error("Error starting interview:", error);
       toast({ title: "Failed to Start Interview", description: error.message || "An unexpected error occurred.", variant: "destructive" });
-      setIsLoading(false);
+      setIsStartingSession(false);
     }
-    // setIsLoading(false) will be handled by navigation or error
   };
 
   const requestPermissions = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      // Stop tracks immediately as we only need to check permission
       stream.getTracks().forEach(track => track.stop());
       setPermissionsGranted(true);
       toast({ title: "Permissions Granted", description: "Camera and microphone access enabled." });
@@ -98,6 +78,14 @@ export default function StartInterviewPage() {
     }
   };
 
+  const isButtonDisabled = 
+    authLoading || 
+    authInitialLoading || 
+    isStartingSession || 
+    !permissionsGranted || 
+    !agreedToMonitoring ||
+    !userProfile || // Ensures profile is loaded before checking limits
+    (userProfile && (userProfile.interviewsTaken || 0) >= 3 && !userProfile.isPlusSubscriber);
 
   return (
     <div className="max-w-2xl mx-auto space-y-8">
@@ -143,7 +131,7 @@ export default function StartInterviewPage() {
                 <p className="text-xs text-muted-foreground">Required for video and conversational questions.</p>
               </div>
               {!permissionsGranted && (
-                <Button variant="outline" size="sm" onClick={requestPermissions}>Grant Access</Button>
+                <Button variant="outline" size="sm" onClick={requestPermissions} disabled={authLoading || authInitialLoading}>Grant Access</Button>
               )}
             </div>
 
@@ -174,9 +162,9 @@ export default function StartInterviewPage() {
             size="lg" 
             className="w-full" 
             onClick={handleStartInterview} 
-            disabled={isLoading || !permissionsGranted || !agreedToMonitoring || (userProfile && (userProfile.interviewsTaken || 0) >=3 && !userProfile.isPlusSubscriber)}
+            disabled={isButtonDisabled}
           >
-            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {(authLoading || authInitialLoading || isStartingSession) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Start {duration}-Minute Interview
           </Button>
         </CardFooter>
