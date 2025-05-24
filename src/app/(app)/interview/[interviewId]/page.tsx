@@ -9,7 +9,7 @@ import { doc, getDoc, updateDoc, onSnapshot } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Mic, Send, Video, MessageCircle, Terminal, AlertTriangle, Volume2, Ban, MicOff } from "lucide-react";
+import { Loader2, Mic, Send, Video, Terminal, AlertTriangle, Volume2, MicOff } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import type { InterviewSession, GeneratedQuestion } from "@/types";
@@ -45,7 +45,7 @@ export default function InterviewPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
   const [isEndingInterview, setIsEndingInterview] = useState(false);
-  const [transcript, setTranscript] = useState<string[]>([]);
+  const [transcriptLog, setTranscriptLog] = useState<string[]>([]); // Renamed from transcript for clarity
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -82,8 +82,8 @@ export default function InterviewPage() {
 
   const cancelSpeechSynthesis = useCallback(() => {
     if (typeof window !== 'undefined' && window.speechSynthesis) {
-      setIsAISpeaking(false); // Ensure UI reflects stoppage
       window.speechSynthesis.cancel();
+      setIsAISpeaking(false); // Ensure UI reflects stoppage
     }
   }, []);
 
@@ -113,6 +113,8 @@ export default function InterviewPage() {
       if (docSnap.exists()) {
         const data = docSnap.data() as InterviewSession;
         setSession(data);
+        setTranscriptLog(data.transcript ? data.transcript.split('\n') : []);
+
 
         if (data.status === "completed" || data.status === "cancelled") {
           toast({ title: "Interview Ended", description: "This interview session is no longer active."});
@@ -173,23 +175,18 @@ export default function InterviewPage() {
 
   // Effect for AI Speech Synthesis
   useEffect(() => {
-    // Always cancel previous speech if currentQuestion or interview status changes
     if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
+      window.speechSynthesis.cancel(); // Always cancel previous speech
     }
 
-    if (currentQuestion && currentQuestion.stage === 'oral' && !currentQuestion.answer && !isEndingInterview) {
+    if (currentQuestion && currentQuestion.stage === 'oral' && !currentQuestion.answer && !isEndingInterview && session?.status !== 'completed') {
       if (typeof window !== 'undefined' && window.speechSynthesis) {
         const utterance = new SpeechSynthesisUtterance(currentQuestion.text);
         utterance.lang = 'en-US';
-        utterance.rate = 0.9; // Adjust rate as needed
+        utterance.rate = 0.9; 
 
-        utterance.onstart = () => {
-          setIsAISpeaking(true);
-        };
-        utterance.onend = () => {
-          setIsAISpeaking(false);
-        };
+        utterance.onstart = () => setIsAISpeaking(true);
+        utterance.onend = () => setIsAISpeaking(false);
         utterance.onerror = (event) => {
           console.error('SpeechSynthesis Error:', event);
           setIsAISpeaking(false);
@@ -198,21 +195,19 @@ export default function InterviewPage() {
         
         window.speechSynthesis.speak(utterance);
       } else {
-        // Fallback if speech synthesis is not available: don't show "AI is speaking" indefinitely
         setIsAISpeaking(false); 
       }
     } else {
-      setIsAISpeaking(false); // Not an oral question requiring speech, or already answered, or interview ending
+      setIsAISpeaking(false);
     }
 
-    // Cleanup function for this effect
     return () => {
       if (typeof window !== 'undefined' && window.speechSynthesis) {
-        setIsAISpeaking(false); // Reset on cleanup
         window.speechSynthesis.cancel();
+        setIsAISpeaking(false);
       }
     };
-  }, [currentQuestion, isEndingInterview, toast]);
+  }, [currentQuestion, isEndingInterview, toast, session?.status]);
 
 
   const handleToggleListening = useCallback(() => {
@@ -226,11 +221,11 @@ export default function InterviewPage() {
         recognitionRef.current.stop();
       }
       setIsListening(false); 
-    } else {
+    } else { // Start listening
       const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!recognitionRef.current) { 
         recognitionRef.current = new SpeechRecognitionAPI();
-        recognitionRef.current.continuous = true; 
+        recognitionRef.current.continuous = true; // Allows for pauses
         recognitionRef.current.interimResults = true; 
         recognitionRef.current.lang = 'en-US';
 
@@ -238,26 +233,26 @@ export default function InterviewPage() {
           setIsListening(true);
           setSpeechError(null);
         };
-
-        let currentFinalTranscript = ""; 
+        
         recognitionRef.current.onresult = (event: any) => {
-          let interimTranscript = '';
-          for (let i = event.resultIndex; i < event.results.length; ++i) {
+          let fullFinalTranscript = "";
+          let latestInterimTranscript = "";
+          for (let i = 0; i < event.results.length; i++) {
             if (event.results[i].isFinal) {
-              currentFinalTranscript += event.results[i][0].transcript + ' ';
+              fullFinalTranscript += event.results[i][0].transcript + " ";
             } else {
-              interimTranscript += event.results[i][0].transcript;
+              latestInterimTranscript = event.results[i][0].transcript;
             }
           }
-          setUserAnswer(currentFinalTranscript.trim() + (interimTranscript ? ' ' + interimTranscript : ''));
+          setUserAnswer(fullFinalTranscript.trim() + (latestInterimTranscript ? " " + latestInterimTranscript.trim() : ""));
         };
 
         recognitionRef.current.onerror = (event: any) => {
           console.error("Speech recognition error", event.error);
           let errorMsg = "Speech recognition error: " + event.error;
-          if (event.error === 'no-speech') errorMsg = "No speech detected. Please ensure your microphone is working and try again.";
-          if (event.error === 'audio-capture') errorMsg = "Audio capture failed. Please check microphone permissions and settings.";
-          if (event.error === 'not-allowed') errorMsg = "Microphone access was not allowed. Please grant permission.";
+          if (event.error === 'no-speech') errorMsg = "No speech detected. Please try again.";
+          if (event.error === 'audio-capture') errorMsg = "Audio capture failed. Check microphone permissions.";
+          if (event.error === 'not-allowed') errorMsg = "Microphone access denied. Please grant permission.";
           setSpeechError(errorMsg);
           setIsListening(false); 
         };
@@ -267,14 +262,14 @@ export default function InterviewPage() {
         };
       }
       
-      setUserAnswer(''); 
+      setUserAnswer(''); // Clear previous answer from Textarea before starting new recognition
       recognitionRef.current.start();
     }
   }, [isListening, speechRecognitionSupported, toast]);
 
 
   const handleNextQuestion = async () => {
-    if (!session || !allQuestions.length || currentQuestionIndex >= allQuestions.length) return;
+    if (!user || !session || !allQuestions.length || currentQuestionIndex >= allQuestions.length) return;
     
     if (isListening) stopSpeechRecognition();
     if (isAISpeaking) cancelSpeechSynthesis();
@@ -286,15 +281,18 @@ export default function InterviewPage() {
     currentQ.answer = userAnswer.trim(); 
     setAllQuestions(updatedQuestions); 
 
-    const newTranscriptEntry = `You: ${userAnswer.trim() || (currentQ.stage === 'oral' ? "[No verbal answer recorded]" : "[No answer provided]")}`;
-    const updatedTranscriptArray = [...transcript, `AI (${currentQ.stage} - ${currentQ.type}): ${currentQ.text}`, newTranscriptEntry];
-    setTranscript(updatedTranscriptArray);
+    const newTranscriptLogEntries = [
+        `AI (${currentQ.stage} - ${currentQ.type}): ${currentQ.text}`,
+        `You: ${userAnswer.trim() || (currentQ.stage === 'oral' ? "[No verbal answer recorded]" : "[No answer provided]")}`
+    ];
+    const updatedTranscriptLogArray = [...transcriptLog, ...newTranscriptLogEntries];
+    setTranscriptLog(updatedTranscriptLogArray);
     
     try {
         const sessionDocRef = doc(db, "users", user.uid, "interviews", interviewId);
         await updateDoc(sessionDocRef, {
             questions: updatedQuestions.map(({answer, ...q}) => ({...q, answer})), 
-            transcript: updatedTranscriptArray.join('\n'),
+            transcript: updatedTranscriptLogArray.join('\n'),
             updatedAt: new Date().toISOString(),
         });
     } catch (error) {
@@ -309,7 +307,7 @@ export default function InterviewPage() {
     if (nextQuestionIndex < allQuestions.length) {
       setCurrentQuestionIndex(nextQuestionIndex);
     } else {
-      await handleEndInterview(updatedQuestions, updatedTranscriptArray.join('\n'));
+      await handleEndInterview(updatedQuestions, updatedTranscriptLogArray.join('\n'));
     }
     setIsSubmittingAnswer(false);
   };
@@ -412,6 +410,8 @@ export default function InterviewPage() {
   const currentStage = currentQuestion?.stage;
   const currentQuestionType = currentQuestion?.type;
 
+  const isSubmitButtonDisabled = isSubmittingAnswer || isEndingInterview || isAISpeaking || isListening || (currentStage === 'technical_written' && !userAnswer.trim());
+
   return (
     <div className="flex flex-col lg:flex-row h-[calc(100vh-var(--header-height,4rem)-2rem)] gap-4 p-4">
       <div className="lg:w-1/3 flex flex-col gap-4">
@@ -428,7 +428,7 @@ export default function InterviewPage() {
             <CardTitle className="text-xl">Transcript</CardTitle>
           </CardHeader>
           <CardContent className="flex-grow overflow-y-auto space-y-2 p-2 bg-muted/50 rounded-b-md">
-            {transcript.map((line, index) => (
+            {transcriptLog.map((line, index) => (
               <p key={index} className={`text-sm p-2 rounded-md ${line.startsWith("AI") ? "bg-secondary text-secondary-foreground self-start mr-auto max-w-[90%]" : "bg-primary text-primary-foreground self-end ml-auto max-w-[90%]"}`}>
                 {line}
               </p>
@@ -449,14 +449,15 @@ export default function InterviewPage() {
                 <span className="text-sm text-muted-foreground capitalize">Stage: {currentStage?.replace('_', ' ')} ({currentQuestionType})</span>
             </div>
             <Progress value={progress} className="w-full h-2" />
+            
             {isAISpeaking && currentStage === 'oral' && (
-                <div className="flex items-center text-primary pt-4">
+                <div className="flex items-center text-primary pt-2 pb-2">
                     <Volume2 className="h-5 w-5 mr-2 animate-pulse" />
-                    <p className="text-lg">AI is asking the question...</p>
+                    <p className="text-md font-medium">AI is asking the question...</p>
                 </div>
             )}
-            {(!isAISpeaking || currentStage !== 'oral') && currentQuestion && (
-                <CardDescription className="text-lg pt-4 whitespace-pre-wrap">{currentQuestion.text}</CardDescription>
+            {currentQuestion && (
+                <CardDescription className="text-lg pt-2 whitespace-pre-wrap">{currentQuestion.text}</CardDescription>
             )}
           </CardHeader>
           <CardContent className="flex-grow flex flex-col">
@@ -464,10 +465,10 @@ export default function InterviewPage() {
               <div className="flex-grow flex flex-col justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground mb-2">
-                    Please answer orally. Your transcribed answer will appear below.
+                    Answer orally. Your transcribed answer will appear below.
                   </p>
                   <Textarea
-                    placeholder={isListening ? "Listening... Your transcribed answer will appear here." : (userAnswer ? userAnswer : "Click the mic to start speaking. Your transcribed answer will be displayed here.")}
+                    placeholder={isListening ? "Listening... Your transcribed answer will appear here." : (userAnswer ? userAnswer : "Click the mic to start speaking.")}
                     value={userAnswer}
                     readOnly 
                     className="text-base min-h-[100px] mb-4 bg-background/70 cursor-not-allowed"
@@ -510,7 +511,7 @@ export default function InterviewPage() {
             <div>
               <Button 
                   onClick={handleNextQuestion} 
-                  disabled={isSubmittingAnswer || isEndingInterview || isAISpeaking || isListening || (currentStage === 'technical_written' && !userAnswer.trim())}
+                  disabled={isSubmitButtonDisabled}
               >
                 {isSubmittingAnswer ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4"/>}
                 {currentQuestionIndex < totalQuestions - 1 ? "Next Question" : "End Interview & Get Feedback"}
@@ -538,4 +539,6 @@ export default function InterviewPage() {
     </div>
   );
 }
+    
+
     
