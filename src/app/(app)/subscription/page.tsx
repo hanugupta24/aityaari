@@ -92,7 +92,7 @@ export default function SubscriptionPage() {
           <CardContent>
             <p className="text-muted-foreground">
               Thank you for being a valued aiTyaari Plus subscriber. You have
-              access to all premium features, including unlimited interviews.
+              access to all premium features, including unlimited interviews with the {userProfile.subscriptionPlan ? userProfile.subscriptionPlan.charAt(0).toUpperCase() + userProfile.subscriptionPlan.slice(1) : ''} plan.
             </p>
           </CardContent>
           <CardFooter>
@@ -113,6 +113,7 @@ export default function SubscriptionPage() {
         return;
     }
     setIsProcessing(planId);
+    console.log(`SubscriptionPage: Simulating payment process for plan: ${planId} for user: ${user.uid}`);
     try {
       // Simulate payment processing
       await new Promise(resolve => setTimeout(resolve, 2500));
@@ -122,19 +123,21 @@ export default function SubscriptionPage() {
         userDocRef,
         {
           isPlusSubscriber: true,
-          subscriptionPlan: planId, // Optionally store chosen plan
+          subscriptionPlan: planId,
           updatedAt: new Date().toISOString(),
         },
         { merge: true }
       );
+      console.log(`SubscriptionPage: Firestore updated for user ${user.uid}. isPlusSubscriber: true, plan: ${planId}`);
 
-      await refreshUserProfile(); // Refresh context
+      await refreshUserProfile(); 
+      console.log("SubscriptionPage: User profile refreshed in AuthContext.");
 
       toast({
         title: "Upgrade Successful!",
         description: `Welcome to aiTyaari Plus! You now have unlimited access with the ${plans.find(p => p.id === planId)?.name || 'selected plan'}.`,
         variant: "default",
-        duration: 5000,
+        duration: 7000,
       });
       router.push("/dashboard");
     } catch (error) {
@@ -146,6 +149,7 @@ export default function SubscriptionPage() {
       });
     } finally {
       setIsProcessing(null);
+      console.log("SubscriptionPage: Payment simulation finished.");
     }
   };
 
@@ -181,8 +185,7 @@ export default function SubscriptionPage() {
               </CardHeader>
               <CardContent className="flex-grow space-y-4">
                 <p className="text-4xl font-bold text-foreground">
-                  ${plan.price.toFixed(2)}
-                  <span className="text-lg font-normal text-muted-foreground"> / {plan.billingCycle}</span>
+                  {plan.priceDisplay}
                 </p>
                 <ul className="space-y-2 text-sm text-muted-foreground">
                   {plusFeatures.map((feature, index) => (
