@@ -25,7 +25,7 @@ export type GenerateInterviewQuestionsInput = z.infer<
 
 // This schema is used both for output of this flow AND as part of input to the feedback flow
 // DO NOT EXPORT THIS ZOD SCHEMA OBJECT from a 'use server' file
-const GeneratedQuestionSchema = z.object({
+const GeneratedQuestionSchemaInternal = z.object({
   id: z.string().describe('A unique ID for the question (e.g., q1, q2).'),
   text: z.string().describe('The question text.'),
   stage: z.enum(['oral', 'technical_written']).describe('The stage of the interview this question belongs to: "oral" for spoken answers, "technical_written" for typed/coding answers.'),
@@ -34,7 +34,7 @@ const GeneratedQuestionSchema = z.object({
 });
 
 const GenerateInterviewQuestionsOutputSchema = z.object({
-  questions: z.array(GeneratedQuestionSchema.omit({ answer: true })).describe('An array of generated interview questions with stages and types. The "answer" field should not be included in the output of this flow.'),
+  questions: z.array(GeneratedQuestionSchemaInternal.omit({ answer: true })).describe('An array of generated interview questions with stages and types. The "answer" field should not be included in the output of this flow.'),
 });
 export type GenerateInterviewQuestionsOutput = z.infer<
   typeof GenerateInterviewQuestionsOutputSchema
@@ -87,23 +87,26 @@ Question Stages & Types:
 Question Distribution and Types based on Duration:
 Ensure a good mix of question types within each stage. Prioritize 'resume_based' questions if a resume is provided, integrating them naturally into both oral and technical stages where appropriate. The 'id' for each question MUST be unique (q1, q2, q3, etc.).
 
-*   **15 minutes:**
-    *   Non-technical roles: 3-4 'oral' questions (mix of 'conversational', 'behavioral', and 'resume_based' if resumeProcessedText exists).
+*   **15 minutes (Total 6-7 questions):**
+    *   Non-technical roles: 6-7 'oral' questions (mix of 'conversational', 'behavioral', and 'resume_based' if resumeProcessedText exists).
     *   Technical roles:
-        *   Oral Stage: 2 'oral' questions (mix of 'conversational', 'behavioral', 'resume_based' if resumeProcessedText exists).
-        *   Technical/Written Stage: 1 'technical_written' question (can be 'technical', 'coding', or 'resume_based', highly relevant to {{{role}}}, {{{profileField}}}, and resume if resumeProcessedText exists).
+        *   Oral Stage: 3-4 'oral' questions (mix of 'conversational', 'behavioral', 'resume_based').
+        *   Technical/Written Stage: 2-3 'technical_written' questions (mix of 'technical', 'coding', 'resume_based').
+        *   Ensure total questions for technical roles is 6-7.
 
-*   **30 minutes:**
-    *   Non-technical roles: 5-6 'oral' questions (mix of 'conversational', 'behavioral', and 'resume_based' if resumeProcessedText exists).
+*   **30 minutes (Total 10-12 questions):**
+    *   Non-technical roles: 10-12 'oral' questions (mix of 'conversational', 'behavioral', and 'resume_based' if resumeProcessedText exists).
     *   Technical roles:
-        *   Oral Stage: 3 'oral' questions (mix of 'conversational', 'behavioral', 'resume_based' if resumeProcessedText exists).
-        *   Technical/Written Stage: 1-2 'technical_written' questions (mix of 'technical', 'coding', or 'resume_based').
+        *   Oral Stage: 4-5 'oral' questions (mix of 'conversational', 'behavioral', 'resume_based').
+        *   Technical/Written Stage: 5-7 'technical_written' questions (mix of 'technical', 'coding', 'resume_based').
+        *   Ensure total questions for technical roles is 10-12.
 
-*   **45 minutes:**
-    *   Non-technical roles: 7-8 'oral' questions (mix of 'conversational', 'behavioral', 'resume_based' if resumeProcessedText exists).
+*   **45 minutes (Total 15-16 questions):**
+    *   Non-technical roles: 15-16 'oral' questions (mix of 'conversational', 'behavioral', and 'resume_based' if resumeProcessedText exists).
     *   Technical roles:
-        *   Oral Stage: 3-4 'oral' questions (mix of 'conversational', 'behavioral', 'resume_based' if resumeProcessedText exists).
-        *   Technical/Written Stage: 2 'technical_written' questions (mix of 'technical', 'coding', or 'resume_based'). Ensure a good mix if multiple.
+        *   Oral Stage: 5-6 'oral' questions (mix of 'conversational', 'behavioral', 'resume_based').
+        *   Technical/Written Stage: 8-10 'technical_written' questions (mix of 'technical', 'coding', 'resume_based').
+        *   Ensure total questions for technical roles is 15-16.
 
 General Guidelines:
 - All questions MUST be directly relevant to the provided 'profileField', 'role', and 'resumeProcessedText' (if available).
@@ -169,4 +172,3 @@ const generateInterviewQuestionsFlow = ai.defineFlow(
     };
   }
 );
-
