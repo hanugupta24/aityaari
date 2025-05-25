@@ -61,52 +61,56 @@ export default function LoginPage() {
   }, [user, initialLoading, router]);
 
   useEffect(() => {
-    if (authMethod === "phone" && !recaptchaVerifierRef.current && recaptchaContainerRef.current && auth) {
-       try {
-        recaptchaVerifierRef.current = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
+    if (authMethod === "phone" && recaptchaContainerRef.current && auth && !recaptchaVerifierRef.current) {
+      console.log("LOGIN: Initializing reCAPTCHA...");
+      try {
+        const verifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
           size: "invisible",
           callback: (response: any) => {
-            console.log("reCAPTCHA solved for login:", response);
+            console.log("LOGIN: reCAPTCHA solved:", response);
           },
           "expired-callback": () => {
             toast({ title: "reCAPTCHA Expired", description: "Please try sending OTP again.", variant: "destructive" });
             setLoading(false);
             if (recaptchaVerifierRef.current) {
-               recaptchaVerifierRef.current.render().then((widgetId) => {
-                 if (typeof grecaptcha !== 'undefined' && grecaptcha.reset) {
-                    grecaptcha.reset(widgetId);
-                 }
-               });
+                recaptchaVerifierRef.current = null;
             }
           },
         });
-        recaptchaVerifierRef.current.render();
-        console.log("Invisible reCAPTCHA Verifier initialized for login.");
-      } catch (error) {
-        console.error("Error initializing reCAPTCHA for login:", error);
-        toast({ title: "reCAPTCHA Error", description: "Could not initialize reCAPTCHA. Phone login may not work.", variant: "destructive" });
-      }
-    }
-    return () => {
-      if (recaptchaVerifierRef.current) {
-        try {
-            recaptchaVerifierRef.current.clear();
-        } catch(e) { /* ignore */ }
+        
+        verifier.render().then((widgetId) => {
+          console.log("LOGIN: Invisible reCAPTCHA rendered. Widget ID:", widgetId);
+          recaptchaVerifierRef.current = verifier;
+        }).catch((error) => {
+          console.error("LOGIN: Error rendering reCAPTCHA:", error);
+          toast({ title: "reCAPTCHA Render Error", description: `Could not render reCAPTCHA: ${error.message}. Phone auth may not work.`, variant: "destructive" });
+          recaptchaVerifierRef.current = null;
+        });
+
+      } catch (error: any) {
+        console.error("LOGIN: Error initializing RecaptchaVerifier instance:", error);
+        toast({ title: "reCAPTCHA Init Error", description: `Could not initialize reCAPTCHA: ${error.message}. Phone auth may not work.`, variant: "destructive" });
         recaptchaVerifierRef.current = null;
       }
+    } else if (authMethod !== "phone" && recaptchaVerifierRef.current) {
+        console.log("LOGIN: Auth method not phone, clearing reCAPTCHA ref.");
+        recaptchaVerifierRef.current = null;
+    }
+    
+    return () => {
+      if (recaptchaVerifierRef.current && authMethod === "phone") {
+         console.log("LOGIN: Cleaning up reCAPTCHA verifier ref on unmount or method change from phone.");
+         recaptchaVerifierRef.current = null;
+      }
     };
-  }, [authMethod, toast]);
-
-  if (initialLoading || isRedirecting) {
-    return <GlobalLoading />;
-  }
+  }, [authMethod, auth, toast]);
 
   const handleEmailLogin = async (values: EmailLoginFormValues) => {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, values.email, values.password);
       toast({ title: "Login Successful", description: "Redirecting to dashboard..." });
-      // Redirection is handled by useEffect
+      // Redirection is handled by the main useEffect checking `user`
     } catch (error: any) {
       console.error("Login error:", error);
       toast({
@@ -128,7 +132,7 @@ export default function LoginPage() {
       return;
     }
      if (!recaptchaVerifierRef.current) {
-        toast({ title: "reCAPTCHA Error", description: "reCAPTCHA not initialized. Please refresh.", variant: "destructive"});
+        toast({ title: "reCAPTCHA Error", description: "reCAPTCHA not ready. Please wait a moment and try again.", variant: "destructive"});
         setLoading(false);
         return;
     }
@@ -141,13 +145,6 @@ export default function LoginPage() {
     } catch (error: any) {
       console.error("Error sending OTP for login:", error);
       toast({ title: "Failed to Send OTP", description: error.message || "Please try again.", variant: "destructive" });
-       if (recaptchaVerifierRef.current) {
-           recaptchaVerifierRef.current.render().then((widgetId) => {
-             if (typeof grecaptcha !== 'undefined' && grecaptcha.reset) {
-                grecaptcha.reset(widgetId);
-             }
-           });
-       }
     } finally {
       setLoading(false);
     }
@@ -170,9 +167,8 @@ export default function LoginPage() {
 
     try {
       await confirmationResult.confirm(otp);
-      // User is now signed in
       toast({ title: "Login Successful!", description: "Redirecting to dashboard..." });
-      // Redirection will be handled by the main useEffect
+      // Redirection will be handled by the main useEffect checking `user`
     } catch (error: any) {
       console.error("Error verifying OTP for login:", error);
       toast({
@@ -185,7 +181,11 @@ export default function LoginPage() {
     }
   };
 
-  if (!user && !initialLoading) {
+  if (initialLoading || isRedirecting ) {
+    return <GlobalLoading />;
+  }
+  
+  if (!user && !initialLoading && !isRedirecting) {
     return (
       <div className="flex min-h-screen items-center justify-center p-4">
         <Card className="w-full max-w-md shadow-xl">
@@ -194,7 +194,13 @@ export default function LoginPage() {
             <CardDescription>Sign in to access your {siteConfig.name} dashboard.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs value={authMethod} onValueChange={(value) => setAuthMethod(value as "email" | "phone")} className="w-full">
+            <Tabs value={authMethod} onValueChange={(value) => {
+                setAuthMethod(value as "email" | "phone");
+                setOtpSent(false);
+                setOtp("");
+                setPhoneNumber("");
+                setConfirmationResult(null);
+            }} className="w-full">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="email">Email & Password</TabsTrigger>
                 <TabsTrigger value="phone">Phone Number</TabsTrigger>
@@ -219,7 +225,11 @@ export default function LoginPage() {
                         Enter your phone number including the country code.
                        </p>
                     </div>
-                    <Button onClick={handleSendOtpForLogin} className="w-full" disabled={loading || !phoneNumber.trim()}>
+                    <Button 
+                        onClick={handleSendOtpForLogin} 
+                        className="w-full" 
+                        disabled={loading || !phoneNumber.trim() || !recaptchaVerifierRef.current}
+                    >
                       {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                       Send OTP
                     </Button>
@@ -238,7 +248,7 @@ export default function LoginPage() {
                         disabled={loading}
                       />
                       <p className="text-xs text-muted-foreground mt-1">
-                        An OTP was sent to {phoneNumber}. <Button variant="link" size="sm" className="p-0 h-auto" onClick={() => { setOtpSent(false); setConfirmationResult(null); setOtp(''); setPhoneNumber('');}}>Change Number?</Button>
+                        An OTP was sent to {phoneNumber}. <Button variant="link" size="sm" className="p-0 h-auto" onClick={() => { setOtpSent(false); setConfirmationResult(null); setOtp(''); /* setPhoneNumber(''); */ }}>Change Number or Resend?</Button>
                       </p>
                     </div>
                     <Button onClick={handleVerifyOtpAndLogin} className="w-full" disabled={loading || otp.length !== 6}>
@@ -247,25 +257,23 @@ export default function LoginPage() {
                     </Button>
                   </>
                 )}
-                <div ref={recaptchaContainerRef} id="recaptcha-container-login"></div>
+                {/* Container for invisible reCAPTCHA */}
+                {authMethod === "phone" && <div ref={recaptchaContainerRef} id="recaptcha-container-login"></div>}
               </TabsContent>
             </Tabs>
           </CardContent>
           <CardFooter className="text-center text-sm">
-            {authMethod === "email" && (
             <p>
               Don't have an account?{" "}
-              <Link href="/signup" className="text-primary hover:underline">
+              <Button variant="link" className="p-0 h-auto" onClick={() => router.push("/signup")}>
                 Sign Up
-              </Link>
+              </Button>
             </p>
-            )}
           </CardFooter>
         </Card>
       </div>
     );
   }
-
   return <GlobalLoading />;
 }
 
