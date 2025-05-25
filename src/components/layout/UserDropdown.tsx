@@ -51,7 +51,7 @@ export function UserDropdown() {
         <Button variant="ghost" className="relative h-8 w-8 rounded-full">
           <Avatar className="h-8 w-8">
             <AvatarImage 
-              src={user.photoURL || `https://placehold.co/40x40/7986CB/FFFFFF?text=${fallbackInitials}`} 
+              src={user.photoURL || `https://placehold.co/40x40/E0E0E0/333333?text=${fallbackInitials}`} 
               alt={displayName || "User"}
               data-ai-hint="profile avatar" 
             />

@@ -45,7 +45,7 @@ export default function HomePage() {
                 </div>
               </div>
               <Image
-                src="https://placehold.co/600x400.png?bg=3F51B5&fc=FFFFFF"
+                src="https://placehold.co/600x400.png"
                 width="600"
                 height="400"
                 alt="AI Interview Practice"
@@ -67,21 +67,21 @@ export default function HomePage() {
               </div>
             </div>
             <div className="mx-auto grid max-w-5xl items-start gap-8 sm:grid-cols-2 md:gap-12 lg:grid-cols-3 lg:gap-16 mt-12">
-              <div className="grid gap-1 p-4 rounded-lg border bg-card text-card-foreground shadow-sm">
+              <div className="grid gap-1 p-4 rounded-lg border bg-card text-card-foreground shadow-sm hover:shadow-md transition-shadow duration-300">
                 <Brain className="h-8 w-8 text-primary mb-2" />
                 <h3 className="text-lg font-bold">AI-Generated Questions</h3>
                 <p className="text-sm text-muted-foreground">
                   Real-time, tailored questions based on your profile and the role you're targeting.
                 </p>
               </div>
-              <div className="grid gap-1 p-4 rounded-lg border bg-card text-card-foreground shadow-sm">
+              <div className="grid gap-1 p-4 rounded-lg border bg-card text-card-foreground shadow-sm hover:shadow-md transition-shadow duration-300">
                 <MessageSquareHeart className="h-8 w-8 text-primary mb-2" />
                 <h3 className="text-lg font-bold">Conversational Practice</h3>
                 <p className="text-sm text-muted-foreground">
                   Engage in spoken interviews with our AI, just like a real conversation.
                 </p>
               </div>
-              <div className="grid gap-1 p-4 rounded-lg border bg-card text-card-foreground shadow-sm">
+              <div className="grid gap-1 p-4 rounded-lg border bg-card text-card-foreground shadow-sm hover:shadow-md transition-shadow duration-300">
                  <Rocket className="h-8 w-8 text-primary mb-2" />
                 <h3 className="text-lg font-bold">Detailed Feedback</h3>
                 <p className="text-sm text-muted-foreground">

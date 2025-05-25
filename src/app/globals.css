@@ -8,96 +8,99 @@ body {
 
 @layer base {
   :root {
-    --background: 230 50% 95%; /* Light Indigo #E8EAF6 for light theme */
-    --foreground: 234 63% 30%; /* Dark Indigo #1A237E for light theme */
+    --background: 0 0% 100%; /* White */
+    --foreground: 0 0% 0%; /* Black */
     
-    --card: 0 0% 100%;
-    --card-foreground: 234 63% 30%;
+    --card: 0 0% 100%; /* White */
+    --card-foreground: 0 0% 0%; /* Black */
     
-    --popover: 0 0% 100%;
-    --popover-foreground: 234 63% 30%;
+    --popover: 0 0% 100%; /* White */
+    --popover-foreground: 0 0% 0%; /* Black */
     
-    --primary: 231 48% 48%; /* Saturated Blue #3F51B5 for light theme */
-    --primary-foreground: 0 0% 100%; /* White */
+    --primary: 205 50% 72%; /* Blue-grey #96C2DB */
+    --primary-foreground: 0 0% 0%; /* Black (for contrast on light blue-grey) */
     
-    --secondary: 230 40% 90%; /* Lighter Indigo */
-    --secondary-foreground: 231 48% 48%;
+    --secondary: 206 44% 92%; /* Lighter Blue-grey #E5EDF1 */
+    --secondary-foreground: 0 0% 10%; /* Darker grey/off-black */
     
-    --muted: 230 40% 90%;
-    --muted-foreground: 230 30% 60%; /* Slightly darker muted text */
+    --muted: 206 44% 92%; /* Lighter Blue-grey #E5EDF1 */
+    --muted-foreground: 0 0% 40%; /* Medium Grey */
     
-    --accent: 252 100% 65%; /* Soft Violet #7C4DFF for light theme */
-    --accent-foreground: 0 0% 100%; /* White */
+    --accent: 205 50% 65%; /* Slightly darker Blue-grey for accent */
+    --accent-foreground: 0 0% 0%; /* Black */
     
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive: 0 84.2% 60.2%; /* Default Red */
+    --destructive-foreground: 0 0% 98%; /* Light Foreground for Destructive */
     
-    --border: 230 30% 85%; /* Lighter border for light theme */
-    --input: 230 30% 85%;
-    --ring: 231 48% 48%;
+    --border: 0 0% 87%; /* Light Grey #DEDEDE */
+    --input: 0 0% 87%; /* Light Grey #DEDEDE */
+    --ring: 205 50% 60%; /* Primary color for ring */
 
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
+    /* Light Theme Chart Colors */
+    --chart-1: 205 60% 55%; /* Main Blue */
+    --chart-2: 210 50% 65%; /* Lighter Blue */
+    --chart-3: 200 40% 50%; /* Desaturated Blue */
+    --chart-4: 0 0% 60%;   /* Grey */
+    --chart-5: 30 70% 70%;  /* Soft Orange/complementary */
+
     --radius: 0.5rem;
 
     /* Light theme sidebar */
-    --sidebar-background: 230 60% 98%; /* Very light indigo/blue */
-    --sidebar-foreground: 234 50% 35%; /* Darker blue text */
-    --sidebar-primary: 231 48% 48%; /* Primary color for active items */
-    --sidebar-primary-foreground: 0 0% 100%; /* White */
-    --sidebar-accent: 230 50% 92%; /* Slightly darker for hover */
-    --sidebar-accent-foreground: 231 48% 48%; /* Primary color for hover text */
-    --sidebar-border: 230 30% 85%;
-    --sidebar-ring: 231 48% 48%;
+    --sidebar-background: 206 44% 96%; /* Very light Blue-grey #F5F7F8 */
+    --sidebar-foreground: 0 0% 10%; /* Dark grey/off-black */
+    --sidebar-primary: 205 50% 72%; /* Blue-grey primary */
+    --sidebar-primary-foreground: 0 0% 0%; /* Black */
+    --sidebar-accent: 206 44% 88%; /* Slightly darker Lighter Blue-grey for hover #DFE8EC */
+    --sidebar-accent-foreground: 0 0% 0%; /* Black */
+    --sidebar-border: 0 0% 80%; /* Medium-Light Grey #CCCCCC */
+    --sidebar-ring: 205 50% 60%; /* Primary color for ring */
   }
 
   .dark {
-    --background: 0 0% 7%; /* #121212 */
-    --foreground: 230 50% 95%; /* Light Indigo #E8EAF6 */
+    --background: 0 0% 0%; /* Black */
+    --foreground: 0 0% 100%; /* White */
     
-    --card: 232 52% 40%; /* Indigo 600 #303F9F */
-    --card-foreground: 230 50% 95%;
+    --card: 0 0% 7%; /* Dark Grey #121212 - Slightly off black for cards */
+    --card-foreground: 0 0% 100%; /* White */
     
-    --popover: 232 52% 40%;
-    --popover-foreground: 230 50% 95%;
+    --popover: 0 0% 5%; /* Even darker for popovers */
+    --popover-foreground: 0 0% 100%; /* White */
     
-    --primary: 231 48% 63%; /* Indigo 300 #7986CB */
+    --primary: 356 82% 45%; /* Red #C92A33 (adjusted from B4121B for better primary feel) */
     --primary-foreground: 0 0% 100%; /* White */
     
-    --secondary: 231 40% 50%; /* Lighter blue #5C6BC0 */
-    --secondary-foreground: 0 0% 100%; /* White */
+    --secondary: 0 0% 12%; /* Darker Grey #1F1F1F */
+    --secondary-foreground: 0 0% 90%; /* Off-white */
     
-    --muted: 230 40% 30%; /* Darker muted blue */
-    --muted-foreground: 230 30% 75%; /* Lighter muted foreground */
+    --muted: 0 0% 12%; /* Darker Grey #1F1F1F */
+    --muted-foreground: 0 0% 65%; /* Lighter Grey */
     
-    --accent: 252 100% 65%; /* Soft Violet #7C4DFF */
+    --accent: 356 82% 55%; /* Brighter Red #E53935 for accent */
     --accent-foreground: 0 0% 100%; /* White */
     
-    --destructive: 0 72% 51%; /* Red #E53935 */
+    --destructive: 0 72% 51%; /* Default Red */
     --destructive-foreground: 0 0% 100%;
     
-    --border: 231 48% 48%; /* Indigo 500 #3F51B5 */
-    --input: 231 48% 48%;
-    --ring: 252 100% 75%; /* Lighter Accent #9C7BFF */
+    --border: 0 0% 15%; /* Dark Grey #262626 for borders */
+    --input: 0 0% 15%; /* Dark Grey #262626 for input borders */
+    --ring: 356 82% 55%; /* Brighter Red for ring */
 
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+    /* Dark Theme Chart Colors */
+    --chart-1: 356 90% 60%; /* Bright Red */
+    --chart-2: 0 0% 80%;   /* Light Grey/White */
+    --chart-3: 20 80% 65%;  /* Orange */
+    --chart-4: 0 0% 50%;   /* Medium Grey */
+    --chart-5: 350 70% 55%; /* Another shade of Red/Pink */
 
     /* Dark theme sidebar */
-    --sidebar-background: 232 57% 32%; /* Slightly darker than main bg #222C6B */
-    --sidebar-foreground: 230 50% 90%; /* #DDE1F8 */
-    --sidebar-primary: 252 100% 65%; /* Accent color for active items */
+    --sidebar-background: 0 0% 3%; /* Very Dark Grey, almost black #080808 */
+    --sidebar-foreground: 0 0% 90%; /* Off-white #E6E6E6 */
+    --sidebar-primary: 356 82% 45%; /* Red primary */
     --sidebar-primary-foreground: 0 0% 100%; /* White */
-    --sidebar-accent: 232 52% 45%; /* Hover color, lighter than sidebar bg #3846A8 */
+    --sidebar-accent: 0 0% 10%; /* Dark grey for hover #1A1A1A */
     --sidebar-accent-foreground: 0 0% 100%; /* White */
-    --sidebar-border: 231 48% 48%; /* #3F51B5 */
-    --sidebar-ring: 252 100% 75%; /* Lighter Accent #9C7BFF */
+    --sidebar-border: 0 0% 12%; /* Darker Grey #1F1F1F */
+    --sidebar-ring: 356 82% 55%; /* Brighter Red for ring */
   }
 }
 

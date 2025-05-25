@@ -86,6 +86,7 @@ export default function DashboardPage() {
       console.error("DashboardPage: Error fetching past interviews:", error);
       const errorMessage = error.message || "An unknown error occurred while fetching interviews.";
       setInterviewsError(errorMessage);
+      setInterviewsLoading(false); // Ensure loading is false on error
       toast({
         title: "Error Loading Interviews",
         description: errorMessage,
@@ -94,9 +95,9 @@ export default function DashboardPage() {
       setFetchedPastInterviews([]); 
     } finally {
       console.log("DashboardPage: Finished fetching interviews, setting interviewsLoading to false.");
-      setInterviewsLoading(false);
+      if(interviewsLoading) setInterviewsLoading(false); // Ensure it's always false if not already set by error
     }
-  }, [user, toast]); 
+  }, [user, toast, interviewsLoading]); // Added interviewsLoading to dependency to potentially help with state sync
 
   useEffect(() => {
     if (!authInitialLoading && user) {
@@ -153,7 +154,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <Card className="shadow-lg">
+      <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
         <CardHeader>
           <CardTitle className="text-2xl flex items-center">
             <User className="mr-3 h-7 w-7 text-primary" />
@@ -176,7 +177,7 @@ export default function DashboardPage() {
 
       {userProfile && !userProfile.isPlusSubscriber && (
         <>
-          <Card className="shadow-md">
+          <Card className="shadow-md hover:shadow-lg transition-shadow duration-300">
             <CardHeader>
               <CardTitle className="text-xl flex items-center">
                 <TrendingUp className="mr-3 h-6 w-6 text-primary" />
@@ -204,7 +205,7 @@ export default function DashboardPage() {
             )}
           </Card>
           
-          <Card className="shadow-md bg-gradient-to-br from-primary/10 via-background to-background dark:from-primary/20">
+          <Card className="shadow-md hover:shadow-lg transition-shadow duration-300 bg-gradient-to-br from-primary/10 via-background to-background dark:from-primary/20">
               <CardHeader>
                   <CardTitle className="text-xl flex items-center">
                   <ShieldCheck className="mr-3 h-6 w-6 text-primary" />
@@ -232,29 +233,27 @@ export default function DashboardPage() {
       )}
       
       {userProfile?.isPlusSubscriber && (
-         <Card className="shadow-md bg-gradient-to-br from-green-500/10 via-background to-background dark:from-green-600/20 border-green-500/30">
+         <Card className="shadow-md hover:shadow-lg transition-shadow duration-300 bg-gradient-to-br from-green-500/10 via-background to-background dark:from-green-600/20 border-green-500/30">
             <CardHeader>
                 <CardTitle className="text-xl flex items-center gap-2">
                   <CheckCircle className="mr-1 h-7 w-7 text-green-600 dark:text-green-400" />
                   You are an aiTyaari Plus Member!
                 </CardTitle>
-                <CardDescription>Enjoy unlimited access to all features and prepare without limits.</CardDescription>
+                <CardDescription>Enjoy unlimited access to all features and prepare without limits. Current Plan: {userProfile.subscriptionPlan ? userProfile.subscriptionPlan.charAt(0).toUpperCase() + userProfile.subscriptionPlan.slice(1) : 'Plus'}</CardDescription>
             </CardHeader>
             <CardContent>
                  <p className="text-sm text-muted-foreground">Thank you for being a Plus subscriber. You have unlimited interview sessions and access to all current and upcoming premium features.</p>
             </CardContent>
-            {/* Optionally add a link to manage subscription if that page exists 
-            <CardFooter>
-                 <Link href="/manage-subscription" passHref>
+             <CardFooter>
+                 <Link href="/subscription" passHref>
                     <Button variant="outline" size="sm">Manage Subscription</Button>
                  </Link>
             </CardFooter>
-            */}
         </Card>
       )}
 
 
-      <Card className="shadow-lg">
+      <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
         <CardHeader>
           <CardTitle className="text-xl flex items-center">
             <ListChecks className="mr-3 h-6 w-6 text-primary" />
@@ -287,7 +286,7 @@ export default function DashboardPage() {
           {!interviewsLoading && !interviewsError && fetchedPastInterviews.length > 0 && (
             <div className="space-y-4">
               {fetchedPastInterviews.map((session) => (
-                <Card key={session.id} className="bg-secondary/50 dark:bg-secondary/30 hover:shadow-md transition-shadow">
+                <Card key={session.id} className="bg-secondary/50 dark:bg-secondary/30 hover:shadow-md transition-shadow duration-300">
                   <CardHeader>
                     <CardTitle className="text-lg">Interview on {new Date(session.createdAt).toLocaleDateString()}</CardTitle>
                     <CardDescription>Duration: {session.duration} minutes. Status: {session.status}</CardDescription>
