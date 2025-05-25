@@ -14,19 +14,57 @@ import {
   CardTitle,
   CardFooter,
 } from "@/components/ui/card";
-import { Loader2, ShieldCheck, Sparkles, CheckCircle, Zap, BarChart, Brain, Users } from "lucide-react";
+import { Loader2, ShieldCheck, Sparkles, CheckCircle, Zap, BarChart, Brain, Users, CalendarDays, CalendarRange, Calendar } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
 
 export default function SubscriptionPage() {
   const { user, userProfile, refreshUserProfile, initialLoading: authInitialLoading, loading: authProfileLoading } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isProcessing, setIsProcessing] = useState<string | null>(null); // Store plan ID being processed
 
   const isLoading = authInitialLoading || authProfileLoading;
+
+  const plans = [
+    {
+      id: "monthly",
+      name: "Monthly Plan",
+      price: 9.99,
+      billingCycle: "month",
+      icon: CalendarDays,
+      description: "Flexible monthly access.",
+      priceDisplay: "$9.99 / month",
+    },
+    {
+      id: "quarterly",
+      name: "Quarterly Plan",
+      price: 27.99,
+      billingCycle: "quarter",
+      icon: CalendarRange,
+      description: "Save with 3-month billing.",
+      priceDisplay: "$27.99 / quarter",
+      highlight: "Popular",
+    },
+    {
+      id: "yearly",
+      name: "Yearly Plan",
+      price: 99.99,
+      billingCycle: "year",
+      icon: Calendar,
+      description: "Best value, billed annually.",
+      priceDisplay: "$99.99 / year",
+      highlight: "Best Value",
+    },
+  ];
+
+  const plusFeatures = [
+    { icon: Zap, text: "Unlimited interview sessions" },
+    { icon: Brain, text: "Access to all question types & difficulties" },
+    { icon: BarChart, text: "More detailed performance analytics (coming soon)" },
+    { icon: Users, text: "Priority AI model access for faster responses" },
+  ];
 
   if (isLoading) {
     return (
@@ -37,7 +75,6 @@ export default function SubscriptionPage() {
   }
 
   if (!user && !isLoading) {
-    // This should ideally be caught by the AppLayout, but as a safeguard
     router.push("/login");
     return <div className="flex justify-center items-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   }
@@ -70,12 +107,12 @@ export default function SubscriptionPage() {
     );
   }
 
-  const handleUpgrade = async () => {
+  const handleUpgrade = async (planId: string) => {
     if (!user) {
         toast({ title: "Authentication Error", description: "You must be logged in to upgrade.", variant: "destructive"});
         return;
     }
-    setIsProcessing(true);
+    setIsProcessing(planId);
     try {
       // Simulate payment processing
       await new Promise(resolve => setTimeout(resolve, 2500));
@@ -85,6 +122,7 @@ export default function SubscriptionPage() {
         userDocRef,
         {
           isPlusSubscriber: true,
+          subscriptionPlan: planId, // Optionally store chosen plan
           updatedAt: new Date().toISOString(),
         },
         { merge: true }
@@ -94,7 +132,7 @@ export default function SubscriptionPage() {
 
       toast({
         title: "Upgrade Successful!",
-        description: "Welcome to aiTyaari Plus! You now have unlimited access.",
+        description: `Welcome to aiTyaari Plus! You now have unlimited access with the ${plans.find(p => p.id === planId)?.name || 'selected plan'}.`,
         variant: "default",
         duration: 5000,
       });
@@ -107,69 +145,81 @@ export default function SubscriptionPage() {
         variant: "destructive",
       });
     } finally {
-      setIsProcessing(false);
+      setIsProcessing(null);
     }
   };
 
-  const plusFeatures = [
-    { icon: Zap, text: "Unlimited interview sessions" },
-    { icon: Brain, text: "Access to all question types & difficulties" },
-    { icon: BarChart, text: "More detailed performance analytics (coming soon)" },
-    { icon: Users, text: "Priority AI model access for faster responses" },
-  ];
 
   return (
-    <div className="max-w-3xl mx-auto py-8 px-4 space-y-8">
-      <Card className="shadow-xl overflow-hidden">
-        <CardHeader className="bg-gradient-to-br from-primary to-accent text-primary-foreground p-8">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-4xl font-bold">aiTyaari Plus</CardTitle>
-            <Sparkles className="h-12 w-12 text-yellow-300" />
-          </div>
-          <CardDescription className="text-primary-foreground/80 text-lg mt-2">
-            Unlock your full potential and ace your interviews with our premium features.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-6 md:p-8">
-          <h3 className="text-2xl font-semibold mb-6 text-center text-foreground">
-            Why Go Plus?
-          </h3>
-          <div className="grid md:grid-cols-2 gap-6 mb-8">
-            {plusFeatures.map((feature, index) => (
-              <div key={index} className="flex items-start gap-3 p-4 bg-secondary/50 rounded-lg">
-                <feature.icon className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
-                <p className="text-muted-foreground">{feature.text}</p>
-              </div>
-            ))}
-          </div>
+    <div className="max-w-5xl mx-auto py-8 px-4 space-y-12">
+      <header className="text-center">
+        <Sparkles className="h-16 w-16 text-primary mx-auto mb-4" />
+        <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
+          Unlock aiTyaari Plus
+        </h1>
+        <p className="mt-4 text-xl text-muted-foreground">
+          Choose the plan that's right for you and supercharge your interview preparation.
+        </p>
+      </header>
 
-          <div className="text-center p-6 bg-muted rounded-lg">
-            <p className="text-4xl font-bold text-primary mb-2">$9.99 <span className="text-lg font-normal text-muted-foreground">/ month</span></p>
-            <p className="text-sm text-muted-foreground mb-6">Billed monthly. Cancel anytime.</p>
-            <Button
-              size="lg"
-              className="w-full max-w-xs mx-auto text-lg py-6"
-              onClick={handleUpgrade}
-              disabled={isProcessing || isLoading}
-            >
-              {isProcessing ? (
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              ) : (
-                <ShieldCheck className="mr-2 h-5 w-5" />
-              )}
-              {isProcessing ? "Processing Payment..." : "Upgrade to Plus Securely"}
-            </Button>
-            <p className="text-xs text-muted-foreground mt-4">
-                This is a mock payment for demonstration purposes. No real transaction will occur.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-       <div className="text-center">
-          <Link href="/dashboard">
-            <Button variant="ghost">Maybe Later, Back to Dashboard</Button>
-          </Link>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-stretch">
+        {plans.map((plan) => {
+          const PlanIcon = plan.icon;
+          return (
+            <Card key={plan.id} className={`flex flex-col shadow-lg hover:shadow-xl transition-shadow duration-300 ${plan.highlight ? (plan.highlight === "Best Value" ? 'border-2 border-primary ring-2 ring-primary/50' : 'border-2 border-accent ring-2 ring-accent/50') : ''}`}>
+              <CardHeader className="pb-4">
+                {plan.highlight && (
+                  <div className={`inline-block px-3 py-1 text-xs font-semibold rounded-full mb-2 self-start ${plan.highlight === "Best Value" ? 'bg-primary text-primary-foreground' : 'bg-accent text-accent-foreground'}`}>
+                    {plan.highlight}
+                  </div>
+                )}
+                <div className="flex items-center gap-3">
+                  <PlanIcon className="h-8 w-8 text-primary" />
+                  <CardTitle className="text-2xl font-semibold">{plan.name}</CardTitle>
+                </div>
+                <CardDescription>{plan.description}</CardDescription>
+              </CardHeader>
+              <CardContent className="flex-grow space-y-4">
+                <p className="text-4xl font-bold text-foreground">
+                  ${plan.price.toFixed(2)}
+                  <span className="text-lg font-normal text-muted-foreground"> / {plan.billingCycle}</span>
+                </p>
+                <ul className="space-y-2 text-sm text-muted-foreground">
+                  {plusFeatures.map((feature, index) => (
+                    <li key={index} className="flex items-start gap-2">
+                      <feature.icon className="h-4 w-4 text-green-500 flex-shrink-0 mt-0.5" />
+                      <span>{feature.text}</span>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+              <CardFooter className="mt-auto">
+                <Button
+                  size="lg"
+                  className="w-full text-lg py-3"
+                  onClick={() => handleUpgrade(plan.id)}
+                  disabled={!!isProcessing || isLoading}
+                  variant={plan.highlight ? (plan.highlight === "Best Value" ? "default" : "default") : "outline"}
+                >
+                  {isProcessing === plan.id ? (
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  ) : (
+                    <ShieldCheck className="mr-2 h-5 w-5" />
+                  )}
+                  {isProcessing === plan.id ? "Processing..." : "Upgrade Securely"}
+                </Button>
+              </CardFooter>
+            </Card>
+          );
+        })}
+      </div>
+      <div className="text-center text-sm text-muted-foreground">
+        <p>All payments are processed securely. This is a mock payment for demonstration purposes. No real transaction will occur.</p>
+        <Link href="/dashboard" className="mt-2 inline-block">
+          <Button variant="ghost">Maybe Later, Back to Dashboard</Button>
+        </Link>
       </div>
     </div>
   );
 }
+
