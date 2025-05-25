@@ -35,12 +35,11 @@ const profileFormSchema = z.object({
   company: z.string().max(100).optional().nullable(),
   education: z.string().min(2, { message: "Education details are required." }).max(200),
   phoneNumber: z.string().max(20).optional().nullable(),
-  // Fields for resume metadata, values will be set programmatically before saving to Firestore
+  // Resume related fields, values will be set programmatically before saving to Firestore
   resumeFileName: z.string().optional().nullable(),
   resumeFileUrl: z.string().url().optional().nullable(),
   resumeStoragePath: z.string().optional().nullable(),
-  // This field is for the TEXT extracted from the resume, used by AI
-  resumeProcessedText: z.string().optional().nullable(),
+  resumeProcessedText: z.string().optional().nullable(), // Text extracted from resume for AI
 });
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
@@ -64,6 +63,8 @@ export default function ProfilePage() {
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [displayedFileName, setDisplayedFileName] = useState<string | null>(null);
+  // This state holds the text extracted from the resume, either from a new upload or from the loaded profile.
+  // It's the source of truth for what the AI will see if the profile is saved.
   const [clientSideResumeText, setClientSideResumeText] = useState<string | null>(null);
   
   const [isReadingFile, setIsReadingFile] = useState(false);
@@ -106,12 +107,12 @@ export default function ProfilePage() {
           resumeProcessedText: userProfile.resumeProcessedText || null,
         });
         setDisplayedFileName(userProfile.resumeFileName || null);
-        setClientSideResumeText(userProfile.resumeProcessedText || null);
+        setClientSideResumeText(userProfile.resumeProcessedText || null); // Populate client-side text from profile
       } else {
         console.log("ProfilePage: No user profile found, resetting to defaults.");
         form.reset(form.formState.defaultValues);
         setDisplayedFileName(null);
-        setClientSideResumeText(null);
+        setClientSideResumeText(null); // Clear client-side text
       }
       setIsFetchingProfile(false);
     } else if (!initialLoading && !authLoading && !user) {
@@ -128,23 +129,25 @@ export default function ProfilePage() {
     console.log("ProfilePage: handleFileChange triggered.");
 
     if (!file) {
-      console.log("ProfilePage: File selection cancelled by user or no file selected.");
-      // User cancelled the dialog or somehow no file was selected.
-      // We don't want to clear existing loaded resume data if they just cancel.
-      // We only clear the visual file input to allow re-selecting the same file later if they change their mind.
+      console.log("ProfilePage: File selection cancelled by user or no file selected. Resetting file input value only.");
       if (fileInputRef.current) {
-        fileInputRef.current.value = "";
+        fileInputRef.current.value = ""; // Allow re-selecting the same file
       }
+      // Do not clear existing resume data from form/state if user just cancelled.
       return;
     }
 
     console.log("ProfilePage: New file selected:", file.name, "Size:", file.size, "Type:", file.type);
     setIsReadingFile(true);
     setSelectedFile(file); // Store the file object for potential upload
+    
+    // Clear previous client-side extracted text and displayed name for the new file
+    setClientSideResumeText(null); 
     setDisplayedFileName(file.name); // Tentatively set file name for display
-    setClientSideResumeText(null); // Clear previous client-side extracted text
-    form.setValue("resumeProcessedText", null, { shouldValidate: true }); // Clear in form as well
+    form.setValue("resumeProcessedText", null); // Clear in form as well
     setUploadProgress(null); // Reset progress for new selection
+
+    const currentFormValues = form.getValues();
 
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
       toast({
@@ -153,8 +156,8 @@ export default function ProfilePage() {
         variant: "destructive",
       });
       setSelectedFile(null);
-      setDisplayedFileName(form.getValues("resumeFileName")); // Revert to saved name from form (which is from userProfile)
-      setClientSideResumeText(form.getValues("resumeProcessedText")); // Revert to saved text from form
+      setClientSideResumeText(currentFormValues.resumeProcessedText); // Revert to existing form value
+      setDisplayedFileName(currentFormValues.resumeFileName); // Revert to existing form value
       if (fileInputRef.current) fileInputRef.current.value = "";
       setIsReadingFile(false);
       console.log("ProfilePage: File too large. Reverted UI to reflect current profile state.");
@@ -168,8 +171,8 @@ export default function ProfilePage() {
         variant: "destructive",
       });
       setSelectedFile(null);
-      setDisplayedFileName(form.getValues("resumeFileName")); // Revert
-      setClientSideResumeText(form.getValues("resumeProcessedText")); // Revert
+      setClientSideResumeText(currentFormValues.resumeProcessedText); // Revert
+      setDisplayedFileName(currentFormValues.resumeFileName); // Revert
       if (fileInputRef.current) fileInputRef.current.value = "";
       setIsReadingFile(false);
       console.log("ProfilePage: Unsupported file type. Reverted UI.");
@@ -188,17 +191,18 @@ export default function ProfilePage() {
     reader.onload = (e) => {
       const text = e.target?.result as string;
       setClientSideResumeText(text); 
-      form.setValue("resumeProcessedText", text, { shouldValidate: true }); 
-      setDisplayedFileName(file.name); 
+      form.setValue("resumeProcessedText", text, { shouldValidate: true }); // Update form as well
+      setDisplayedFileName(file.name); // Confirm display name
       toast({ title: "Resume File Processed", description: `Text from ${file.name} has been extracted for AI use. Click 'Save Changes' to upload the file and update your profile.` });
       setIsReadingFile(false);
+      if (fileInputRef.current) fileInputRef.current.value = ""; // Clear to allow re-selection of same file
       console.log("ProfilePage: File read successfully. Text extracted length:", text?.length);
     };
     reader.onerror = (errorEvent) => {
       console.error("ProfilePage: Error reading file:", errorEvent);
       toast({ title: "File Read Error", description: "Could not read the resume file content.", variant: "destructive" });
-      setClientSideResumeText(form.getValues("resumeProcessedText")); // Revert to form's current value
-      setDisplayedFileName(form.getValues("resumeFileName")); // Revert
+      setClientSideResumeText(currentFormValues.resumeProcessedText); // Revert
+      setDisplayedFileName(currentFormValues.resumeFileName); // Revert
       setSelectedFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
       setIsReadingFile(false);
@@ -210,7 +214,7 @@ export default function ProfilePage() {
   const clearResume = async () => {
     if (!user) return;
     console.log("ProfilePage: clearResume initiated.");
-    setIsSubmitting(true); // Use isSubmitting to disable save button during this operation
+    setIsSubmitting(true); 
     try {
       const currentStoragePath = form.getValues("resumeStoragePath");
       if (currentStoragePath) {
@@ -236,6 +240,7 @@ export default function ProfilePage() {
       setDisplayedFileName(null);
       setClientSideResumeText(null);
       
+      // Reset form fields related to resume
       form.reset({
         ...form.getValues(), 
         resumeFileName: null,
@@ -243,10 +248,15 @@ export default function ProfilePage() {
         resumeStoragePath: null,
         resumeProcessedText: null,
       });
+
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
-      await refreshUserProfile();
+      refreshUserProfile().then(() => {
+        console.log("ProfilePage: User profile refreshed after clearing resume.");
+      }).catch(err => {
+        console.error("ProfilePage: Error refreshing user profile after clearing resume:", err);
+      });
       toast({ title: "Resume Cleared", description: "Resume information has been removed from your profile." });
     } catch (error: any) {
       console.error("ProfilePage: Error Clearing Resume:", error);
@@ -262,17 +272,25 @@ export default function ProfilePage() {
       toast({ title: "Error", description: "You must be logged in.", variant: "destructive" });
       return;
     }
-    console.log("ProfilePage: onSubmit triggered. Form Values (values from form.handleSubmit):", JSON.stringify(values, null, 2));
+    console.log("ProfilePage: onSubmit triggered. Form Values (from form.handleSubmit):", JSON.stringify(values, null, 2));
     console.log("ProfilePage: Current selectedFile:", selectedFile?.name);
     console.log("ProfilePage: Current clientSideResumeText length:", clientSideResumeText?.length);
 
     setIsSubmitting(true);
+    setIsUploading(false); // Reset uploading state initially
     setUploadProgress(null);
 
     // This object will hold the resume-related data to be merged into the profile
-    let resumeDataForFirestore: Partial<UserProfile> = {
-      // Start with the processed text from the client-side state, as it's the most up-to-date
-      resumeProcessedText: clientSideResumeText,
+    let finalResumeData: {
+        resumeFileName: string | null;
+        resumeFileUrl: string | null;
+        resumeStoragePath: string | null;
+        resumeProcessedText: string | null;
+    } = {
+        resumeFileName: values.resumeFileName, // from loaded profile or if user cleared via input
+        resumeFileUrl: values.resumeFileUrl,
+        resumeStoragePath: values.resumeStoragePath,
+        resumeProcessedText: clientSideResumeText, // Always use the up-to-date clientSideResumeText
     };
 
     try {
@@ -282,7 +300,7 @@ export default function ProfilePage() {
         setIsUploading(true);
         setUploadProgress(0);
 
-        const oldStoragePath = form.getValues("resumeStoragePath");
+        const oldStoragePath = form.getValues("resumeStoragePath"); // Use form's current value for old path
         if (oldStoragePath) {
           try {
             console.log("ProfilePage: Deleting existing resume from storage:", oldStoragePath);
@@ -317,10 +335,12 @@ export default function ProfilePage() {
                 console.log("ProfilePage: Upload complete. Getting download URL.");
                 const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
                 console.log("ProfilePage: Download URL obtained:", downloadURL);
-                resumeDataForFirestore.resumeFileUrl = downloadURL;
-                resumeDataForFirestore.resumeFileName = selectedFile.name; 
-                resumeDataForFirestore.resumeStoragePath = filePath;
-                // resumeProcessedText is already in resumeDataForFirestore from clientSideResumeText
+                
+                finalResumeData.resumeFileUrl = downloadURL;
+                finalResumeData.resumeFileName = selectedFile.name; 
+                finalResumeData.resumeStoragePath = filePath;
+                // finalResumeData.resumeProcessedText is already sourced from clientSideResumeText
+                                
                 setUploadProgress(100); 
                 resolve();
               } catch (urlError) {
@@ -332,27 +352,25 @@ export default function ProfilePage() {
           );
         });
         console.log("ProfilePage: Resume file upload promise resolved/rejected.");
+        setIsUploading(false); // Upload process finished (success or fail via catch)
       } else {
-        // No new file selected. Decide what to do with existing resume info.
-        if (!displayedFileName) {
-          // Implies the resume was cleared (e.g., user selected a file then cancelled, or input was cleared)
-          // or there never was one.
-          console.log("ProfilePage: No new file and no displayedFileName. Clearing resume fields in Firestore.");
-          resumeDataForFirestore.resumeFileName = null;
-          resumeDataForFirestore.resumeFileUrl = null;
-          resumeDataForFirestore.resumeStoragePath = null;
-          resumeDataForFirestore.resumeProcessedText = null; // clientSideResumeText would also be null here
+         // No new file selected. Check if the resume was meant to be cleared.
+         // clientSideResumeText and displayedFileName are the sources of truth here if no new file is selected.
+         if (!displayedFileName && !clientSideResumeText) { 
+            // This implies user action to clear the resume (e.g., via clearResume button or by selecting then cancelling and no prior resume)
+            console.log("ProfilePage: No new file and no displayedFileName/clientSideResumeText. Ensuring resume fields are null.");
+            finalResumeData.resumeFileName = null;
+            finalResumeData.resumeFileUrl = null;
+            finalResumeData.resumeStoragePath = null;
+            finalResumeData.resumeProcessedText = null;
         } else {
-          // A file name is displayed, but no new file was selected. Retain existing metadata from form values.
-          // resumeProcessedText from clientSideResumeText is already set in resumeDataForFirestore.
-          console.log("ProfilePage: No new file selected. Retaining existing resume file info from form values.");
-          resumeDataForFirestore.resumeFileName = values.resumeFileName;
-          resumeDataForFirestore.resumeFileUrl = values.resumeFileUrl;
-          resumeDataForFirestore.resumeStoragePath = values.resumeStoragePath;
+            // Retain existing resume file info if a file was not cleared and no new one was selected
+            // finalResumeData is already initialized with form values or updated clientSideResumeText
+             console.log("ProfilePage: No new file selected. Retaining existing or client-side processed resume text.");
         }
       }
 
-      console.log("ProfilePage: Assembling final profile data to save. Resume data part:", JSON.stringify(resumeDataForFirestore, null, 2));
+      console.log("ProfilePage: Assembling final profile data to save. Resume data part:", JSON.stringify(finalResumeData, null, 2));
       const profileDataToSave: UserProfile = {
         uid: user.uid,
         email: user.email || userProfile?.email || undefined,
@@ -363,10 +381,10 @@ export default function ProfilePage() {
         education: values.education,
         phoneNumber: values.phoneNumber || null,
         
-        resumeFileName: resumeDataForFirestore.resumeFileName,
-        resumeFileUrl: resumeDataForFirestore.resumeFileUrl,
-        resumeStoragePath: resumeDataForFirestore.resumeStoragePath,
-        resumeProcessedText: resumeDataForFirestore.resumeProcessedText,
+        resumeFileName: finalResumeData.resumeFileName,
+        resumeFileUrl: finalResumeData.resumeFileUrl,
+        resumeStoragePath: finalResumeData.resumeStoragePath,
+        resumeProcessedText: finalResumeData.resumeProcessedText, // This is the text for AI
 
         createdAt: userProfile?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -375,17 +393,20 @@ export default function ProfilePage() {
         isAdmin: userProfile?.isAdmin || false,
       };
       
-      console.log("ProfilePage: Saving profile data to Firestore:", JSON.stringify(profileDataToSave, null, 2));
+      console.log("ProfilePage: FINAL data to save to Firestore:", JSON.stringify(profileDataToSave, null, 2));
       const userDocRef = doc(db, "users", user.uid);
       await setDoc(userDocRef, profileDataToSave, { merge: true });
       console.log("ProfilePage: Profile data successfully saved to Firestore.");
 
       toast({ title: "Profile Updated", description: "Your profile has been successfully updated." });
       
-      console.log("ProfilePage: Refreshing user profile from AuthContext.");
-      await refreshUserProfile(); 
-      console.log("ProfilePage: User profile refreshed.");
-
+      // Refresh profile data in context, but don't let it block UI
+      refreshUserProfile().then(() => {
+        console.log("ProfilePage: User profile refreshed in context after save.");
+      }).catch(err => {
+        console.error("ProfilePage: Error refreshing user profile in context after save:", err);
+      });
+      
       setSelectedFile(null); 
       // displayedFileName and clientSideResumeText will be updated by useEffect from new userProfile
       if (fileInputRef.current) {
@@ -398,7 +419,7 @@ export default function ProfilePage() {
       toast({ title: "Update Failed", description: description, variant: "destructive" });
       setUploadProgress(null); // Clear progress on error
     } finally {
-      setIsUploading(false);
+      setIsUploading(false); // Ensure this is reset
       console.log("ProfilePage: onSubmit - Reached finally block. Preparing to set isSubmitting to false.");
       setIsSubmitting(false);
       console.log("ProfilePage: onSubmit - isSubmitting has been set to false.");
@@ -472,7 +493,7 @@ export default function ProfilePage() {
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    {form.getValues("resumeFileUrl") && !selectedFile && (
+                    {form.getValues("resumeFileUrl") && !selectedFile && ( // Show download only if there's a saved URL and no new file selected
                       <Button type="button" variant="outline" size="sm" asChild disabled={isSubmitting || isReadingFile || isUploading}>
                         <a href={form.getValues("resumeFileUrl")!} target="_blank" rel="noopener noreferrer" title="Download current resume">
                           <DownloadCloud className="h-4 w-4" />
@@ -499,3 +520,6 @@ export default function ProfilePage() {
     </Card>
   );
 }
+
+
+    
