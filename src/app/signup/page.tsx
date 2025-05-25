@@ -55,11 +55,10 @@ export default function SignupPage() {
   const [authMethod, setAuthMethod] = useState<"email" | "phone">("email");
   const [isRedirecting, setIsRedirecting] = useState(false);
   
-  // Phone Auth State
   const [phoneNumber, setPhoneNumber] = useState("");
-  const [phoneEmail, setPhoneEmail] = useState(""); // For email input in phone tab
-  const [phonePassword, setPhonePassword] = useState(""); // For password input in phone tab
-  const [phoneConfirmPassword, setPhoneConfirmPassword] = useState(""); // For confirm password
+  const [phoneEmail, setPhoneEmail] = useState(""); 
+  const [phonePassword, setPhonePassword] = useState(""); 
+  const [phoneConfirmPassword, setPhoneConfirmPassword] = useState(""); 
   const [otp, setOtp] = useState("");
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
   const [otpSent, setOtpSent] = useState(false);
@@ -79,33 +78,35 @@ export default function SignupPage() {
   }, [user, initialLoading, router]);
 
   useEffect(() => {
-    const pageName = "SIGNUP_PAGE_RECAPTCHA";
+    const pageName = "SIGNUP_PAGE_RECAPTCHA_EFFECT";
+    console.log(`${pageName}: useEffect triggered. AuthMethod: ${authMethod}, Auth available: ${!!auth}`);
+    
     const initRecaptcha = async () => {
-      console.log(`${pageName}: initRecaptcha called. Container ref exists:`, !!recaptchaContainerRef.current);
+      console.log(`${pageName}: initRecaptcha called. Container ref:`, recaptchaContainerRef.current);
       
       if (recaptchaVerifierRef.current) {
         try {
-          console.log(`${pageName}: Attempting to clear existing reCAPTCHA verifier.`);
+          console.log(`${pageName}: Clearing existing reCAPTCHA verifier.`);
           recaptchaVerifierRef.current.clear();
-          console.log(`${pageName}: Cleared existing reCAPTCHA verifier.`);
         } catch (e) {
           console.warn(`${pageName}: Error clearing previous reCAPTCHA:`, e);
         }
         recaptchaVerifierRef.current = null;
       }
-      setIsRecaptchaReady(false); // Reset readiness
+      setIsRecaptchaReady(false);
+      setRecaptchaError(null);
 
       if (recaptchaContainerRef.current && auth) {
-        console.log(`${pageName}: Attempting to initialize new reCAPTCHA verifier...`);
+        console.log(`${pageName}: Attempting to initialize new reCAPTCHA. Container element:`, recaptchaContainerRef.current);
         setIsRecaptchaInitializing(true);
-        setRecaptchaError(null);
-
+        
         try {
-          console.log(`${pageName}: Creating new RecaptchaVerifier instance.`);
-          const verifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
+          console.log(`${pageName}: Creating new RecaptchaVerifier instance for element ID: ${recaptchaContainerRef.current.id}`);
+          const verifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current.id, { // Pass ID string
             size: "invisible",
             callback: (response: any) => {
               console.log(`${pageName}: reCAPTCHA challenge passed (invisible flow):`, response);
+              setIsRecaptchaReady(true); // Can set ready on successful callback
             },
             "expired-callback": () => {
               console.warn(`${pageName}: reCAPTCHA challenge expired.`);
@@ -130,12 +131,12 @@ export default function SignupPage() {
           console.log(`${pageName}: verifier.render() promise RESOLVED or didn't time out.`);
           recaptchaVerifierRef.current = verifier;
           setIsRecaptchaReady(true); 
-          setRecaptchaError(null); // Clear any previous error
+          setRecaptchaError(null);
           console.log(`${pageName}: reCAPTCHA setup successful. isRecaptchaReady: true`);
 
         } catch (error: any) {
-          console.error(`${pageName}: Error during reCAPTCHA verifier.render() or instantiation:`, error);
-          setRecaptchaError(`reCAPTCHA Setup Error: ${error.message}. Please check browser console for more details, ensure your domain is authorized in Firebase & Google Cloud for this API key, and that no browser extensions are blocking reCAPTCHA scripts.`);
+          console.error(`${pageName}: Error during reCAPTCHA setup:`, error);
+          setRecaptchaError(`reCAPTCHA Setup Error: ${error.message}. Ensure your domain is authorized for this API key and reCAPTCHA is enabled in Firebase.`);
           recaptchaVerifierRef.current = null;
           setIsRecaptchaReady(false);
         } finally {
@@ -143,40 +144,37 @@ export default function SignupPage() {
           setIsRecaptchaInitializing(false);
         }
       } else {
-         console.log(`${pageName}: Conditions not met for reCAPTCHA init. Container ref: ${!!recaptchaContainerRef.current}, Auth: ${!!auth}`);
+         console.warn(`${pageName}: Conditions not met for reCAPTCHA init. Container ref exists: ${!!recaptchaContainerRef.current}, Auth exists: ${!!auth}`);
       }
     };
 
     if (authMethod === "phone") {
-      // Only initialize if not already ready and not currently initializing
-      if (!isRecaptchaReady && !isRecaptchaInitializing && recaptchaContainerRef.current) {
-         console.log(`${pageName}: Conditions met to call initRecaptcha.`);
+      if (!isRecaptchaReady && !isRecaptchaInitializing) {
+         console.log(`${pageName}: Phone auth method selected. Triggering initRecaptcha.`);
          initRecaptcha();
-      } else if (!recaptchaContainerRef.current && !isRecaptchaInitializing) {
-         console.log(`${pageName}: recaptchaContainerRef.current is null, cannot init reCAPTCHA yet.`);
+      } else {
+        console.log(`${pageName}: Phone auth method selected, but reCAPTCHA already ready or initializing. isReady: ${isRecaptchaReady}, isInitializing: ${isRecaptchaInitializing}`);
       }
     } else {
-      // Cleanup if switching away from phone method
       if (recaptchaVerifierRef.current) {
         console.log(`${pageName}: Clearing reCAPTCHA verifier due to auth method change from phone.`);
-        try { recaptchaVerifierRef.current.clear(); } catch (e) { console.warn(`${pageName}: Error clearing reCAPTCHA on auth method change:`, e); }
+        try { recaptchaVerifierRef.current.clear(); } catch (e) { console.warn(`${pageName}: Error clearing reCAPTCHA:`, e); }
         recaptchaVerifierRef.current = null;
       }
       setIsRecaptchaReady(false);
-      setIsRecaptchaInitializing(false);
       setRecaptchaError(null);
+      setIsRecaptchaInitializing(false);
     }
     
-    // Cleanup on unmount
     return () => {
+      const cleanupPageName = "SIGNUP_PAGE_RECAPTCHA_CLEANUP";
       if (recaptchaVerifierRef.current) { 
-        console.log(`${pageName}: Cleaning up reCAPTCHA verifier on component unmount.`);
-        try { recaptchaVerifierRef.current.clear(); } catch (e) { console.warn(`${pageName}: Error clearing reCAPTCHA on unmount:`, e); }
+        console.log(`${cleanupPageName}: Cleaning up reCAPTCHA verifier on component unmount or authMethod change.`);
+        try { recaptchaVerifierRef.current.clear(); } catch (e) { console.warn(`${cleanupPageName}: Error clearing reCAPTCHA:`, e); }
         recaptchaVerifierRef.current = null;
       }
     };
-  // Add recaptchaContainerRef.current as a dependency if its availability triggers re-init
-  }, [authMethod, auth, toast, isRecaptchaInitializing, isRecaptchaReady]); 
+  }, [authMethod, auth]); 
 
 
   const handleEmailSignup = async (values: EmailSignupFormValues) => {
@@ -226,6 +224,8 @@ export default function SignupPage() {
   const handleSendOtp = async () => {
     const pageName = "SIGNUP_PAGE_SEND_OTP";
     setLoading(true);
+    setRecaptchaError(null); // Clear previous errors
+
     const validation = phoneSchema.safeParse(phoneNumber);
     if (!validation.success) {
       toast({ title: "Invalid Phone Number", description: validation.error.errors[0].message, variant: "destructive" });
@@ -234,31 +234,29 @@ export default function SignupPage() {
     }
 
     if (!recaptchaVerifierRef.current || !isRecaptchaReady) {
-        console.error(`${pageName}: Send OTP clicked but reCAPTCHA not ready. isRecaptchaReady: ${isRecaptchaReady}, recaptchaError: ${recaptchaError}`);
-        toast({ title: "reCAPTCHA Error", description: recaptchaError || "reCAPTCHA not ready. Please wait or try refreshing the reCAPTCHA setup.", variant: "destructive"});
+        console.error(`${pageName}: Send OTP clicked but reCAPTCHA not ready. Verifier: ${!!recaptchaVerifierRef.current}, isReady: ${isRecaptchaReady}, Error: ${recaptchaError}`);
+        toast({ title: "reCAPTCHA Error", description: recaptchaError || "reCAPTCHA not ready. Please wait or try re-initializing.", variant: "destructive"});
         setLoading(false);
         return;
     }
     
     try {
-      console.log(`${pageName}: Attempting signInWithPhoneNumber for ${phoneNumber}`);
+      console.log(`${pageName}: Attempting signInWithPhoneNumber for ${phoneNumber} with verifier:`, recaptchaVerifierRef.current);
       const result = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifierRef.current);
       setConfirmationResult(result);
       setOtpSent(true);
-      setRecaptchaError(null); // Clear error on success
       toast({ title: "OTP Sent", description: `An OTP has been sent to ${phoneNumber}.` });
       console.log(`${pageName}: OTP sent successfully.`);
     } catch (error: any) {
       console.error(`${pageName}: Error sending OTP:`, error);
       toast({ title: "Failed to Send OTP", description: error.message || "Please try again.", variant: "destructive" });
-      // Reset reCAPTCHA on certain errors to allow retrying the whole flow
-      if (error.code === 'auth/captcha-check-failed' || error.code === 'auth/invalid-verification-code' || error.code === 'auth/too-many-requests') {
+      if (error.code === 'auth/captcha-check-failed' || error.code === 'auth/invalid-verification-code' || error.code === 'auth/too-many-requests' || error.code === 'auth/network-request-failed') {
         if (recaptchaVerifierRef.current) {
           try { recaptchaVerifierRef.current.clear(); } catch (e) { console.warn(`${pageName}: Error clearing reCAPTCHA after OTP send error:`, e); }
         }
         recaptchaVerifierRef.current = null;
         setIsRecaptchaReady(false); 
-        setRecaptchaError(`reCAPTCHA or OTP error (${error.code}). Please try sending OTP again.`);
+        setRecaptchaError(`reCAPTCHA or OTP error (${error.code}). Please try sending OTP again by switching tabs or refreshing.`);
       }
     } finally {
       setLoading(false);
@@ -320,14 +318,12 @@ export default function SignupPage() {
           } else {
             toast({ title: "Email Link Error", description: `Could not link email: ${linkError.message}`, variant: "destructive" });
           }
-          // Decide if you want to proceed with signup without email link or halt
-          // For now, we proceed but email won't be linked
         }
       }
 
       await setDoc(doc(db, "users", firebaseUser.uid), {
         uid: firebaseUser.uid,
-        email: finalEmail, // Store the linked email, or null if not linked/failed
+        email: finalEmail, 
         phoneNumber: firebaseUser.phoneNumber,
         createdAt: new Date().toISOString(),
         name: "", 
@@ -362,12 +358,8 @@ export default function SignupPage() {
     return <GlobalLoading />;
   }
   
-  if (user && !initialLoading) {
-     return <GlobalLoading />;
-  }
-
   const sendOtpButtonDisabled = loading || !phoneNumber.trim() || isRecaptchaInitializing || !isRecaptchaReady || !!recaptchaError;
-  const verifyOtpButtonDisabled = loading || otp.length !== 6 || (phoneEmail && !phonePassword) || (phonePassword && phonePassword !== phoneConfirmPassword);
+  const verifyOtpButtonDisabled = loading || otp.length !== 6 || (phoneEmail && (!phonePassword || !phoneConfirmPassword)) || (phonePassword && phonePassword !== phoneConfirmPassword);
 
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
@@ -379,25 +371,23 @@ export default function SignupPage() {
         <CardContent>
           <Tabs value={authMethod} onValueChange={(value) => {
               const newAuthMethod = value as "email" | "phone";
-              console.log(`SIGNUP_PAGE: Auth method changed to ${newAuthMethod}`);
+              console.log(`SIGNUP_PAGE_TABS: Auth method changed to ${newAuthMethod}`);
               setAuthMethod(newAuthMethod);
-              // Reset phone auth specific states
               setOtpSent(false);
               setOtp("");
               setConfirmationResult(null);
               setPhoneEmail("");
               setPhonePassword("");
               setPhoneConfirmPassword("");
-              // Critical: Reset reCAPTCHA states to trigger re-initialization if switching to phone
-              setIsRecaptchaInitializing(false); // Allow re-init
-              setIsRecaptchaReady(false);      // Mark as not ready
-              setRecaptchaError(null);         // Clear any old errors
-              if (recaptchaVerifierRef.current) { // Attempt to clear any existing instance
+              setIsRecaptchaInitializing(false); 
+              setIsRecaptchaReady(false);      
+              setRecaptchaError(null);         
+              if (recaptchaVerifierRef.current) { 
                 try { 
-                  console.log("SIGNUP_PAGE: Clearing reCAPTCHA verifier due to auth method switch.");
+                  console.log("SIGNUP_PAGE_TABS: Clearing reCAPTCHA verifier due to auth method switch.");
                   recaptchaVerifierRef.current.clear(); 
                 } catch(e) {
-                  console.warn("SIGNUP_PAGE: Error clearing reCAPTCHA on method switch:", e);
+                  console.warn("SIGNUP_PAGE_TABS: Error clearing reCAPTCHA on method switch:", e);
                 }
                 recaptchaVerifierRef.current = null;
               }
@@ -410,6 +400,8 @@ export default function SignupPage() {
               <AuthForm formSchema={emailSignupSchema} onSubmit={handleEmailSignup} type="signup" loading={loading} />
             </TabsContent>
             <TabsContent value="phone" className="pt-4 space-y-4">
+               {/* This div must be present in the DOM for reCAPTCHA to render, ensure it's always there when authMethod is phone */}
+               {authMethod === "phone" && <div ref={recaptchaContainerRef} id="recaptcha-container-signup"></div>}
               {!otpSent ? (
                 <>
                   <div>
@@ -435,7 +427,6 @@ export default function SignupPage() {
                     {isRecaptchaInitializing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                     {isRecaptchaInitializing ? 'Initializing reCAPTCHA...' : (loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Send OTP')}
                   </Button>
-                  {/* Visual feedback for reCAPTCHA state */}
                   {!isRecaptchaInitializing && !isRecaptchaReady && !recaptchaError && authMethod === 'phone' && (
                       <p className="text-xs text-center text-muted-foreground">Waiting for reCAPTCHA...</p>
                   )}
@@ -494,8 +485,6 @@ export default function SignupPage() {
                   </Button>
                 </>
               )}
-              {/* This div must be present in the DOM for reCAPTCHA to render, ensure it's always there when authMethod is phone */}
-              {authMethod === "phone" && <div ref={recaptchaContainerRef} id="recaptcha-container-signup"></div>}
             </TabsContent>
           </Tabs>
         </CardContent>
@@ -512,3 +501,4 @@ export default function SignupPage() {
   );
 }
 
+    
