@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { BarChart as BarChartIcon, Users, DollarSign, Activity, CreditCard, Loader2, AlertTriangle } from "lucide-react";
+import { BarChart as BarChartIcon, Users, DollarSign, Activity, CreditCard, Loader2, AlertTriangle, TrendingUp, Package, CalendarDays, CalendarRange, Calendar } from "lucide-react";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { db } from "@/lib/firebase";
@@ -15,7 +15,14 @@ import { collection, getDocs } from "firebase/firestore";
 import type { UserProfile } from "@/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
-// Mock data for sales chart (remains mock for this iteration)
+// Plan prices
+const PLAN_PRICES = {
+  monthly: 9.99,
+  quarterly: 27.99,
+  yearly: 99.99,
+};
+
+// Mock data for sales chart (remains mock)
 const mockSalesData = [
   { date: "2024-07-01", sales: 150 }, { date: "2024-07-02", sales: 200 }, { date: "2024-07-03", sales: 120 },
   { date: "2024-07-04", sales: 250 }, { date: "2024-07-05", sales: 180 }, { date: "2024-07-06", sales: 300 },
@@ -24,10 +31,8 @@ const mockSalesData = [
 
 const chartConfig = {
   sales: { label: "Sales ($)", color: "hsl(var(--primary))" },
-  // users: { label: "New Users", color: "hsl(var(--accent))" }, // Not used in this chart
 } satisfies Record<string, any>;
 
-const PLUS_SUBSCRIPTION_PRICE = 9.99;
 
 export default function AdminPage() {
   const { user, isAdmin, initialLoading: authInitialLoading } = useAuth();
@@ -71,7 +76,7 @@ export default function AdminPage() {
     return <div className="flex justify-center items-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   }
   
-  if (!isAdmin) { // Should be caught by useEffect redirect, but as a safeguard
+  if (!isAdmin) { 
      return <div className="flex justify-center items-center h-screen"><p>Access Denied</p></div>;
   }
 
@@ -79,7 +84,27 @@ export default function AdminPage() {
   const totalUsers = allUsersData.length;
   const plusSubscribers = allUsersData.filter(u => u.isPlusSubscriber);
   const totalPlusSubscriptions = plusSubscribers.length;
-  const estimatedMonthlyRevenue = totalPlusSubscriptions * PLUS_SUBSCRIPTION_PRICE;
+
+  const monthlySubscribers = plusSubscribers.filter(u => u.subscriptionPlan === 'monthly').length;
+  const quarterlySubscribers = plusSubscribers.filter(u => u.subscriptionPlan === 'quarterly').length;
+  const yearlySubscribers = plusSubscribers.filter(u => u.subscriptionPlan === 'yearly').length;
+  const unknownPlanSubscribers = plusSubscribers.filter(u => !u.subscriptionPlan).length;
+
+
+  let estimatedMonthlyRevenue = 0;
+  plusSubscribers.forEach(u => {
+    if (u.subscriptionPlan === 'monthly') {
+      estimatedMonthlyRevenue += PLAN_PRICES.monthly;
+    } else if (u.subscriptionPlan === 'quarterly') {
+      estimatedMonthlyRevenue += PLAN_PRICES.quarterly / 3;
+    } else if (u.subscriptionPlan === 'yearly') {
+      estimatedMonthlyRevenue += PLAN_PRICES.yearly / 12;
+    } else {
+      // Fallback for Plus subscribers with no plan specified (e.g., older data)
+      estimatedMonthlyRevenue += PLAN_PRICES.monthly; 
+    }
+  });
+
 
   const today = new Date();
   const twentyFourHoursAgo = new Date(today.getTime() - 24 * 60 * 60 * 1000);
@@ -113,7 +138,7 @@ export default function AdminPage() {
 
       {!isLoadingData && !fetchError && (
         <>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Users</CardTitle>
@@ -121,7 +146,6 @@ export default function AdminPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{totalUsers}</div>
-                {/* <p className="text-xs text-muted-foreground">+5 since last week</p> */}
               </CardContent>
             </Card>
             <Card>
@@ -131,27 +155,26 @@ export default function AdminPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{totalPlusSubscriptions}</div>
-                {/* <p className="text-xs text-muted-foreground">+2 this month</p> */}
+                 {unknownPlanSubscribers > 0 && <p className="text-xs text-muted-foreground">{unknownPlanSubscribers} with unspecified plan</p>}
               </CardContent>
             </Card>
              <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Plus Subscriptions Today</CardTitle>
-                <Activity className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-medium">Plus Signups Today</CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{plusSubscriptionsToday}</div>
-                <p className="text-xs text-muted-foreground">(Estimated)</p>
+                <p className="text-xs text-muted-foreground">(Estimated based on profile update)</p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Estimated Monthly Revenue</CardTitle>
+                <CardTitle className="text-sm font-medium">Est. Monthly Revenue</CardTitle>
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">${estimatedMonthlyRevenue.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">From {totalPlusSubscriptions} Plus users</p>
               </CardContent>
             </Card>
             <Card>
@@ -161,10 +184,49 @@ export default function AdminPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{totalInterviewsTaken}</div>
-                {/* <p className="text-xs text-muted-foreground">+50 this week</p> */}
               </CardContent>
             </Card>
           </div>
+
+          <Card>
+            <CardHeader>
+                <CardTitle>Subscription Plan Breakdown</CardTitle>
+                <CardDescription>Current number of active Plus subscribers by plan type.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-3">
+                <Card className="bg-secondary/30">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Monthly Subscribers</CardTitle>
+                        <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{monthlySubscribers}</div>
+                        <p className="text-xs text-muted-foreground">@ ${PLAN_PRICES.monthly.toFixed(2)}/mo</p>
+                    </CardContent>
+                </Card>
+                <Card className="bg-secondary/30">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Quarterly Subscribers</CardTitle>
+                        <CalendarRange className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{quarterlySubscribers}</div>
+                        <p className="text-xs text-muted-foreground">@ ${PLAN_PRICES.quarterly.toFixed(2)}/qtr</p>
+                    </CardContent>
+                </Card>
+                <Card className="bg-secondary/30">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Yearly Subscribers</CardTitle>
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{yearlySubscribers}</div>
+                        <p className="text-xs text-muted-foreground">@ ${PLAN_PRICES.yearly.toFixed(2)}/yr</p>
+                    </CardContent>
+                </Card>
+            </CardContent>
+          </Card>
+
 
           <Card>
             <CardHeader>
@@ -199,7 +261,7 @@ export default function AdminPage() {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
-                    <TableHead>Plan</TableHead>
+                    <TableHead>Plan Tier</TableHead>
                     <TableHead>Joined</TableHead>
                     <TableHead className="text-right">Interviews</TableHead>
                      <TableHead>Is Admin?</TableHead>
@@ -212,7 +274,9 @@ export default function AdminPage() {
                       <TableCell>{u.email}</TableCell>
                       <TableCell>
                         <Badge variant={u.isPlusSubscriber ? "default" : "secondary"}>
-                          {u.isPlusSubscriber ? "Plus" : "Free"}
+                          {u.isPlusSubscriber 
+                            ? (u.subscriptionPlan ? u.subscriptionPlan.charAt(0).toUpperCase() + u.subscriptionPlan.slice(1) : "Plus") 
+                            : "Free"}
                         </Badge>
                       </TableCell>
                       <TableCell>{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "N/A"}</TableCell>
@@ -236,3 +300,4 @@ export default function AdminPage() {
     </div>
   );
 }
+
