@@ -50,13 +50,11 @@ export default function InterviewPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
 
-  // Speech Recognition State
   const [isListening, setIsListening] = useState(false);
   const [speechRecognitionSupported, setSpeechRecognitionSupported] = useState(false);
   const [speechError, setSpeechError] = useState<string | null>(null);
-  const recognitionRef = useRef<any>(null); // SpeechRecognition instance
+  const recognitionRef = useRef<any>(null); 
 
-  // AI Speech Synthesis State
   const [isAISpeaking, setIsAISpeaking] = useState(false);
   const [hasSpokenCurrentQuestion, setHasSpokenCurrentQuestion] = useState(false);
   const previousQuestionIdRef = useRef<string | null>(null);
@@ -115,7 +113,7 @@ export default function InterviewPage() {
       if (docSnap.exists()) {
         const data = docSnap.data() as InterviewSession;
         setSession(data);
-        setTranscriptLog(data.transcript ? data.transcript.split('\n') : []);
+        setTranscriptLog(data.transcript ? data.transcript.split('\\n') : []);
 
 
         if (data.status === "completed" || data.status === "cancelled") {
@@ -129,11 +127,15 @@ export default function InterviewPage() {
         
         if (data.questions && data.questions.length > 0) {
           const sortedQuestions = data.questions
-            .map(q => ({...q, answer: q.answer || ""}))
-            .sort((a, b) => (parseInt(a.id.substring(1)) || 0) - (parseInt(b.id.substring(1)) || 0));
+            .map(q => ({...q, answer: q.answer || ""})) // Ensure answer property exists
+            .sort((a, b) => { // Sort by oral then technical, then by ID
+                if (a.stage === 'oral' && b.stage === 'technical_written') return -1;
+                if (a.stage === 'technical_written' && b.stage === 'oral') return 1;
+                return (parseInt(a.id.substring(1)) || 0) - (parseInt(b.id.substring(1)) || 0);
+            });
           
           setAllQuestions(sortedQuestions);
-          const firstUnansweredIndex = sortedQuestions.findIndex(q => !q.answer);
+          const firstUnansweredIndex = sortedQuestions.findIndex(q => !q.answer); // Find first question without an answer
           setCurrentQuestionIndex(firstUnansweredIndex > -1 ? firstUnansweredIndex : (data.questions.length > 0 ? data.questions.length -1 : 0));
 
         } else {
@@ -177,13 +179,13 @@ export default function InterviewPage() {
 
   // Effect for AI Speech Synthesis
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
-
     if (currentQuestion?.id !== previousQuestionIdRef.current) {
-      setHasSpokenCurrentQuestion(false); // Reset speaking status for new question
+      setHasSpokenCurrentQuestion(false); 
       previousQuestionIdRef.current = currentQuestion?.id || null;
+      if (typeof window !== 'undefined' && window.speechSynthesis?.speaking) {
+        window.speechSynthesis.cancel(); // Cancel any ongoing speech from previous question
+        setIsAISpeaking(false);
+      }
     }
 
     if (currentQuestion && currentQuestion.stage === 'oral' && !currentQuestion.answer && !isEndingInterview && session?.status !== 'completed' && !isListening && !hasSpokenCurrentQuestion) {
@@ -200,26 +202,22 @@ export default function InterviewPage() {
         utterance.onerror = (event) => {
           console.error('SpeechSynthesis Error:', event);
           setIsAISpeaking(false);
-          setHasSpokenCurrentQuestion(true); // Mark as spoken even on error to prevent loop
+          setHasSpokenCurrentQuestion(true); 
           toast({ title: "AI Voice Error", description: "Could not play AI voice.", variant: "destructive" });
         };
         
         window.speechSynthesis.speak(utterance);
       } else {
-        setIsAISpeaking(false);
+        setIsAISpeaking(false); // Ensure state is correct if API not available
       }
     } else if (currentQuestion?.stage !== 'oral' || currentQuestion?.answer || hasSpokenCurrentQuestion) {
-      // If not an oral question, already answered, or already spoken, ensure AI is not marked as speaking
+      if (window.speechSynthesis?.speaking) { // Still speaking from a previous oral question? Cancel it.
+          window.speechSynthesis.cancel();
+      }
       setIsAISpeaking(false);
     }
 
-    return () => {
-      if (typeof window !== 'undefined' && window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-        setIsAISpeaking(false);
-      }
-    };
-  }, [currentQuestion, isEndingInterview, session?.status, toast, isListening, hasSpokenCurrentQuestion]);
+  }, [currentQuestion, isEndingInterview, session?.status, toast, hasSpokenCurrentQuestion]); // Removed isListening from deps
 
 
   const handleToggleListening = useCallback(() => {
@@ -228,19 +226,20 @@ export default function InterviewPage() {
       return;
     }
 
-    if (isListening) { // User wants to stop listening
+    if (isListening) { 
       if (recognitionRef.current) {
         recognitionRef.current.stop();
       }
       setIsListening(false); 
-    } else { // User wants to start listening
+    } else { 
       if (window.speechSynthesis?.speaking) {
         window.speechSynthesis.cancel(); 
         setIsAISpeaking(false);
+        setHasSpokenCurrentQuestion(true); // Mark as spoken if interrupted
       }
 
-      setUserAnswer(''); // Clear previous answer from Textarea before starting new recognition
-      setSpeechError(null); // Clear previous speech errors
+      setUserAnswer(''); // Clear previous answer
+      setSpeechError(null);
 
       const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!recognitionRef.current) { 
@@ -255,28 +254,16 @@ export default function InterviewPage() {
         };
         
         recognitionRef.current.onresult = (event: any) => {
-          let finalSegments: string[] = [];
-          let latestInterim = '';
-
-          for (let i = 0; i < event.results.length; i++) {
-              const segment = event.results[i];
-              if (segment.isFinal) {
-                  finalSegments.push(segment[0].transcript);
-              } else {
-                  latestInterim = segment[0].transcript; 
-              }
+          let finalTranscript = '';
+          let interimTranscript = '';
+          for (let i = 0; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+              finalTranscript += event.results[i][0].transcript + ' ';
+            } else {
+              interimTranscript += event.results[i][0].transcript;
+            }
           }
-          
-          const finalTranscriptPortion = finalSegments.join(' ').trim();
-          
-          let combinedAnswer = finalTranscriptPortion;
-          if (latestInterim) {
-              if (combinedAnswer.length > 0 && !combinedAnswer.endsWith(' ')) {
-                  combinedAnswer += ' '; 
-              }
-              combinedAnswer += latestInterim;
-          }
-          setUserAnswer(combinedAnswer.trim());
+          setUserAnswer(finalTranscript.trim() + (interimTranscript ? (finalTranscript.trim() ? ' ' : '') + interimTranscript : ''));
         };
 
         recognitionRef.current.onerror = (event: any) => {
@@ -303,7 +290,10 @@ export default function InterviewPage() {
     if (!user || !session || !allQuestions.length || currentQuestionIndex >= allQuestions.length) return;
     
     if (isListening) stopSpeechRecognition();
-    if (isAISpeaking) cancelSpeechSynthesis();
+    if (isAISpeaking) {
+       cancelSpeechSynthesis();
+       setHasSpokenCurrentQuestion(true); // Mark as spoken if interrupted by moving next
+    }
 
     setIsSubmittingAnswer(true);
 
@@ -322,8 +312,8 @@ export default function InterviewPage() {
     try {
         const sessionDocRef = doc(db, "users", user.uid, "interviews", interviewId);
         await updateDoc(sessionDocRef, {
-            questions: updatedQuestions.map(({answer, ...q}) => ({...q, answer})), 
-            transcript: updatedTranscriptLogArray.join('\n'),
+            questions: updatedQuestions.map(({answer, ...q}) => ({...q, answer: answer || ""})), // Save answers
+            transcript: updatedTranscriptLogArray.join('\\n'),
             updatedAt: new Date().toISOString(),
         });
     } catch (error) {
@@ -339,7 +329,8 @@ export default function InterviewPage() {
     if (nextQuestionIndex < allQuestions.length) {
       setCurrentQuestionIndex(nextQuestionIndex);
     } else {
-      await handleEndInterview(updatedQuestions, updatedTranscriptLogArray.join('\n'));
+      // All questions answered, automatically end interview
+      await handleEndInterview(updatedQuestions, updatedTranscriptLogArray.join('\\n'));
     }
     setIsSubmittingAnswer(false);
   };
@@ -360,7 +351,14 @@ export default function InterviewPage() {
     try {
       const sessionDocRef = doc(db, "users", user.uid, "interviews", interviewId);
       
-      const questionsToStore = finalQuestionsData.map(({ answer, ...q }) => ({ ...q, answer: answer || "" }) as GeneratedQuestion);
+      // Ensure all question objects sent to Firestore have the 'answer' field, even if empty
+      const questionsToStore = finalQuestionsData.map(q => ({
+        id: q.id,
+        text: q.text,
+        stage: q.stage,
+        type: q.type,
+        answer: q.answer || "", // Ensure answer is at least an empty string
+      }));
 
       await updateDoc(sessionDocRef, {
         status: "completed",
@@ -372,13 +370,15 @@ export default function InterviewPage() {
       const userDocRef = doc(db, "users", user.uid);
       await updateDoc(userDocRef, {
         interviewsTaken: (userProfile.interviewsTaken || 0) + 1,
+        updatedAt: new Date().toISOString(), // Also update user profile's updatedAt
       });
       await refreshUserProfile(); 
       
       const feedbackInput: AnalyzeInterviewFeedbackInput = {
-        interviewTranscript: finalTranscriptString,
+        questions: questionsToStore, // Pass the structured questions with answers
         jobDescription: userProfile.role || "General Role", 
         candidateProfile: `Field: ${userProfile.profileField}, Role: ${userProfile.role}, Education: ${userProfile.education}`,
+        interviewTranscript: finalTranscriptString, // Keep for overall context
       };
       const feedbackResult = await analyzeInterviewFeedback(feedbackInput);
       
@@ -482,14 +482,14 @@ export default function InterviewPage() {
             </div>
             <Progress value={progress} className="w-full h-2" />
             
-            {isAISpeaking && currentStage === 'oral' && (
+             {isAISpeaking && currentStage === 'oral' && (
                 <div className="flex items-center text-primary pt-2">
                     <Volume2 className="h-5 w-5 mr-2 animate-pulse" />
                     <p className="text-md font-medium">AI is asking the question...</p>
                 </div>
             )}
             {currentQuestion && (
-                <CardDescription className={`text-lg pt-2 whitespace-pre-wrap ${isAISpeaking && currentStage === 'oral' ? 'pb-1' : 'pb-0'}`}>{currentQuestion.text}</CardDescription>
+                 <CardDescription className={`text-lg pt-2 whitespace-pre-wrap ${isAISpeaking && currentStage === 'oral' ? 'pb-1' : 'pb-0'}`}>{currentQuestion.text}</CardDescription>
             )}
           </CardHeader>
           <CardContent className="flex-grow flex flex-col">
@@ -497,7 +497,7 @@ export default function InterviewPage() {
               <div className="flex-grow flex flex-col justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground mb-2">
-                    Your transcribed answer will appear below. Click the mic to speak.
+                    {isListening ? "Speak now. Your transcribed answer will appear below." : (userAnswer ? "Review your transcribed answer or listen again." : "Click the mic to speak your answer.")}
                   </p>
                   <Textarea
                     placeholder={isListening ? "Listening... Speak now." : (userAnswer ? userAnswer : "Your transcribed answer will appear here...")}
@@ -571,10 +571,3 @@ export default function InterviewPage() {
     </div>
   );
 }
-    
-
-    
-
-    
-
-    

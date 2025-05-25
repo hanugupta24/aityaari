@@ -7,6 +7,7 @@
  * - generateInterviewQuestions - A function that generates interview questions.
  * - GenerateInterviewQuestionsInput - The input type for the generateInterviewQuestions function.
  * - GenerateInterviewQuestionsOutput - The output type for the generateInterviewQuestions function.
+ * - GeneratedQuestionSchema - Zod schema for a single generated question.
  */
 
 import {ai} from '@/ai/genkit';
@@ -17,17 +18,19 @@ const GenerateInterviewQuestionsInputSchema = z.object({
   profileField: z.string().describe('The user profile field, e.g., Software Engineering, Data Science.'),
   role: z.string().describe('The user role, e.g., Frontend Developer, Product Manager.'),
   interviewDuration: z.enum(['15', '30', '45']).describe('The selected interview duration in minutes.'),
-  resumeProcessedText: z.string().optional().describe('Optional: The client-side processed text content of the candidate\'s resume.'), // Name updated for clarity
+  resumeProcessedText: z.string().optional().describe('Optional: The client-side processed text content of the candidate\'s resume.'),
 });
 export type GenerateInterviewQuestionsInput = z.infer<
   typeof GenerateInterviewQuestionsInputSchema
 >;
 
-const GeneratedQuestionSchema = z.object({
+// This schema is used both for output of this flow AND as part of input to the feedback flow
+export const GeneratedQuestionSchema = z.object({
   id: z.string().describe('A unique ID for the question (e.g., q1, q2).'),
   text: z.string().describe('The question text.'),
   stage: z.enum(['oral', 'technical_written']).describe('The stage of the interview this question belongs to: "oral" for spoken answers, "technical_written" for typed/coding answers.'),
   type: z.enum(['behavioral', 'technical', 'coding', 'conversational', 'resume_based']).describe('The type of question. "conversational", "behavioral", and "resume_based" are for oral stage. "technical" and "coding" are for technical_written stage. "resume_based" can also be used if the question is directly derived from the resume content for any stage.'),
+  answer: z.string().optional().describe("The user's answer to this question, if provided/applicable at the time of feedback generation."),
 });
 
 const GenerateInterviewQuestionsOutputSchema = z.object({
@@ -82,7 +85,7 @@ Question Stages & Types:
         *   'resume_based': If a technical question can be directly derived from a technical skill or project in the resume (e.g., "Your resume mentions using microservices; explain the challenges you faced with service discovery.").
 
 Question Distribution and Types based on Duration:
-Ensure a good mix of question types within each stage. Prioritize 'resume_based' questions if a resume is provided, integrating them naturally into both oral and technical stages where appropriate.
+Ensure a good mix of question types within each stage. Prioritize 'resume_based' questions if a resume is provided, integrating them naturally into both oral and technical stages where appropriate. The 'id' for each question MUST be unique (q1, q2, q3, etc.).
 
 *   **15 minutes:**
     *   Non-technical roles: 3-4 'oral' questions (mix of 'conversational', 'behavioral', and 'resume_based' if resumeProcessedText exists).
@@ -108,7 +111,7 @@ General Guidelines:
 - For 'technical_written' questions of type 'coding', provide a clear, concise problem statement.
 - 'Oral' questions should be open-ended and designed to encourage spoken, detailed responses.
 - Provide questions in a logical sequence: all 'oral' stage questions first, then all 'technical_written' stage questions if the role is technical.
-- Each question MUST have a unique 'id' (e.g., "q1", "q2", "q3"...), its 'text', its designated 'stage', and its 'type'.
+- Each question MUST have a unique 'id' (e.g., "q1", "q2", "q3"...), its 'text', its designated 'stage', and its 'type'. The 'answer' field should NOT be part of this generation output.
 
 Generate the questions array according to these guidelines. Ensure questions are challenging yet appropriate for the experience level implied by the role, field, and resume.
 If no resumeProcessedText is provided, generate questions based on role and field only.
@@ -132,29 +135,36 @@ const generateInterviewQuestionsFlow = ai.defineFlow(
     const {output} = await prompt(input);
 
     if (!output || !output.questions || output.questions.length === 0) {
-        console.error("AI did not return any questions. Input was:", input);
-        return { questions: [] }; 
+        console.error("AI did not return any questions for generation. Input was:", input);
+        // Return a default conversational question if generation fails
+        return { questions: [{
+            id: 'q1',
+            text: 'Tell me about yourself and your experience relevant to this field.',
+            stage: 'oral',
+            type: 'conversational',
+        }] }; 
     }
     
+    // Ensure IDs are unique and sort questions: oral first, then technical/written.
     const sortedQuestions = output.questions
       .map((q, index) => ({
         ...q,
-        id: q.id || `gen_q${index + 1}`, 
+        id: q.id || `gen_q${index + 1}`, // Ensure ID exists
       }))
       .sort((a, b) => {
         if (a.stage === 'oral' && b.stage === 'technical_written') return -1;
         if (a.stage === 'technical_written' && b.stage === 'oral') return 1;
-        // Fallback to original ID sorting if stages are the same or IDs are not standard
-        const idA = parseInt(a.id.replace ( /^\D+/g, ''));
-        const idB = parseInt(b.id.replace ( /^\D+/g, ''));
+        // Fallback to original ID sorting if stages are the same
+        const idA = parseInt(a.id.replace ( /^\D+/g, ''), 10);
+        const idB = parseInt(b.id.replace ( /^\D+/g, ''), 10);
         if (!isNaN(idA) && !isNaN(idB)) {
             return idA - idB;
         }
-        return 0; // Keep original order if IDs are not parseable as q1, q2 etc.
+        return 0; 
     });
     
     return {
-      questions: sortedQuestions as GeneratedQuestion[],
+      questions: sortedQuestions as GeneratedQuestion[], // Cast as our type
     };
   }
 );
