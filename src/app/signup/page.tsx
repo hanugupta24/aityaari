@@ -15,11 +15,15 @@ import {
 } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { z } from "zod";
-import { AuthForm } from "@/components/auth/AuthForm";
+// AuthForm is not used for the phone part here, directly implementing form
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Label } from "@/components/ui/label"; // Ensure Label is imported
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, AlertTriangle } from "lucide-react";
@@ -46,6 +50,7 @@ const phoneSchema = z.string().min(10, "Phone number must be at least 10 digits 
 const otpSchema = z.string().length(6, "OTP must be 6 digits.");
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters.");
 
+const RECAPTCHA_CONTAINER_ID_SIGNUP = "recaptcha-container-signup";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -63,12 +68,17 @@ export default function SignupPage() {
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
   const [otpSent, setOtpSent] = useState(false);
   const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
+  // recaptchaContainerRef can still be used if needed for direct DOM manipulation, but init relies on ID.
   const recaptchaContainerRef = useRef<HTMLDivElement | null>(null);
 
   const [isRecaptchaInitializing, setIsRecaptchaInitializing] = useState(false);
   const [isRecaptchaReady, setIsRecaptchaReady] = useState(false);
   const [recaptchaError, setRecaptchaError] = useState<string | null>(null);
 
+  const emailSignupForm = useForm<EmailSignupFormValues>({
+    resolver: zodResolver(emailSignupSchema),
+    defaultValues: { email: "", password: "", confirmPassword: "", phoneNumber: "" },
+  });
 
   useEffect(() => {
     if (!initialLoading && user) {
@@ -77,132 +87,117 @@ export default function SignupPage() {
     }
   }, [user, initialLoading, router]);
 
+  const initRecaptcha = async (containerId: string) => {
+    const pageName = "SIGNUP_PAGE_INIT_RECAPTCHA";
+    console.log(`${pageName}: Attempting to initialize reCAPTCHA on container ID: ${containerId}. Current verifier: ${!!recaptchaVerifierRef.current}`);
+    
+    if (recaptchaVerifierRef.current) {
+        console.warn(`${pageName}: Existing verifier instance found. Clearing before re-init.`);
+        try { recaptchaVerifierRef.current.clear(); } catch(e) { console.warn(`${pageName}: Error clearing old verifier:`, e); }
+        recaptchaVerifierRef.current = null;
+    }
+    
+    setIsRecaptchaInitializing(true);
+    setIsRecaptchaReady(false);
+    setRecaptchaError(null);
+
+    try {
+      if (!auth) {
+        console.error(`${pageName}: Firebase auth object is NOT available.`);
+        throw new Error("Firebase auth service not ready.");
+      }
+      const domContainer = document.getElementById(containerId);
+      if (!domContainer) {
+        console.error(`${pageName}: DOM element with ID '${containerId}' NOT FOUND for reCAPTCHA.`);
+        throw new Error(`reCAPTCHA container element (ID: ${containerId}) missing from DOM.`);
+      }
+      console.log(`${pageName}: DOM element with ID '${containerId}' FOUND.`);
+
+      console.log(`${pageName}: Creating new RecaptchaVerifier instance for element ID: ${containerId}`);
+      const verifier = new RecaptchaVerifier(auth, containerId, {
+        size: "invisible",
+        callback: (response: any) => {
+          console.log(`${pageName}: reCAPTCHA challenge PASSED (invisible flow). Response:`, response);
+          setIsRecaptchaReady(true);
+          setRecaptchaError(null);
+        },
+        "expired-callback": () => {
+          console.warn(`${pageName}: reCAPTCHA challenge EXPIRED.`);
+          setRecaptchaError("reCAPTCHA challenge expired. Please try sending OTP again.");
+          if (recaptchaVerifierRef.current) {
+            try { recaptchaVerifierRef.current.clear(); } catch (e) { console.warn(`${pageName}: Error clearing expired reCAPTCHA:`, e); }
+          }
+          recaptchaVerifierRef.current = null;
+          setIsRecaptchaReady(false);
+        },
+      });
+      console.log(`${pageName}: New RecaptchaVerifier instance CREATED.`);
+      
+      console.log(`${pageName}: Attempting verifier.render()...`);
+      const renderTimeout = 15000; // 15 seconds
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error(`reCAPTCHA render timed out after ${renderTimeout / 1000} seconds. Check network and domain authorization.`)), renderTimeout)
+      );
+      
+      await Promise.race([verifier.render(), timeoutPromise]);
+      
+      console.log(`${pageName}: verifier.render() promise RESOLVED or didn't time out. Setting verifier ref and ready state.`);
+      recaptchaVerifierRef.current = verifier;
+      setIsRecaptchaReady(true); // Crucial: set ready state here
+      setRecaptchaError(null);
+      console.log(`${pageName}: reCAPTCHA setup successful. isRecaptchaReady: true`);
+
+    } catch (error: any) {
+      console.error(`${pageName}: CRITICAL ERROR during reCAPTCHA setup:`, error);
+      setRecaptchaError(`reCAPTCHA Setup Error: ${error.message}. This often indicates issues with API key domain restrictions or network access to Google's reCAPTCHA services. Check console & network tab.`);
+      recaptchaVerifierRef.current = null;
+      setIsRecaptchaReady(false);
+    } finally {
+      console.log(`${pageName}: initRecaptcha finally block. isRecaptchaInitializing -> false`);
+      setIsRecaptchaInitializing(false);
+    }
+  };
+
   useEffect(() => {
     const pageName = "SIGNUP_PAGE_RECAPTCHA_EFFECT";
-    console.log(`${pageName}: useEffect triggered. AuthMethod: ${authMethod}, Auth object available: ${!!auth}`);
-    
-    const initRecaptcha = async () => {
-      console.log(`${pageName}: initRecaptcha called. Container ref current:`, recaptchaContainerRef.current);
-      setIsRecaptchaInitializing(true);
-      setIsRecaptchaReady(false);
-      setRecaptchaError(null);
+    console.log(`${pageName}: Main reCAPTCHA useEffect. AuthMethod: ${authMethod}, Auth: ${!!auth}`);
 
-      if (recaptchaVerifierRef.current) {
-        try {
-          console.log(`${pageName}: Clearing existing reCAPTCHA verifier.`);
-          recaptchaVerifierRef.current.clear();
-        } catch (e) {
-          console.warn(`${pageName}: Error clearing previous reCAPTCHA:`, e);
-        }
-        recaptchaVerifierRef.current = null;
-      }
+    if (authMethod === "phone" && auth) {
+        const containerElementDOM = document.getElementById(RECAPTCHA_CONTAINER_ID_SIGNUP);
+        console.log(`${pageName}: Checking for container. DOM element by ID '${RECAPTCHA_CONTAINER_ID_SIGNUP}':`, containerElementDOM);
 
-      if (!auth) {
-        console.error(`${pageName}: Firebase auth object is not available. Cannot initialize reCAPTCHA.`);
-        setRecaptchaError("Firebase auth service is not ready. Please try again later.");
-        setIsRecaptchaInitializing(false);
-        return;
-      }
-      
-      if (!recaptchaContainerRef.current) {
-        console.error(`${pageName}: reCAPTCHA container element not found in DOM.`);
-        setRecaptchaError("reCAPTCHA container element missing. Cannot initialize.");
-        setIsRecaptchaInitializing(false);
-        return;
-      }
-      
-      const containerId = recaptchaContainerRef.current.id;
-       if (!containerId) {
-        console.error(`${pageName}: reCAPTCHA container element does not have an ID.`);
-        setRecaptchaError("reCAPTCHA container ID missing. Cannot initialize.");
-        setIsRecaptchaInitializing(false);
-        return;
-      }
-      console.log(`${pageName}: reCAPTCHA container ID: ${containerId}`);
-
-      let verifier: RecaptchaVerifier | null = null;
-      try {
-        console.log(`${pageName}: Attempting to create new RecaptchaVerifier instance for element ID: ${containerId}`);
-        verifier = new RecaptchaVerifier(auth, containerId, {
-          size: "invisible",
-          callback: (response: any) => {
-            console.log(`${pageName}: reCAPTCHA challenge PASSED (invisible flow). Response:`, response);
-            setIsRecaptchaReady(true);
-            // setIsRecaptchaInitializing(false); // Handled in finally
-            setRecaptchaError(null);
-          },
-          "expired-callback": () => {
-            console.warn(`${pageName}: reCAPTCHA challenge expired.`);
-            setRecaptchaError("reCAPTCHA challenge expired. Please try sending OTP again.");
-            if (recaptchaVerifierRef.current) {
-              try { recaptchaVerifierRef.current.clear(); } catch (e) { console.warn(`${pageName}: Error clearing expired reCAPTCHA:`, e); }
+        if (containerElementDOM) {
+            if (!recaptchaVerifierRef.current && !isRecaptchaInitializing && !isRecaptchaReady) {
+                console.log(`${pageName}: Conditions met (container in DOM, no verifier ref, not initializing, not ready). Triggering initRecaptcha.`);
+                initRecaptcha(RECAPTCHA_CONTAINER_ID_SIGNUP);
+            } else {
+                console.log(`${pageName}: Not calling initRecaptcha. VerifierRef: ${!!recaptchaVerifierRef.current}, Initializing: ${isRecaptchaInitializing}, Ready: ${isRecaptchaReady}`);
             }
+        } else {
+            console.warn(`${pageName}: reCAPTCHA container (ID: ${RECAPTCHA_CONTAINER_ID_SIGNUP}) NOT found in DOM yet. useEffect will run again if DOM changes.`);
+        }
+    } else { 
+        if (recaptchaVerifierRef.current) {
+            console.log(`${pageName}: Auth method is not 'phone' or auth not ready. Clearing existing reCAPTCHA verifier.`);
+            try { recaptchaVerifierRef.current.clear(); } catch (e) { console.warn(`${pageName}: Error clearing reCAPTCHA:`, e); }
             recaptchaVerifierRef.current = null;
-            setIsRecaptchaReady(false);
-            // setIsRecaptchaInitializing(false);
-          },
-        });
-        console.log(`${pageName}: New RecaptchaVerifier instance CREATED.`);
-      } catch (error: any) {
-        console.error(`${pageName}: CRITICAL ERROR instantiating RecaptchaVerifier:`, error);
-        setRecaptchaError(`reCAPTCHA Instantiation Error: ${error.message}. Check console for details.`);
-        setIsRecaptchaInitializing(false);
-        return; 
-      }
-
-      try {
-        console.log(`${pageName}: Attempting verifier.render()...`);
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error("reCAPTCHA render timed out after 15 seconds.")), 15000)
-        );
-
-        await Promise.race([verifier.render(), timeoutPromise]);
-        
-        console.log(`${pageName}: verifier.render() promise RESOLVED or didn't time out.`);
-        recaptchaVerifierRef.current = verifier; // Assign only after successful render
-        setIsRecaptchaReady(true);
-        setRecaptchaError(null);
-        console.log(`${pageName}: reCAPTCHA setup successful. isRecaptchaReady: true`);
-      } catch (error: any) {
-        console.error(`${pageName}: CRITICAL ERROR during verifier.render():`, error);
-        setRecaptchaError(`reCAPTCHA Render Error: ${error.message}. This often indicates issues with API key domain restrictions or network access to Google's reCAPTCHA services. Check console & network tab.`);
-        recaptchaVerifierRef.current = null; // Clear ref on render error
+        }
         setIsRecaptchaReady(false);
-      } finally {
-        console.log(`${pageName}: initRecaptcha finally block. isRecaptchaInitializing -> false`);
+        setRecaptchaError(null);
         setIsRecaptchaInitializing(false);
-      }
-    };
-
-    if (authMethod === "phone") {
-      if (!isRecaptchaReady && !isRecaptchaInitializing && recaptchaContainerRef.current && auth) {
-         console.log(`${pageName}: Phone auth method selected, reCAPTCHA not ready and not initializing. Triggering initRecaptcha.`);
-         initRecaptcha();
-      } else {
-        console.log(`${pageName}: Phone auth method selected. Conditions for initRecaptcha: isReady: ${isRecaptchaReady}, isInitializing: ${isRecaptchaInitializing}, container: ${!!recaptchaContainerRef.current}, auth: ${!!auth}`);
-      }
-    } else { // email method
-      if (recaptchaVerifierRef.current) {
-        console.log(`${pageName}: Clearing reCAPTCHA verifier due to auth method change from phone.`);
-        try { recaptchaVerifierRef.current.clear(); } catch (e) { console.warn(`${pageName}: Error clearing reCAPTCHA:`, e); }
-        recaptchaVerifierRef.current = null;
-      }
-      setIsRecaptchaReady(false);
-      setRecaptchaError(null);
-      setIsRecaptchaInitializing(false);
     }
     
     return () => {
-      const cleanupPageName = "SIGNUP_PAGE_RECAPTCHA_CLEANUP";
-      console.log(`${cleanupPageName}: Running cleanup for authMethod: ${authMethod}`);
-      if (recaptchaVerifierRef.current) { 
-        console.log(`${cleanupPageName}: Cleaning up reCAPTCHA verifier on component unmount or authMethod change.`);
-        try { recaptchaVerifierRef.current.clear(); } catch (e) { console.warn(`${cleanupPageName}: Error clearing reCAPTCHA during cleanup:`, e); }
-        recaptchaVerifierRef.current = null;
-      }
+        if (recaptchaVerifierRef.current) {
+            console.log(`${pageName}: useEffect cleanup - Clearing verifier instance.`);
+            try { recaptchaVerifierRef.current.clear(); } catch (e) { /* ignore */ }
+            recaptchaVerifierRef.current = null;
+            setIsRecaptchaReady(false);
+            setRecaptchaError(null);
+            setIsRecaptchaInitializing(false);
+        }
     };
-  // Ensure auth is a dependency if its availability triggers re-init
-  }, [authMethod, auth]); 
+  }, [authMethod, auth]);
 
 
   const handleEmailSignup = async (values: EmailSignupFormValues) => {
@@ -252,7 +247,7 @@ export default function SignupPage() {
   const handleSendOtp = async () => {
     const pageName = "SIGNUP_PAGE_SEND_OTP";
     setLoading(true);
-    setRecaptchaError(null); // Clear previous errors
+    setRecaptchaError(null); 
 
     const validation = phoneSchema.safeParse(phoneNumber);
     if (!validation.success) {
@@ -302,7 +297,7 @@ export default function SignupPage() {
       return;
     }
 
-    if (phoneEmail && phonePassword) {
+    if (phoneEmail && phonePassword) { // Only validate password if email is also provided
       if (phonePassword !== phoneConfirmPassword) {
         toast({ title: "Password Mismatch", description: "Passwords do not match.", variant: "destructive" });
         setLoading(false);
@@ -329,30 +324,30 @@ export default function SignupPage() {
       const firebaseUser = userCredential.user;
       console.log(`${pageName}: Phone number verified, user signed up/in:`, firebaseUser.uid);
 
-      let finalEmail = null;
+      let finalEmailToStore = null;
       if (phoneEmail && phonePassword && firebaseUser) {
         try {
           console.log(`${pageName}: Attempting to link email ${phoneEmail} to user ${firebaseUser.uid}`);
           const credential = EmailAuthProvider.credential(phoneEmail, phonePassword);
           await linkWithCredential(firebaseUser, credential);
-          finalEmail = phoneEmail;
+          finalEmailToStore = phoneEmail; // Store the email if linking was successful
           console.log(`${pageName}: Email ${phoneEmail} successfully linked to user ${firebaseUser.uid}`);
         } catch (linkError: any) {
           console.error(`${pageName}: Error linking email credential:`, linkError);
+          let linkErrorMessage = `Could not link email: ${linkError.message}`;
           if (linkError.code === 'auth/email-already-in-use') {
-            toast({ title: "Email Link Error", description: "This email is already associated with another account.", variant: "destructive" });
+            linkErrorMessage = "This email is already associated with another account.";
           } else if (linkError.code === 'auth/credential-already-in-use') {
-             toast({ title: "Account Link Error", description: "This email/password is already linked to another account or this phone.", variant: "destructive" });
-          } else {
-            toast({ title: "Email Link Error", description: `Could not link email: ${linkError.message}`, variant: "destructive" });
+             linkErrorMessage = "This email/password is already linked to another account or this phone.";
           }
-           // Even if linking fails, proceed to create Firestore profile with phone data
+          toast({ title: "Email Link Error", description: linkErrorMessage, variant: "destructive" });
+           // Even if linking fails, proceed to create Firestore profile with phone data, email will be null
         }
       }
 
       await setDoc(doc(db, "users", firebaseUser.uid), {
         uid: firebaseUser.uid,
-        email: finalEmail, 
+        email: finalEmailToStore, // Store linked email or null
         phoneNumber: firebaseUser.phoneNumber,
         createdAt: new Date().toISOString(),
         name: "", 
@@ -388,7 +383,8 @@ export default function SignupPage() {
   }
   
   const sendOtpButtonDisabled = loading || !phoneNumber.trim() || isRecaptchaInitializing || !isRecaptchaReady || !!recaptchaError;
-  const verifyOtpButtonDisabled = loading || otp.length !== 6 || (phoneEmail && (!phonePassword || !phoneConfirmPassword)) || (phonePassword && phonePassword !== phoneConfirmPassword);
+  const verifyOtpButtonDisabled = loading || otp.length !== 6 || (phoneEmail && (!phonePassword || !phoneConfirmPassword)) || (phonePassword && phonePassword !== phoneConfirmPassword && phoneEmail.length > 0) ;
+
 
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
@@ -408,36 +404,83 @@ export default function SignupPage() {
               setPhoneEmail("");
               setPhonePassword("");
               setPhoneConfirmPassword("");
-              // Reset reCAPTCHA states, useEffect will handle re-init if needed
-              // setIsRecaptchaInitializing(false); 
-              // setIsRecaptchaReady(false);      
-              // setRecaptchaError(null);         
-              // if (recaptchaVerifierRef.current) { 
-              //   try { 
-              //     console.log("SIGNUP_PAGE_TABS: Clearing reCAPTCHA verifier due to auth method switch.");
-              //     recaptchaVerifierRef.current.clear(); 
-              //   } catch(e) {
-              //     console.warn("SIGNUP_PAGE_TABS: Error clearing reCAPTCHA on method switch:", e);
-              //   }
-              //   recaptchaVerifierRef.current = null;
-              // }
+              // The useEffect will handle reCAPTCHA state reset based on authMethod
           }} className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="email">Email & Password</TabsTrigger>
               <TabsTrigger value="phone">Phone Number</TabsTrigger>
             </TabsList>
             <TabsContent value="email" className="pt-4">
-              <AuthForm formSchema={emailSignupSchema} onSubmit={handleEmailSignup} type="signup" loading={loading} />
+              <Form {...emailSignupForm}>
+                <form onSubmit={emailSignupForm.handleSubmit(handleEmailSignup)} className="space-y-4">
+                  <FormField
+                    control={emailSignupForm.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Label htmlFor="emailSignup">Email</Label>
+                        <FormControl>
+                          <Input id="emailSignup" placeholder="you@example.com" {...field} type="email" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={emailSignupForm.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Label htmlFor="passwordSignup">Password</Label>
+                        <FormControl>
+                          <Input id="passwordSignup" placeholder="••••••••" {...field} type="password" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={emailSignupForm.control}
+                    name="confirmPassword"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Label htmlFor="confirmPasswordSignup">Confirm Password</Label>
+                        <FormControl>
+                          <Input id="confirmPasswordSignup" placeholder="••••••••" {...field} type="password" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={emailSignupForm.control}
+                    name="phoneNumber"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Label htmlFor="emailBasedPhoneNumberSignup">Phone Number (Optional)</Label>
+                        <FormControl>
+                          <Input id="emailBasedPhoneNumberSignup" placeholder="e.g., +15551234567" {...field} type="tel" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <Button type="submit" className="w-full" disabled={loading}>
+                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Sign Up with Email
+                  </Button>
+                </form>
+              </Form>
             </TabsContent>
             <TabsContent value="phone" className="pt-4 space-y-4">
-               {/* This div must be present in the DOM for reCAPTCHA to render, ensure it has an ID */}
-               {authMethod === "phone" && <div ref={recaptchaContainerRef} id="recaptcha-container-signup"></div>}
+               {/* This div must be present in the DOM for reCAPTCHA to render */}
+               {authMethod === "phone" && <div ref={recaptchaContainerRef} id={RECAPTCHA_CONTAINER_ID_SIGNUP}></div>}
               {!otpSent ? (
                 <>
                   <div>
-                    <Label htmlFor="phoneNumber">Phone Number (with country code)</Label>
+                    <Label htmlFor="phoneNumberSignup">Phone Number (with country code)</Label>
                     <Input
-                      id="phoneNumber"
+                      id="phoneNumberSignup"
                       type="tel"
                       placeholder="+15551234567"
                       value={phoneNumber}
@@ -454,8 +497,8 @@ export default function SignupPage() {
                       disabled={sendOtpButtonDisabled}
                       aria-live="polite"
                   >
-                    {isRecaptchaInitializing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                    {isRecaptchaInitializing ? 'Initializing reCAPTCHA...' : (loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Send OTP')}
+                    {(loading || isRecaptchaInitializing) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {isRecaptchaInitializing ? 'Initializing reCAPTCHA...' : (loading ? 'Sending OTP...' : 'Send OTP')}
                   </Button>
                   {!isRecaptchaInitializing && !isRecaptchaReady && !recaptchaError && authMethod === 'phone' && (
                       <p className="text-xs text-center text-muted-foreground">Waiting for reCAPTCHA...</p>
@@ -471,9 +514,9 @@ export default function SignupPage() {
               ) : (
                 <>
                   <div>
-                    <Label htmlFor="otp">Enter OTP</Label>
+                    <Label htmlFor="otpSignup">Enter OTP</Label>
                     <Input
-                      id="otp"
+                      id="otpSignup"
                       type="text"
                       maxLength={6}
                       placeholder="Enter 6-digit OTP"
@@ -488,30 +531,30 @@ export default function SignupPage() {
                             setOtpSent(false); 
                             setConfirmationResult(null); 
                             setOtp('');
-                            // Trigger re-initialization of reCAPTCHA by resetting its ready state
+                            if (recaptchaVerifierRef.current) {
+                                try { recaptchaVerifierRef.current.clear(); } catch(e) { console.warn("Error clearing verifier on resend:", e); }
+                                recaptchaVerifierRef.current = null;
+                            }
                             setIsRecaptchaReady(false); 
-                            setRecaptchaError(null); // Clear any previous error
-                            // if(recaptchaVerifierRef.current) {
-                            //   try { recaptchaVerifierRef.current.clear(); } catch(e) { console.warn("Error clearing verifier on resend:", e); }
-                            //   recaptchaVerifierRef.current = null;
-                            // }
+                            setRecaptchaError(null);
+                            setIsRecaptchaInitializing(false); // Allow re-init
                         }}>Change Number or Resend?</Button>
                     </p>
                   </div>
                   <div className="space-y-2">
-                     <Label htmlFor="phoneEmail">Email (Optional, to link with your phone account)</Label>
-                     <Input id="phoneEmail" type="email" placeholder="you@example.com" value={phoneEmail} onChange={(e) => setPhoneEmail(e.target.value)} disabled={loading} />
+                     <Label htmlFor="phoneBasedEmailSignup">Email (Optional, to link with your phone account)</Label>
+                     <Input id="phoneBasedEmailSignup" type="email" placeholder="you@example.com" value={phoneEmail} onChange={(e) => setPhoneEmail(e.target.value)} disabled={loading} />
                   </div>
                   <div className="space-y-2">
-                     <Label htmlFor="phonePassword">Password (Optional, if email provided)</Label>
-                     <Input id="phonePassword" type="password" placeholder="••••••••" value={phonePassword} onChange={(e) => setPhonePassword(e.target.value)} disabled={loading || !phoneEmail} />
+                     <Label htmlFor="phoneBasedPasswordSignup">Password (Optional, if email provided)</Label>
+                     <Input id="phoneBasedPasswordSignup" type="password" placeholder="••••••••" value={phonePassword} onChange={(e) => setPhonePassword(e.target.value)} disabled={loading || !phoneEmail} />
                   </div>
                   <div className="space-y-2">
-                     <Label htmlFor="phoneConfirmPassword">Confirm Password (if password provided)</Label>
-                     <Input id="phoneConfirmPassword" type="password" placeholder="••••••••" value={phoneConfirmPassword} onChange={(e) => setPhoneConfirmPassword(e.target.value)} disabled={loading || !phonePassword} />
+                     <Label htmlFor="phoneBasedConfirmPasswordSignup">Confirm Password (if password provided)</Label>
+                     <Input id="phoneBasedConfirmPasswordSignup" type="password" placeholder="••••••••" value={phoneConfirmPassword} onChange={(e) => setPhoneConfirmPassword(e.target.value)} disabled={loading || !phonePassword} />
                   </div>
                   <Button onClick={handleVerifyOtpAndSignup} className="w-full" disabled={verifyOtpButtonDisabled}>
-                    {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Verify OTP & Sign Up
                   </Button>
                 </>
@@ -531,3 +574,5 @@ export default function SignupPage() {
     </div>
   );
 }
+
+    

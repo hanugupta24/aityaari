@@ -12,12 +12,16 @@ import {
   type ConfirmationResult,
 } from "firebase/auth";
 import { z } from "zod";
-import { AuthForm } from "@/components/auth/AuthForm";
+// AuthForm is not used for the phone part here, directly implementing form
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+
 import { useToast } from "@/hooks/use-toast";
 import { GlobalLoading } from "@/components/common/GlobalLoading";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Label } from "@/components/ui/label"; // Ensure Label is imported
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, AlertTriangle } from "lucide-react";
@@ -36,6 +40,7 @@ type EmailLoginFormValues = z.infer<typeof emailLoginSchema>;
 const phoneSchema = z.string().min(10, "Phone number must be at least 10 digits (including country code, e.g., +1XXXXXXXXXX).").max(15);
 const otpSchema = z.string().length(6, "OTP must be 6 digits.");
 
+const RECAPTCHA_CONTAINER_ID_LOGIN = "recaptcha-container-login";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -50,11 +55,17 @@ export default function LoginPage() {
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
   const [otpSent, setOtpSent] = useState(false);
   const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
-  const recaptchaContainerRef = useRef<HTMLDivElement | null>(null);
+  // recaptchaContainerRef can still be used if needed for direct DOM manipulation, but init relies on ID.
+  const recaptchaContainerRef = useRef<HTMLDivElement | null>(null); 
   
   const [isRecaptchaInitializing, setIsRecaptchaInitializing] = useState(false);
   const [isRecaptchaReady, setIsRecaptchaReady] = useState(false);
   const [recaptchaError, setRecaptchaError] = useState<string | null>(null);
+
+  const emailLoginForm = useForm<EmailLoginFormValues>({
+    resolver: zodResolver(emailLoginSchema),
+    defaultValues: { email: "", password: "" },
+  });
 
   useEffect(() => {
     if (!initialLoading && user) {
@@ -63,138 +74,123 @@ export default function LoginPage() {
     }
   }, [user, initialLoading, router]);
 
+  const initRecaptcha = async (containerId: string) => {
+    const pageName = "LOGIN_PAGE_INIT_RECAPTCHA";
+    console.log(`${pageName}: Attempting to initialize reCAPTCHA on container ID: ${containerId}. Current verifier: ${!!recaptchaVerifierRef.current}`);
+    
+    // Defensive clear if a verifier instance somehow exists but isn't considered ready
+    if (recaptchaVerifierRef.current) {
+        console.warn(`${pageName}: Existing verifier instance found. Clearing before re-init.`);
+        try { recaptchaVerifierRef.current.clear(); } catch(e) { console.warn(`${pageName}: Error clearing old verifier:`, e); }
+        recaptchaVerifierRef.current = null;
+    }
+
+    setIsRecaptchaInitializing(true);
+    setIsRecaptchaReady(false);
+    setRecaptchaError(null);
+
+    try {
+      if (!auth) {
+        console.error(`${pageName}: Firebase auth object is NOT available.`);
+        throw new Error("Firebase auth service not ready.");
+      }
+      const domContainer = document.getElementById(containerId);
+      if (!domContainer) {
+        console.error(`${pageName}: DOM element with ID '${containerId}' NOT FOUND for reCAPTCHA.`);
+        throw new Error(`reCAPTCHA container element (ID: ${containerId}) missing from DOM.`);
+      }
+      console.log(`${pageName}: DOM element with ID '${containerId}' FOUND.`);
+
+      console.log(`${pageName}: Creating new RecaptchaVerifier instance for element ID: ${containerId}`);
+      const verifier = new RecaptchaVerifier(auth, containerId, {
+        size: "invisible",
+        callback: (response: any) => {
+          console.log(`${pageName}: reCAPTCHA challenge PASSED (invisible flow). Response:`, response);
+          setIsRecaptchaReady(true);
+          setRecaptchaError(null);
+        },
+        "expired-callback": () => {
+          console.warn(`${pageName}: reCAPTCHA challenge EXPIRED.`);
+          setRecaptchaError("reCAPTCHA challenge expired. Please try sending OTP again.");
+          if (recaptchaVerifierRef.current) {
+            try { recaptchaVerifierRef.current.clear(); } catch (e) { console.warn(`${pageName}: Error clearing expired reCAPTCHA:`, e); }
+          }
+          recaptchaVerifierRef.current = null;
+          setIsRecaptchaReady(false);
+        },
+      });
+      console.log(`${pageName}: New RecaptchaVerifier instance CREATED.`);
+      
+      console.log(`${pageName}: Attempting verifier.render()...`);
+      const renderTimeout = 15000; // 15 seconds
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error(`reCAPTCHA render timed out after ${renderTimeout / 1000} seconds. Check network and domain authorization.`)), renderTimeout)
+      );
+      
+      await Promise.race([verifier.render(), timeoutPromise]);
+      
+      console.log(`${pageName}: verifier.render() promise RESOLVED or didn't time out. Setting verifier ref and ready state.`);
+      recaptchaVerifierRef.current = verifier;
+      setIsRecaptchaReady(true); // Crucial: set ready state here
+      setRecaptchaError(null);
+      console.log(`${pageName}: reCAPTCHA setup successful. isRecaptchaReady: true`);
+
+    } catch (error: any) {
+      console.error(`${pageName}: CRITICAL ERROR during reCAPTCHA setup:`, error);
+      setRecaptchaError(`reCAPTCHA Setup Error: ${error.message}. This often indicates issues with API key domain restrictions or network access to Google's reCAPTCHA services. Check console & network tab.`);
+      recaptchaVerifierRef.current = null;
+      setIsRecaptchaReady(false);
+    } finally {
+      console.log(`${pageName}: initRecaptcha finally block. isRecaptchaInitializing -> false`);
+      setIsRecaptchaInitializing(false);
+    }
+  };
+
+
   useEffect(() => {
     const pageName = "LOGIN_PAGE_RECAPTCHA_EFFECT";
-    console.log(`${pageName}: useEffect triggered. AuthMethod: ${authMethod}, Auth object available: ${!!auth}`);
+    console.log(`${pageName}: Main reCAPTCHA useEffect. AuthMethod: ${authMethod}, Auth: ${!!auth}`);
 
-    const initRecaptcha = async () => {
-      console.log(`${pageName}: initRecaptcha called. Container ref current:`, recaptchaContainerRef.current);
-      setIsRecaptchaInitializing(true);
-      setIsRecaptchaReady(false);
-      setRecaptchaError(null);
+    if (authMethod === "phone" && auth) {
+        const containerElementDOM = document.getElementById(RECAPTCHA_CONTAINER_ID_LOGIN);
+        console.log(`${pageName}: Checking for container. DOM element by ID '${RECAPTCHA_CONTAINER_ID_LOGIN}':`, containerElementDOM);
 
-      if (recaptchaVerifierRef.current) {
-        try {
-          console.log(`${pageName}: Clearing existing reCAPTCHA verifier.`);
-          recaptchaVerifierRef.current.clear();
-        } catch (e) {
-          console.warn(`${pageName}: Error clearing previous reCAPTCHA:`, e);
-        }
-        recaptchaVerifierRef.current = null;
-      }
-      
-      if (!auth) {
-        console.error(`${pageName}: Firebase auth object is not available. Cannot initialize reCAPTCHA.`);
-        setRecaptchaError("Firebase auth service is not ready. Please try again later.");
-        setIsRecaptchaInitializing(false);
-        return;
-      }
-
-      if (!recaptchaContainerRef.current) {
-        console.error(`${pageName}: reCAPTCHA container element not found in DOM.`);
-        setRecaptchaError("reCAPTCHA container element missing. Cannot initialize.");
-        setIsRecaptchaInitializing(false);
-        return;
-      }
-      
-      const containerId = recaptchaContainerRef.current.id;
-      if (!containerId) {
-        console.error(`${pageName}: reCAPTCHA container element does not have an ID.`);
-        setRecaptchaError("reCAPTCHA container ID missing. Cannot initialize.");
-        setIsRecaptchaInitializing(false);
-        return;
-      }
-      console.log(`${pageName}: reCAPTCHA container ID: ${containerId}`);
-
-      let verifier: RecaptchaVerifier | null = null;
-      try {
-        console.log(`${pageName}: Attempting to create new RecaptchaVerifier instance for element ID: ${containerId}`);
-        verifier = new RecaptchaVerifier(auth, containerId, {
-          size: "invisible",
-          callback: (response: any) => {
-            console.log(`${pageName}: reCAPTCHA challenge PASSED (invisible flow). Response:`, response);
-            setIsRecaptchaReady(true); 
-            // setIsRecaptchaInitializing(false); // Already handled in finally
-            setRecaptchaError(null);
-          },
-          "expired-callback": () => {
-            console.warn(`${pageName}: reCAPTCHA challenge expired.`);
-            setRecaptchaError("reCAPTCHA challenge expired. Please try sending OTP again.");
-            if (recaptchaVerifierRef.current) { // Check if current is this verifier or a new one
-              try { recaptchaVerifierRef.current.clear(); } catch (e) { console.warn(`${pageName}: Error clearing expired reCAPTCHA:`, e); }
+        if (containerElementDOM) {
+            // If no verifier exists (ref is null) AND not currently initializing AND not already ready
+            if (!recaptchaVerifierRef.current && !isRecaptchaInitializing && !isRecaptchaReady) {
+                console.log(`${pageName}: Conditions met (container in DOM, no verifier ref, not initializing, not ready). Triggering initRecaptcha.`);
+                initRecaptcha(RECAPTCHA_CONTAINER_ID_LOGIN);
+            } else {
+                console.log(`${pageName}: Not calling initRecaptcha. VerifierRef: ${!!recaptchaVerifierRef.current}, Initializing: ${isRecaptchaInitializing}, Ready: ${isRecaptchaReady}`);
             }
-            recaptchaVerifierRef.current = null; // Ensure it's cleared
-            setIsRecaptchaReady(false);
-            // setIsRecaptchaInitializing(false);
-          },
-        });
-        console.log(`${pageName}: New RecaptchaVerifier instance CREATED.`);
-      } catch (error: any) {
-        console.error(`${pageName}: CRITICAL ERROR instantiating RecaptchaVerifier:`, error);
-        setRecaptchaError(`reCAPTCHA Instantiation Error: ${error.message}. Check console for details.`);
-        setIsRecaptchaInitializing(false);
-        return; // Stop if verifier couldn't be created
-      }
-
-      try {
-        console.log(`${pageName}: Attempting verifier.render()...`);
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error("reCAPTCHA render timed out after 15 seconds.")), 15000)
-        );
-        
-        await Promise.race([verifier.render(), timeoutPromise]);
-        
-        console.log(`${pageName}: verifier.render() promise RESOLVED or didn't time out.`);
-        recaptchaVerifierRef.current = verifier; // Assign only after successful render
-        setIsRecaptchaReady(true);
-        setRecaptchaError(null);
-        console.log(`${pageName}: reCAPTCHA setup successful. isRecaptchaReady: true`);
-      } catch (error: any) {
-        console.error(`${pageName}: CRITICAL ERROR during verifier.render():`, error);
-        setRecaptchaError(`reCAPTCHA Render Error: ${error.message}. This often indicates issues with API key domain restrictions or network access to Google's reCAPTCHA services. Check console & network tab.`);
-        recaptchaVerifierRef.current = null; // Clear ref on render error
+        } else {
+            console.warn(`${pageName}: reCAPTCHA container (ID: ${RECAPTCHA_CONTAINER_ID_LOGIN}) NOT found in DOM yet. useEffect will run again if DOM changes.`);
+        }
+    } else { // authMethod is 'email' or auth is not ready
+        if (recaptchaVerifierRef.current) {
+            console.log(`${pageName}: Auth method is not 'phone' or auth not ready. Clearing existing reCAPTCHA verifier.`);
+            try { recaptchaVerifierRef.current.clear(); } catch (e) { console.warn(`${pageName}: Error clearing reCAPTCHA:`, e); }
+            recaptchaVerifierRef.current = null;
+        }
         setIsRecaptchaReady(false);
-      } finally {
-        console.log(`${pageName}: initRecaptcha finally block. isRecaptchaInitializing -> false`);
+        setRecaptchaError(null);
         setIsRecaptchaInitializing(false);
-      }
-    };
-
-    if (authMethod === "phone") {
-      // Only initialize if not already ready and not currently initializing.
-      // The container must exist.
-      if (!isRecaptchaReady && !isRecaptchaInitializing && recaptchaContainerRef.current && auth) {
-         console.log(`${pageName}: Phone auth method selected, reCAPTCHA not ready and not initializing. Triggering initRecaptcha.`);
-         initRecaptcha();
-      } else {
-        console.log(`${pageName}: Phone auth method selected. Conditions for initRecaptcha: isReady: ${isRecaptchaReady}, isInitializing: ${isRecaptchaInitializing}, container: ${!!recaptchaContainerRef.current}, auth: ${!!auth}`);
-      }
-    } else { // email method
-      if (recaptchaVerifierRef.current) {
-        console.log(`${pageName}: Clearing reCAPTCHA verifier due to auth method change from phone.`);
-        try { recaptchaVerifierRef.current.clear(); } catch (e) { console.warn(`${pageName}: Error clearing reCAPTCHA:`, e); }
-        recaptchaVerifierRef.current = null;
-      }
-      setIsRecaptchaReady(false);
-      setRecaptchaError(null);
-      setIsRecaptchaInitializing(false); // Ensure this is reset
     }
     
+    // Cleanup focused on the verifier instance if it exists
     return () => {
-      const cleanupPageName = "LOGIN_PAGE_RECAPTCHA_CLEANUP";
-      console.log(`${cleanupPageName}: Running cleanup for authMethod: ${authMethod}`);
-      if (recaptchaVerifierRef.current) { 
-        console.log(`${cleanupPageName}: Cleaning up reCAPTCHA verifier on component unmount or authMethod change.`);
-        try { recaptchaVerifierRef.current.clear(); } catch (e) { console.warn(`${cleanupPageName}: Error clearing reCAPTCHA during cleanup:`, e); }
-        recaptchaVerifierRef.current = null;
-      }
-      // Reset states on cleanup to ensure fresh init if component remounts or method changes back quickly
-      // setIsRecaptchaReady(false);
-      // setRecaptchaError(null);
-      // setIsRecaptchaInitializing(false);
+        if (recaptchaVerifierRef.current) {
+            console.log(`${pageName}: useEffect cleanup - Clearing verifier instance.`);
+            try { recaptchaVerifierRef.current.clear(); } catch (e) { /* ignore */ }
+            recaptchaVerifierRef.current = null;
+            // Reset states on cleanup to be sure for next init
+            setIsRecaptchaReady(false);
+            setRecaptchaError(null);
+            setIsRecaptchaInitializing(false);
+        }
     };
-  // Ensure auth is a dependency if its availability triggers re-init
-  }, [authMethod, auth]); 
+  }, [authMethod, auth]); // Main dependencies that trigger re-evaluation of reCAPTCHA setup
+
 
   const handleEmailLogin = async (values: EmailLoginFormValues) => {
     setLoading(true);
@@ -216,7 +212,7 @@ export default function LoginPage() {
   const handleSendOtpForLogin = async () => {
     const pageName = "LOGIN_PAGE_SEND_OTP";
     setLoading(true);
-    setRecaptchaError(null); // Clear previous errors
+    setRecaptchaError(null); 
 
     const validation = phoneSchema.safeParse(phoneNumber);
     if (!validation.success) {
@@ -305,30 +301,51 @@ export default function LoginPage() {
               setOtpSent(false);
               setOtp("");
               setConfirmationResult(null);
-              // Reset reCAPTCHA states if changing, to trigger re-initialization if switching to phone
-              // No need to set isRecaptchaInitializing here, useEffect will handle it.
-              // if (recaptchaVerifierRef.current) {
-              //   try { 
-              //     console.log("LOGIN_PAGE_TABS: Clearing reCAPTCHA verifier due to auth method switch.");
-              //     recaptchaVerifierRef.current.clear(); 
-              //   } catch(e) {
-              //     console.warn("LOGIN_PAGE_TABS: Error clearing reCAPTCHA on method switch:", e);
-              //   }
-              //   recaptchaVerifierRef.current = null;
-              // }
-              // setIsRecaptchaReady(false); // This will be handled by the effect
-              // setRecaptchaError(null);
+              // The useEffect will handle reCAPTCHA state reset based on authMethod
           }} className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="email">Email & Password</TabsTrigger>
               <TabsTrigger value="phone">Phone Number</TabsTrigger>
             </TabsList>
             <TabsContent value="email" className="pt-4">
-              <AuthForm formSchema={emailLoginSchema} onSubmit={handleEmailLogin} type="login" loading={loading} />
+               <Form {...emailLoginForm}>
+                <form onSubmit={emailLoginForm.handleSubmit(handleEmailLogin)} className="space-y-4">
+                  <FormField
+                    control={emailLoginForm.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Label htmlFor="emailLogin">Email</Label>
+                        <FormControl>
+                          <Input id="emailLogin" placeholder="you@example.com" {...field} type="email" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={emailLoginForm.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Label htmlFor="passwordLogin">Password</Label>
+                        <FormControl>
+                          <Input id="passwordLogin" placeholder="••••••••" {...field} type="password" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <Button type="submit" className="w-full" disabled={loading}>
+                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Login
+                  </Button>
+                </form>
+              </Form>
             </TabsContent>
             <TabsContent value="phone" className="pt-4 space-y-4">
-              {/* This div must be present in the DOM for reCAPTCHA to render, ensure it has an ID */}
-              {authMethod === "phone" && <div ref={recaptchaContainerRef} id="recaptcha-container-login"></div>}
+              {/* This div must be present in the DOM for reCAPTCHA to render */}
+              {authMethod === "phone" && <div ref={recaptchaContainerRef} id={RECAPTCHA_CONTAINER_ID_LOGIN}></div>}
 
               {!otpSent ? (
                 <>
@@ -352,8 +369,8 @@ export default function LoginPage() {
                       disabled={sendOtpButtonDisabled}
                       aria-live="polite"
                   >
-                    {isRecaptchaInitializing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                    {isRecaptchaInitializing ? 'Initializing reCAPTCHA...' : (loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Send OTP')}
+                    {(loading || isRecaptchaInitializing) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {isRecaptchaInitializing ? 'Initializing reCAPTCHA...' : (loading ? 'Sending OTP...' : 'Send OTP')}
                   </Button>
                   
                   {!isRecaptchaInitializing && !isRecaptchaReady && !recaptchaError && authMethod === 'phone' && (
@@ -386,18 +403,19 @@ export default function LoginPage() {
                           setOtpSent(false); 
                           setConfirmationResult(null); 
                           setOtp(''); 
-                          // Trigger re-initialization of reCAPTCHA by resetting its ready state
+                          // Trigger re-initialization of reCAPTCHA by resetting its ready state and verifier ref
+                          if (recaptchaVerifierRef.current) {
+                            try { recaptchaVerifierRef.current.clear(); } catch(e) { console.warn("Error clearing verifier on resend:", e); }
+                            recaptchaVerifierRef.current = null;
+                          }
                           setIsRecaptchaReady(false); 
-                          setRecaptchaError(null); // Clear any previous error
-                          // if(recaptchaVerifierRef.current) {
-                          //   try { recaptchaVerifierRef.current.clear(); } catch(e) { console.warn("Error clearing verifier on resend:", e) }
-                          //   recaptchaVerifierRef.current = null;
-                          // }
+                          setRecaptchaError(null); 
+                          setIsRecaptchaInitializing(false); // Allow re-init
                       }}>Change Number or Resend?</Button>
                     </p>
                   </div>
                   <Button onClick={handleVerifyOtpAndLogin} className="w-full" disabled={loading || otp.length !== 6}>
-                    {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Verify OTP & Login
                   </Button>
                 </>
@@ -417,3 +435,5 @@ export default function LoginPage() {
     </div>
   );
 }
+
+    
