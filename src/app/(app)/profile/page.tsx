@@ -7,9 +7,8 @@ import { z } from "zod";
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
-import { db } from "@/lib/firebase"; // Removed storage import
+import { db } from "@/lib/firebase";
 import { doc, setDoc, getDoc } from "firebase/firestore";
-// Removed Firebase Storage imports: ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -24,13 +23,14 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, FileText, UploadCloud, XCircle } from "lucide-react"; // Removed DownloadCloud, Progress
+import { Loader2, FileText, UploadCloud, XCircle, DownloadCloud } from "lucide-react";
 import type { UserProfile } from "@/types";
-// Removed Progress import
 
-// Schema no longer includes resume fields for Firestore submission
+// Schema now reflects that resume data is handled client-side via localStorage
+// and not part of the Firestore submission for the core profile.
 const profileFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }).max(50),
+  email: z.string().email({ message: "Please enter a valid email."}).optional(), // Display only, not for submission
   profileField: z.string().min(2, { message: "Profile field is required." }).max(100),
   role: z.string().min(2, { message: "Current role is required." }).max(100),
   company: z.string().max(100).optional().nullable(),
@@ -60,19 +60,18 @@ export default function ProfilePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFetchingProfile, setIsFetchingProfile] = useState(true);
 
-  const [selectedFile, setSelectedFile] = useState<File | null>(null); // For the current file object
-  const [displayedFileName, setDisplayedFileName] = useState<string | null>(null); // For UI, from localStorage or new upload
-  const [clientSideResumeText, setClientSideResumeText] = useState<string | null>(null); // Extracted text, from localStorage or new upload
-  
+  // State for client-side resume handling (localStorage)
+  const [displayedFileName, setDisplayedFileName] = useState<string | null>(null);
+  const [clientSideResumeText, setClientSideResumeText] = useState<string | null>(null);
   const [isReadingFile, setIsReadingFile] = useState(false);
-  // Removed uploadProgress, isUploading states
-
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
     defaultValues: {
       name: "",
+      email: "", // Will be populated from user.email and be read-only
       profileField: "",
       role: "",
       company: null,
@@ -83,35 +82,44 @@ export default function ProfilePage() {
 
   // Load resume info from localStorage on mount
   useEffect(() => {
+    console.log("ProfilePage: Attempting to load resume info from localStorage.");
     if (typeof window !== "undefined") {
       const storedFileName = localStorage.getItem(LOCAL_STORAGE_RESUME_FILENAME_KEY);
       const storedResumeText = localStorage.getItem(LOCAL_STORAGE_RESUME_TEXT_KEY);
       if (storedFileName) {
         setDisplayedFileName(storedFileName);
+        console.log("ProfilePage: Loaded fileName from localStorage:", storedFileName);
       }
       if (storedResumeText) {
         setClientSideResumeText(storedResumeText);
+        console.log("ProfilePage: Loaded resumeText from localStorage, length:", storedResumeText.length);
       }
     }
   }, []);
 
   useEffect(() => {
-    console.log("ProfilePage: useEffect for userProfile triggered. AuthLoading:", authLoading, "InitialLoading:", initialLoading, "User:", !!user);
+    console.log("ProfilePage: useEffect for userProfile/user triggered. AuthLoading:", authLoading, "InitialLoading:", initialLoading, "User:", !!user, "UserProfile:", !!userProfile);
     if (!initialLoading && !authLoading && user) {
+      form.setValue("email", user.email || ""); // Set read-only email from auth user
       if (userProfile) {
-        console.log("ProfilePage: User profile found, resetting form.", userProfile);
+        console.log("ProfilePage: User profile found, resetting form with profile data.", userProfile);
         form.reset({
           name: userProfile.name || "",
+          email: user.email || "", // Ensure auth email is used
           profileField: userProfile.profileField || "",
           role: userProfile.role || "",
           company: userProfile.company || null,
           education: userProfile.education || "",
           phoneNumber: userProfile.phoneNumber || null,
         });
-        // Resume is now handled by localStorage, not userProfile from Firestore
       } else {
-        console.log("ProfilePage: No user profile found, resetting to defaults.");
-        form.reset(form.formState.defaultValues);
+        // User exists, but no profile yet (e.g., fresh signup redirected here)
+        console.log("ProfilePage: User authenticated, but no Firestore profile yet. Resetting to defaults, keeping email.");
+        form.reset({
+          ...form.formState.defaultValues,
+          email: user.email || "", // Keep auth email
+          name: user.displayName || "", // Pre-fill name from auth if available
+        });
       }
       setIsFetchingProfile(false);
     } else if (!initialLoading && !authLoading && !user) {
@@ -122,27 +130,24 @@ export default function ProfilePage() {
   }, [user, userProfile, form, authLoading, initialLoading]);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
     console.log("ProfilePage: handleFileChange triggered.");
-
-    if (fileInputRef.current) { // Always allow re-selection
-      fileInputRef.current.value = "";
-    }
+    const file = event.target.files?.[0];
     
+    // Always reset the file input value to allow re-selecting the same file
+    if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+    }
+
     if (!file) {
-      console.log("ProfilePage: File selection cancelled by user or no file selected.");
-      // Don't clear localStorage here, user might just be cancelling the dialog
-      setSelectedFile(null); // Clear the temp selected file state
-      return;
+      console.log("ProfilePage: File selection cancelled or no file selected. Not altering localStorage.");
+      return; // User cancelled, don't clear localStorage or current display
     }
 
     console.log("ProfilePage: New file selected:", file.name, "Size:", file.size, "Type:", file.type);
     setIsReadingFile(true);
-    setSelectedFile(file); // Store the file object temporarily
-    
-    // Clear previous client-side extracted text and displayed name for the new file
-    setClientSideResumeText(null); 
-    setDisplayedFileName(file.name); // Tentatively set file name for display
+    // Clear previous display for the new file while it's being processed
+    setDisplayedFileName(file.name); // Tentatively set name
+    setClientSideResumeText(null);  // Clear old text
 
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
       toast({
@@ -150,26 +155,24 @@ export default function ProfilePage() {
         description: `Please upload a file smaller than ${MAX_FILE_SIZE_MB}MB. Your file is ${(file.size / (1024 * 1024)).toFixed(2)}MB.`,
         variant: "destructive",
       });
-      setSelectedFile(null);
-      // Revert UI display to what's in localStorage (or null if nothing)
+      // Revert display to what's in localStorage, as this upload failed
       setDisplayedFileName(localStorage.getItem(LOCAL_STORAGE_RESUME_FILENAME_KEY));
       setClientSideResumeText(localStorage.getItem(LOCAL_STORAGE_RESUME_TEXT_KEY));
       setIsReadingFile(false);
-      console.log("ProfilePage: File too large. Reverted UI to reflect localStorage state.");
+      console.log("ProfilePage: File too large. UI reverted to localStorage state.");
       return;
     }
 
     if (!ACCEPTED_MIME_TYPES.includes(file.type) && !ACCEPT_FILE_EXTENSIONS.split(',').some(ext => file.name.toLowerCase().endsWith(ext))) {
       toast({
         title: "Unsupported File Type",
-        description: `Please upload a supported file type (${ACCEPT_FILE_EXTENSIONS}). You uploaded: ${file.name} (type: ${file.type || 'unknown'}).`,
+        description: `Please upload a supported file type (${ACCEPT_FILE_EXTENSIONS}). You uploaded: ${file.name} (type: ${file.type || 'unknown'}). Plain text versions (.txt, .md) are best for AI.`,
         variant: "destructive",
       });
-      setSelectedFile(null);
       setDisplayedFileName(localStorage.getItem(LOCAL_STORAGE_RESUME_FILENAME_KEY));
       setClientSideResumeText(localStorage.getItem(LOCAL_STORAGE_RESUME_TEXT_KEY));
       setIsReadingFile(false);
-      console.log("ProfilePage: Unsupported file type. Reverted UI.");
+      console.log("ProfilePage: Unsupported file type. UI reverted.");
       return;
     }
     
@@ -184,39 +187,37 @@ export default function ProfilePage() {
     const reader = new FileReader();
     reader.onload = (e) => {
       const text = e.target?.result as string;
-      setClientSideResumeText(text); 
+      setClientSideResumeText(text);
       setDisplayedFileName(file.name); // Confirm display name
       localStorage.setItem(LOCAL_STORAGE_RESUME_TEXT_KEY, text);
       localStorage.setItem(LOCAL_STORAGE_RESUME_FILENAME_KEY, file.name);
-      toast({ title: "Resume Processed", description: `Text from ${file.name} has been extracted and is ready for AI use. This will be used if you start an interview.` });
+      toast({ title: "Resume Processed for AI", description: `Text from ${file.name} has been extracted and stored in this browser. It will be used if you start an interview.` });
       setIsReadingFile(false);
-      setSelectedFile(null); // Clear the temporary file state
-      console.log("ProfilePage: File read successfully. Text extracted length:", text?.length);
+      console.log("ProfilePage: File read successfully. Text stored in localStorage. Length:", text?.length);
     };
     reader.onerror = (errorEvent) => {
       console.error("ProfilePage: Error reading file:", errorEvent);
       toast({ title: "File Read Error", description: "Could not read the resume file content.", variant: "destructive" });
+      // Revert display to localStorage state on error
       setDisplayedFileName(localStorage.getItem(LOCAL_STORAGE_RESUME_FILENAME_KEY));
       setClientSideResumeText(localStorage.getItem(LOCAL_STORAGE_RESUME_TEXT_KEY));
-      setSelectedFile(null);
       setIsReadingFile(false);
-      console.log("ProfilePage: File read error. Reverted UI.");
+      console.log("ProfilePage: File read error. UI reverted.");
     };
     reader.readAsText(file);
   };
 
   const clearResume = async () => {
-    console.log("ProfilePage: clearResume initiated.");
-    setSelectedFile(null);
-    setDisplayedFileName(null);
-    setClientSideResumeText(null);
+    console.log("ProfilePage: clearResume initiated for localStorage.");
     localStorage.removeItem(LOCAL_STORAGE_RESUME_FILENAME_KEY);
     localStorage.removeItem(LOCAL_STORAGE_RESUME_TEXT_KEY);
+    setDisplayedFileName(null);
+    setClientSideResumeText(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
     toast({ title: "Resume Cleared", description: "Resume information has been removed from this browser session." });
-    console.log("ProfilePage: clearResume finished.");
+    console.log("ProfilePage: Resume cleared from localStorage and UI.");
   };
 
   const onSubmit = async (values: ProfileFormValues) => {
@@ -224,32 +225,36 @@ export default function ProfilePage() {
       toast({ title: "Error", description: "You must be logged in.", variant: "destructive" });
       return;
     }
-    console.log("ProfilePage: onSubmit triggered. Form Values (from form.handleSubmit):", JSON.stringify(values, null, 2));
+    // The email from the form (`values.email`) is just for display consistency if needed;
+    // the actual email for the UserProfile object should come from `user.email`.
+    console.log("ProfilePage: onSubmit triggered. Form Values (excluding resume):", JSON.stringify(values, null, 2));
     
     setIsSubmitting(true);
 
     try {
-      console.log("ProfilePage: Starting profile update process (no resume data saved to Firestore).");
+      console.log("ProfilePage: Starting profile update process (resume handled by localStorage).");
       
       const profileDataToSave: UserProfile = {
         uid: user.uid,
-        email: user.email || userProfile?.email || undefined, // Ensure email is preserved
+        email: user.email, // Crucially use the authenticated user's email
         name: values.name,
         profileField: values.profileField,
         role: values.role,
         company: values.company || null,
         education: values.education,
         phoneNumber: values.phoneNumber || null,
+        // Resume fields are NOT saved to Firestore in this version
         createdAt: userProfile?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         interviewsTaken: userProfile?.interviewsTaken || 0,
         isPlusSubscriber: userProfile?.isPlusSubscriber || false,
+        subscriptionPlan: userProfile?.subscriptionPlan || null,
         isAdmin: userProfile?.isAdmin || false,
       };
       
       console.log("ProfilePage: FINAL data to save to Firestore (NO RESUME DATA):", JSON.stringify(profileDataToSave, null, 2));
       const userDocRef = doc(db, "users", user.uid);
-      await setDoc(userDocRef, profileDataToSave, { merge: true });
+      await setDoc(userDocRef, profileDataToSave, { merge: true }); // merge:true is good practice
       console.log("ProfilePage: Profile data successfully saved to Firestore.");
 
       toast({ title: "Profile Updated", description: "Your profile has been successfully updated." });
@@ -260,9 +265,6 @@ export default function ProfilePage() {
         console.error("ProfilePage: Error refreshing user profile in context after save:", err);
       });
       
-      // selectedFile is already null or handled by handleFileChange for new uploads
-      // displayedFileName and clientSideResumeText are managed by localStorage and local state
-
     } catch (error: any) { 
       console.error("ProfilePage: onSubmit - Profile update error:", error);
       const description = error.code ? `${error.message} (Code: ${error.code})` : error.message || "Could not update profile.";
@@ -274,25 +276,58 @@ export default function ProfilePage() {
     }
   };
 
-  const canSubmit = !isSubmitting && !authLoading && !isReadingFile;
+  const canSubmit = !isSubmitting && !authLoading && !isReadingFile && !isFetchingProfile;
+
+  if (isFetchingProfile || initialLoading || (authLoading && !userProfile && !initialLoading) ) {
+     return <div className="flex justify-center items-center h-[calc(100vh-var(--header-height,4rem)-2rem)]"><Loader2 className="h-12 w-12 animate-spin text-primary" /> <p className="ml-3">Loading profile...</p></div>;
+  }
+
 
   return (
     <Card className="max-w-2xl mx-auto shadow-lg">
       <CardHeader>
         <CardTitle className="text-2xl">Your Profile</CardTitle>
-        <CardDescription>Keep your information up to date to get the best interview experience. Resume is stored locally in your browser.</CardDescription>
+        <CardDescription>Keep your information up to date. Resume text is stored in your browser for AI question generation.</CardDescription>
       </CardHeader>
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email (Login ID)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="your-login-email@example.com" {...field} readOnly className="bg-muted/50 cursor-not-allowed" />
+                    </FormControl>
+                    <FormDescription>Your login email cannot be changed here.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             <FormField control={form.control} name="name" render={({ field }) => (<FormItem><FormLabel>Full Name</FormLabel><FormControl><Input placeholder="e.g., Ada Lovelace" {...field} /></FormControl><FormMessage /></FormItem>)} />
             <FormField control={form.control} name="profileField" render={({ field }) => (<FormItem><FormLabel>Profile Field</FormLabel><FormControl><Input placeholder="e.g., Software Engineering, Product Management" {...field} /></FormControl><FormDescription>Your primary area of expertise.</FormDescription><FormMessage /></FormItem>)} />
             <FormField control={form.control} name="role" render={({ field }) => (<FormItem><FormLabel>Current or Target Role</FormLabel><FormControl><Input placeholder="e.g., Senior Frontend Developer" {...field} /></FormControl><FormMessage /></FormItem>)} />
             <FormField control={form.control} name="company" render={({ field }) => (<FormItem><FormLabel>Current or Target Company (Optional)</FormLabel><FormControl><Input placeholder="e.g., Google, Acme Corp" {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>)} />
             <FormField control={form.control} name="education" render={({ field }) => (<FormItem><FormLabel>Education</FormLabel><FormControl><Textarea placeholder="e.g., B.S. in Computer Science from Example University" {...field} /></FormControl><FormDescription>Your highest relevant education.</FormDescription><FormMessage /></FormItem>)} />
+             <FormField
+                control={form.control}
+                name="phoneNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone Number (Optional)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g., +1 555-123-4567 or 0123456789" {...field} value={field.value ?? ""} type="tel" />
+                    </FormControl>
+                    <FormDescription>Your contact phone number.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
             <FormItem>
-              <FormLabel>Resume (Optional, stored in browser)</FormLabel>
+              <FormLabel>Resume (Optional, processed text stored in browser)</FormLabel>
               <div className="flex items-center gap-2">
                 <FormControl>
                   <Input
@@ -313,7 +348,7 @@ export default function ProfilePage() {
               </div>
               <FormDescription>
                 Upload your resume ({ACCEPT_FILE_EXTENSIONS}, max {MAX_FILE_SIZE_MB}MB). Text will be extracted for AI question generation and stored locally in your browser.
-                Plain text versions (.txt, .md) are best for AI processing.
+                Plain text versions (.txt, .md) are best for AI processing. PDF/Word text extraction may be incomplete.
               </FormDescription>
 
               {displayedFileName && !isReadingFile && (
@@ -321,24 +356,18 @@ export default function ProfilePage() {
                   <div className="flex items-center gap-2">
                     <FileText className="h-4 w-4 text-primary" />
                     <span>
-                      {displayedFileName}
-                      {selectedFile ? " (New file selected, processed locally)" : " (From browser storage)"}
+                      {displayedFileName} (In browser storage)
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {/* No download button as file isn't stored in Firebase Storage */}
-                    <Button type="button" variant="ghost" size="sm" onClick={clearResume} title="Clear resume from browser" disabled={isSubmitting || authLoading || isReadingFile || !displayedFileName}>
+                  <Button type="button" variant="ghost" size="sm" onClick={clearResume} title="Clear resume from browser" disabled={isSubmitting || authLoading || isReadingFile || !displayedFileName}>
                       <XCircle className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
+                  </Button>
                 </div>
               )}
             </FormItem>
 
-            <FormField control={form.control} name="phoneNumber" render={({ field }) => (<FormItem><FormLabel>Phone Number (Optional)</FormLabel><FormControl><Input placeholder="e.g., +1 555-123-4567" {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>)} />
-
             <Button type="submit" disabled={!canSubmit} className="w-full sm:w-auto">
-              {isSubmitting || isReadingFile && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {(isSubmitting || isReadingFile) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {isReadingFile ? 'Processing File...' : (isSubmitting ? 'Saving Profile...' : 'Save Profile Changes')}
             </Button>
           </form>

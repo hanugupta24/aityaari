@@ -27,9 +27,19 @@ interface AuthFormProps {
 }
 
 export function AuthForm({ formSchema, onSubmit, type, loading }: AuthFormProps) {
+  const defaultFormValues: Record<string, string> = { email: "", password: "" };
+  if (type === "signup") {
+    defaultFormValues.confirmPassword = "";
+    // Add phoneNumber to default values if it's part of the signup schema
+    // This assumes the schema passed will include phoneNumber for signup type
+    if (formSchema.shape.phoneNumber) {
+      defaultFormValues.phoneNumber = "";
+    }
+  }
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues: type === "signup" ? { email: "", password: "", confirmPassword: "" } : { email: "", password: "" },
+    defaultValues: defaultFormValues,
   });
 
   const cardTitle = type === "login" ? "Welcome Back!" : "Create an Account";
@@ -75,19 +85,36 @@ export function AuthForm({ formSchema, onSubmit, type, loading }: AuthFormProps)
                 )}
               />
               {type === "signup" && (
-                <FormField
-                  control={form.control}
-                  name="confirmPassword"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Confirm Password</FormLabel>
-                      <FormControl>
-                        <Input placeholder="••••••••" {...field} type="password" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
+                <>
+                  <FormField
+                    control={form.control}
+                    name="confirmPassword"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Confirm Password</FormLabel>
+                        <FormControl>
+                          <Input placeholder="••••••••" {...field} type="password" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  {formSchema.shape.phoneNumber && ( // Conditionally render if phoneNumber is in schema
+                     <FormField
+                        control={form.control}
+                        name="phoneNumber"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Phone Number (Optional)</FormLabel>
+                            <FormControl>
+                              <Input placeholder="e.g., +15551234567 or 0123456789" {...field} type="tel" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
                   )}
-                />
+                </>
               )}
             </CardContent>
             <CardFooter className="flex flex-col gap-4">

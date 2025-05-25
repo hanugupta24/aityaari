@@ -16,6 +16,7 @@ const signupSchema = z
     email: z.string().email({ message: "Invalid email address." }),
     password: z.string().min(6, { message: "Password must be at least 6 characters." }),
     confirmPassword: z.string(),
+    phoneNumber: z.string().min(10, { message: "Phone number must be at least 10 digits."}).max(15, { message: "Phone number can be at most 15 digits."}).optional().or(z.literal('')),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords don't match.",
@@ -46,25 +47,35 @@ export default function SignupPage() {
         uid: firebaseUser.uid,
         email: firebaseUser.email,
         createdAt: new Date().toISOString(),
-        // Initialize other fields as needed or let profile page handle it
         name: "",
         profileField: "",
-        role: "", // e.g., 'candidate' or 'software_developer'
-        company: "",
+        role: "",
+        company: null,
         education: "",
+        phoneNumber: values.phoneNumber || null,
         interviewsTaken: 0,
         isPlusSubscriber: false,
+        isAdmin: false,
+        updatedAt: new Date().toISOString(),
       });
 
       toast({ title: "Signup Successful", description: "Redirecting to complete your profile..." });
       router.push("/profile");
     } catch (error: any) {
       console.error("Signup error:", error);
-      toast({
-        title: "Signup Failed",
-        description: error.message || "An unexpected error occurred.",
-        variant: "destructive",
-      });
+      if (error.code === 'auth/email-already-in-use') {
+        toast({
+          title: "Account Exists",
+          description: "This email is already registered. Please login.",
+          variant: "default", // Or "destructive" if preferred
+        });
+      } else {
+        toast({
+          title: "Signup Failed",
+          description: error.message || "An unexpected error occurred.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setLoading(false);
     }
