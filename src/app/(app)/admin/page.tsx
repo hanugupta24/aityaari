@@ -7,7 +7,7 @@ import { useEffect, useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Users, DollarSign, TrendingUp, CreditCard, Loader2, AlertTriangle, CalendarDays, CalendarRange, CalendarCheck2, CalendarClock, BarChart3 } from "lucide-react";
+import { Users, DollarSign, TrendingUp, CreditCard, Loader2, AlertTriangle, CalendarDays, CalendarRange, CalendarCheck2, CalendarClock, BarChart3, Calendar } from "lucide-react";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar, Legend } from "recharts";
 import { db } from "@/lib/firebase";
@@ -214,7 +214,9 @@ export default function AdminPage() {
       } else if (u.subscriptionPlan === 'yearly') {
         estimatedMonthlyRevenue += PLAN_PRICES.yearly / 12;
       } else {
-        estimatedMonthlyRevenue += PLAN_PRICES.monthly; 
+        // Fallback for users who are Plus but have no plan specified (e.g., older data)
+        // You might want to adjust this logic or log these cases
+        estimatedMonthlyRevenue += PLAN_PRICES.monthly; // Default to monthly for estimation
       }
     });
 
@@ -238,6 +240,7 @@ export default function AdminPage() {
   }
   
   if (!isAdmin) { 
+     // This should ideally not be reached due to the useEffect redirect, but as a fallback
      return <div className="flex justify-center items-center h-screen"><p>Access Denied</p></div>;
   }
 
