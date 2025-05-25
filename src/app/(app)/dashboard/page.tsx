@@ -9,12 +9,54 @@ import { PlusCircle, Loader2, AlertTriangle, ListChecks, User, DatabaseZap, Exte
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { InterviewSession } from "@/types";
 import { useEffect, useState, useCallback } from "react";
-import { collection, query, where, orderBy, limit, getDocs } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+// import { collection, query, where, orderBy, limit, getDocs } from "firebase/firestore";
+// import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 
 const FREE_INTERVIEW_LIMIT = 3;
+
+// Mock data for past interviews
+const MOCK_PAST_INTERVIEWS: InterviewSession[] = [
+  {
+    id: "mock1",
+    userId: "mockUser",
+    duration: 30,
+    status: "completed",
+    createdAt: new Date(Date.now() - 86400000 * 2).toISOString(), // 2 days ago
+    questions: [],
+    feedback: {
+      overallScore: 75,
+      overallFeedback: "Good overall performance, with some areas to focus on for improvement. Keep practicing!",
+      strengthsSummary: "Answered behavioral questions well.",
+      weaknessesSummary: "Could be more concise in technical explanations.",
+      overallAreasForImprovement: "Practice STAR method for behavioral and be more specific with technical answers.",
+      detailedQuestionFeedback: [
+        { questionId: "q1", questionText: "Tell me about yourself.", userAnswer: "A good summary.", idealAnswer: "Ideal answer would be...", refinementSuggestions: "More focus on X.", score: 8 },
+      ]
+    },
+    transcript: "AI: Tell me about yourself.\nYou: I am a..."
+  },
+  {
+    id: "mock2",
+    userId: "mockUser",
+    duration: 15,
+    status: "completed",
+    createdAt: new Date(Date.now() - 86400000 * 5).toISOString(), // 5 days ago
+    questions: [],
+    feedback: {
+      overallScore: 88,
+      overallFeedback: "Excellent work on the coding question and clear communication.",
+      strengthsSummary: "Strong problem-solving skills demonstrated.",
+      weaknessesSummary: "Slight hesitation on one conceptual question.",
+      overallAreasForImprovement: "Review foundational concepts for X.",
+       detailedQuestionFeedback: [
+        { questionId: "q1", questionText: "Describe a challenging project.", userAnswer: "My project was...", idealAnswer: "Ideal answer would be...", refinementSuggestions: "Good detail.", score: 9 },
+      ]
+    },
+    transcript: "AI: Describe a challenging project.\nYou: I worked on..."
+  }
+];
 
 function InterviewsErrorAlert({ error }: { error: string | null }) {
   if (!error) return null;
@@ -22,7 +64,6 @@ function InterviewsErrorAlert({ error }: { error: string | null }) {
   const isIndexError = error.includes("query requires an index");
   const indexCreationLinkMatch = error.match(/https:\/\/console\.firebase\.google\.com\/[^)]+/);
   const indexCreationLink = indexCreationLinkMatch ? indexCreationLinkMatch[0] : null;
-
 
   return (
     <Alert variant="destructive" className="my-4">
@@ -52,13 +93,16 @@ function InterviewsErrorAlert({ error }: { error: string | null }) {
 
 export default function DashboardPage() {
   const { user, userProfile, initialLoading: authInitialLoading, loading: authLoading, refreshUserProfile } = useAuth();
-  const { toast } = useToast();
+  // const { toast } = useToast(); // Uncomment if dynamic fetching is re-enabled
 
-  const [fetchedPastInterviews, setFetchedPastInterviews] = useState<InterviewSession[]>([]);
-  const [interviewsLoading, setInterviewsLoading] = useState(true);
+  // Use static data for past interviews
+  const [fetchedPastInterviews, setFetchedPastInterviews] = useState<InterviewSession[]>(MOCK_PAST_INTERVIEWS);
+  const [interviewsLoading, setInterviewsLoading] = useState(false); // Default to false for static data
   const [interviewsError, setInterviewsError] = useState<string | null>(null);
 
 
+  // Comment out or remove dynamic fetching logic for now
+  /*
   const fetchInterviews = useCallback(async () => {
     if (!user) {
       console.log("DashboardPage: No user, clearing past interviews and stopping loader.");
@@ -86,18 +130,17 @@ export default function DashboardPage() {
       console.error("DashboardPage: Error fetching past interviews:", error);
       const errorMessage = error.message || "An unknown error occurred while fetching interviews.";
       setInterviewsError(errorMessage);
-      setInterviewsLoading(false); // Ensure loading is false on error
-      toast({
-        title: "Error Loading Interviews",
-        description: errorMessage,
-        variant: "destructive",
-      });
+      // toast({ // Uncomment if dynamic fetching is re-enabled
+      //   title: "Error Loading Interviews",
+      //   description: errorMessage,
+      //   variant: "destructive",
+      // });
       setFetchedPastInterviews([]); 
     } finally {
       console.log("DashboardPage: Finished fetching interviews, setting interviewsLoading to false.");
-      if(interviewsLoading) setInterviewsLoading(false); // Ensure it's always false if not already set by error
+      setInterviewsLoading(false);
     }
-  }, [user, toast, interviewsLoading]); // Added interviewsLoading to dependency to potentially help with state sync
+  }, [user, toast]); // Add toast back if re-enabled
 
   useEffect(() => {
     if (!authInitialLoading && user) {
@@ -108,6 +151,18 @@ export default function DashboardPage() {
         setInterviewsError(null);
     }
   }, [user, authInitialLoading, fetchInterviews]);
+  */
+
+  // For static data, we can directly set interviews if needed, or keep the initial state.
+  // This useEffect is not strictly necessary for static data but included for completeness if logic changes later.
+  useEffect(() => {
+    if (!authInitialLoading && !user) {
+        setFetchedPastInterviews([]); // Clear if user logs out
+    } else if (user && fetchedPastInterviews.length === 0) { // if user is logged in but fetched is empty (can happen if static data wasn't desired initially)
+        setFetchedPastInterviews(MOCK_PAST_INTERVIEWS); // Ensure mock data is set if needed
+    }
+    // No specific action needed for authInitialLoading or if user exists with data already set by useState
+  }, [user, authInitialLoading, fetchedPastInterviews.length]);
 
 
   if (authInitialLoading) {
@@ -315,3 +370,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
