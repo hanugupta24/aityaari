@@ -5,15 +5,14 @@ export interface UserProfile {
   name?: string;
   profileField?: string; // e.g., "Software Engineering", "Product Management"
   role?: string; // e.g., "Frontend Developer", "Senior PM"
-  company?: string;
+  company?: string | null;
   education?: string;
-  phoneNumber?: string;
+  phoneNumber?: string | null;
   
-  // Resume fields for Firebase Storage and processed text
-  resumeFileName?: string; 
-  resumeFileUrl?: string; 
-  resumeStoragePath?: string; 
-  resumeProcessedText?: string; // Text extracted client-side for AI
+  resumeFileName?: string | null; 
+  resumeFileUrl?: string | null; 
+  resumeStoragePath?: string | null; 
+  resumeProcessedText?: string | null;
 
   createdAt: string;
   interviewsTaken?: number;
