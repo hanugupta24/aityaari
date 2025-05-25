@@ -56,7 +56,7 @@ export default function FeedbackPage() {
             toast({ title: "Feedback Pending", description: "Feedback for this interview is not yet available. It might still be processing.", variant: "default" });
           } else {
              toast({ title: "Interview Not Completed", description: "This interview was not completed, so no feedback is available.", variant: "default" });
-             router.push("/dashboard"); 
+             router.push("/dashboard");
           }
         } else {
           toast({ title: "Error", description: "Interview session not found.", variant: "destructive" });
@@ -80,7 +80,7 @@ export default function FeedbackPage() {
   if (!session) {
     return <div className="flex justify-center items-center h-screen"><p>Interview session not found.</p></div>;
   }
-  
+
   if (!feedback && session.status === "completed") {
      return (
       <div className="max-w-3xl mx-auto py-8 px-4">
@@ -101,7 +101,7 @@ export default function FeedbackPage() {
       </div>
     );
   }
-  
+
   if (!feedback) {
     return <div className="flex justify-center items-center h-screen"><p>No feedback available for this session.</p></div>;
   }
@@ -131,7 +131,7 @@ export default function FeedbackPage() {
         )}
       </Card>
 
-      <Accordion type="multiple" collapsible className="w-full space-y-4">
+      <Accordion type="multiple" className="w-full space-y-4">
         <AccordionItem value="overall-feedback" className="rounded-lg border bg-card text-card-foreground shadow-md">
           <AccordionTrigger className="p-6 hover:no-underline text-left">
             <div className="flex items-center gap-3">
@@ -180,7 +180,7 @@ export default function FeedbackPage() {
           </AccordionContent>
         </AccordionItem>
       </Accordion>
-      
+
       {feedback.detailedQuestionFeedback && feedback.detailedQuestionFeedback.length > 0 && (
         <Card className="shadow-xl mt-6">
             <CardHeader className="bg-muted/30">
@@ -191,7 +191,7 @@ export default function FeedbackPage() {
                 <CardDescription>Detailed analysis for each question you answered.</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-                <Accordion type="multiple" collapsible className="w-full">
+                <Accordion type="multiple" className="w-full">
                     {feedback.detailedQuestionFeedback.map((item, index) => (
                         <AccordionItem key={item.questionId || index} value={`q-item-${index}`} className="border-b last:border-b-0">
                              <AccordionTrigger className="p-6 hover:no-underline text-left">
@@ -228,7 +228,7 @@ export default function FeedbackPage() {
             </CardContent>
         </Card>
       )}
-        
+
       {session.transcript && (
          <Accordion type="single" collapsible className="w-full mt-6">
             <AccordionItem value="full-transcript" className="rounded-lg border bg-card text-card-foreground shadow-md">
