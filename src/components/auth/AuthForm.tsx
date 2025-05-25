@@ -32,7 +32,7 @@ export function AuthForm({ formSchema, onSubmit, type, loading }: AuthFormProps)
     defaultFormValues.confirmPassword = "";
     // Add phoneNumber to default values if it's part of the signup schema
     // This assumes the schema passed will include phoneNumber for signup type
-    if (formSchema.shape.phoneNumber) {
+    if (formSchema.shape && (formSchema.shape as any).phoneNumber) {
       defaultFormValues.phoneNumber = "";
     }
   }
@@ -99,7 +99,7 @@ export function AuthForm({ formSchema, onSubmit, type, loading }: AuthFormProps)
                       </FormItem>
                     )}
                   />
-                  {formSchema.shape.phoneNumber && ( // Conditionally render if phoneNumber is in schema
+                  {formSchema.shape && (formSchema.shape as any).phoneNumber && ( // Conditionally render if phoneNumber is in schema
                      <FormField
                         control={form.control}
                         name="phoneNumber"
