@@ -9,10 +9,11 @@ export interface UserProfile {
   education?: string;
   phoneNumber?: string | null;
   
-  resumeFileName?: string | null; 
-  resumeFileUrl?: string | null; 
-  resumeStoragePath?: string | null; 
-  resumeProcessedText?: string | null;
+  // Resume fields are removed from Firestore profile
+  // resumeFileName?: string | null; 
+  // resumeFileUrl?: string | null; 
+  // resumeStoragePath?: string | null; 
+  // resumeProcessedText?: string | null;
 
   createdAt: string;
   interviewsTaken?: number;

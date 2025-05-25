@@ -18,6 +18,8 @@ import { doc, setDoc, serverTimestamp, collection, addDoc } from "firebase/fires
 import { db } from "@/lib/firebase";
 import Link from "next/link";
 
+const LOCAL_STORAGE_RESUME_TEXT_KEY = 'tyaariResumeProcessedText';
+
 export default function StartInterviewPage() {
   const { user, userProfile, loading: authLoading, initialLoading: authInitialLoading, refreshUserProfile } = useAuth();
   const router = useRouter();
@@ -50,15 +52,15 @@ export default function StartInterviewPage() {
     toast({ title: "Preparing Interview", description: "Generating questions, please wait..." });
 
     try {
-      // Retrieve resume text from userProfile (which should be from Firestore)
-      const resumeProcessedTextFromProfile = userProfile.resumeProcessedText;
+      // Retrieve resume text from localStorage
+      const resumeProcessedTextFromLocalStorage = typeof window !== "undefined" ? localStorage.getItem(LOCAL_STORAGE_RESUME_TEXT_KEY) : null;
 
       // 1. Generate Questions
       const questionGenInput: GenerateInterviewQuestionsInput = {
         profileField: userProfile.profileField,
         role: userProfile.role,
         interviewDuration: duration,
-        resumeProcessedText: resumeProcessedTextFromProfile || undefined, 
+        resumeProcessedText: resumeProcessedTextFromLocalStorage || undefined, 
       };
       const questionGenOutput = await generateInterviewQuestions(questionGenInput);
 
@@ -79,6 +81,7 @@ export default function StartInterviewPage() {
         status: "questions_generated", 
         createdAt: new Date().toISOString(),
         questions: questionGenOutput.questions as GeneratedQuestion[], 
+        // No transcript or feedback initially
       };
       await setDoc(newInterviewRef, initialSessionData);
       
@@ -171,7 +174,7 @@ export default function StartInterviewPage() {
             <AlertTitle>Personalized Questions</AlertTitle>
             <AlertDescription>
               Interview questions will be based on your targeted role and profile field. Uploading your resume in the 
-              <Link href="/profile" className="font-semibold underline hover:text-foreground/80"> profile section</Link> can further tailor the questions to your experience, making your practice more fruitful!
+              <Link href="/profile" className="font-semibold underline hover:text-foreground/80"> profile section</Link> (it will be stored in your browser) can further tailor the questions to your experience, making your practice more fruitful!
             </AlertDescription>
           </Alert>
 

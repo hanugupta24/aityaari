@@ -2,7 +2,7 @@
 import { initializeApp, getApps, getApp, type FirebaseOptions } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage"; // Re-added storage
+// import { getStorage } from "firebase/storage"; // Storage no longer needed for resume
 
 const firebaseConfig: FirebaseOptions = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -45,6 +45,6 @@ if (!getApps().length) {
 
 const auth = getAuth(app);
 const db = getFirestore(app);
-const storage = getStorage(app); // Re-added storage
+// const storage = getStorage(app); // Storage no longer needed for resume
 
-export { app, auth, db, storage }; // Re-added storage
+export { app, auth, db }; // Removed storage from export
