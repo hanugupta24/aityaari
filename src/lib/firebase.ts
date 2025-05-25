@@ -1,8 +1,7 @@
-
 import { initializeApp, getApps, getApp, type FirebaseOptions } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
-// import { getStorage } from "firebase/storage"; // No longer storing resume files in Firebase Storage
+import { getStorage } from "firebase/storage";
 
 const firebaseConfig: FirebaseOptions = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -14,32 +13,31 @@ const firebaseConfig: FirebaseOptions = {
 };
 
 // --- BEGIN DIAGNOSTIC LOG ---
-console.log("Firebase Config being used by the app:", {
-  apiKey: firebaseConfig.apiKey ? `${firebaseConfig.apiKey.substring(0, 4)}...` : 'MISSING_OR_UNDEFINED', // Show only a snippet for security
-  authDomain: firebaseConfig.authDomain,
-  projectId: firebaseConfig.projectId,
-  storageBucket: firebaseConfig.storageBucket,
-  messagingSenderId: firebaseConfig.messagingSenderId,
-  appId: firebaseConfig.appId,
+console.log("Firebase Config Check (src/lib/firebase.ts):");
+console.log("Attempting to initialize Firebase with the following configuration:");
+console.table({
+  apiKey: firebaseConfig.apiKey ? `********${firebaseConfig.apiKey.slice(-4)}` : 'MISSING or UNDEFINED',
+  authDomain: firebaseConfig.authDomain || 'MISSING or UNDEFINED',
+  projectId: firebaseConfig.projectId || 'MISSING or UNDEFINED',
+  storageBucket: firebaseConfig.storageBucket || 'MISSING or UNDEFINED',
+  messagingSenderId: firebaseConfig.messagingSenderId || 'MISSING or UNDEFINED',
+  appId: firebaseConfig.appId || 'MISSING or UNDEFINED',
 });
 
-if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "YOUR_API_KEY_HERE_DO_NOT_COMMIT_THIS_PLACEHOLDER") {
+if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "YOUR_API_KEY_HERE_DO_NOT_COMMIT_THIS_PLACEHOLDER" || firebaseConfig.apiKey === "YOUR_API_KEY") {
   const errorMessage =
-    "CRITICAL_FIREBASE_SETUP_ERROR: Firebase API Key (NEXT_PUBLIC_FIREBASE_API_KEY) is MISSING or is still the placeholder 'YOUR_API_KEY_HERE_DO_NOT_COMMIT_THIS_PLACEHOLDER'. " +
-    "You MUST create an API key in your Google Cloud Console for the Firebase project '" + (firebaseConfig.projectId || 'UNKNOWN_PROJECT') + "', " +
-    "restrict it (HTTP referrers and API restrictions for Identity Toolkit API & Token Service API), " +
-    "and set it in your .env file. Then, restart your development server. The application WILL NOT WORK without a valid API key.";
+    "CRITICAL_FIREBASE_SETUP_ERROR: Firebase API Key (NEXT_PUBLIC_FIREBASE_API_KEY) is MISSING or is still a placeholder. " +
+    "Please ensure it is correctly set in your .env file with the value from your Firebase project settings (Project settings > General > Your apps > Web app). Then, restart your development server. The application WILL NOT WORK without a valid API key.";
   console.error(errorMessage);
-  // In a client-side environment, you might throw an error or display this to the user more visibly.
-  // For now, the console error is the primary feedback.
-  // throw new Error(errorMessage); // Optionally throw to halt execution
-}
-
-if (!firebaseConfig.projectId) {
+  // Optionally, you could throw an error here to halt execution if the key is obviously a placeholder
+  // throw new Error(errorMessage);
+} else if (!firebaseConfig.projectId) {
   console.error(
     "CRITICAL_FIREBASE_SETUP_ERROR: Firebase Project ID (NEXT_PUBLIC_FIREBASE_PROJECT_ID) is MISSING. " +
     "Please ensure it is correctly set in your .env file and the server is restarted."
   );
+} else {
+  console.log("Firebase configuration seems to have values. Attempting initialization...");
 }
 // --- END DIAGNOSTIC LOG ---
 
@@ -47,16 +45,21 @@ let app;
 if (!getApps().length) {
   try {
     app = initializeApp(firebaseConfig);
+    console.log("Firebase app initialized successfully.");
   } catch (error) {
     console.error("CRITICAL: Firebase initialization failed!", error);
-    throw error; // Re-throw to make it clear initialization failed
+    // It's crucial to see this error if initialization itself fails.
+    // This might indicate a fundamentally malformed config object,
+    // though "auth/configuration-not-found" usually means the call to Firebase services fails later.
+    throw error; 
   }
 } else {
   app = getApp();
+  console.log("Firebase app already initialized.");
 }
 
 const auth = getAuth(app);
 const db = getFirestore(app);
-// const storage = getStorage(app); // Not using Firebase Storage for resumes
+const storage = getStorage(app);
 
-export { app, auth, db };
+export { app, auth, db, storage };
