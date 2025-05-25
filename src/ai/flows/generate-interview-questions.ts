@@ -100,7 +100,7 @@ Ensure a good mix of question types within each stage. Prioritize 'resume_based'
         *   Technical/Written Stage: 1-2 'technical_written' questions (mix of 'technical', 'coding', or 'resume_based').
 
 *   **45 minutes:**
-    *   Non-technical roles: 7-8 'oral' questions (mix of 'conversational', 'behavioral', and 'resume_based' if resumeProcessedText exists).
+    *   Non-technical roles: 7-8 'oral' questions (mix of 'conversational', 'behavioral', 'resume_based' if resumeProcessedText exists).
     *   Technical roles:
         *   Oral Stage: 3-4 'oral' questions (mix of 'conversational', 'behavioral', 'resume_based' if resumeProcessedText exists).
         *   Technical/Written Stage: 2 'technical_written' questions (mix of 'technical', 'coding', or 'resume_based'). Ensure a good mix if multiple.
@@ -115,6 +115,7 @@ General Guidelines:
 
 Generate the questions array according to these guidelines. Ensure questions are challenging yet appropriate for the experience level implied by the role, field, and resume.
 If no resumeProcessedText is provided, generate questions based on role and field only.
+Ensure your entire output is a single JSON object that strictly adheres to the defined output schema.
 `,
 });
 
@@ -142,9 +143,9 @@ const generateInterviewQuestionsFlow = ai.defineFlow(
             text: 'Tell me about yourself and your experience relevant to this field.',
             stage: 'oral',
             type: 'conversational',
-        }] }; 
+        }] };
     }
-    
+
     // Ensure IDs are unique and sort questions: oral first, then technical/written.
     const sortedQuestions = output.questions
       .map((q, index) => ({
@@ -160,11 +161,12 @@ const generateInterviewQuestionsFlow = ai.defineFlow(
         if (!isNaN(idA) && !isNaN(idB)) {
             return idA - idB;
         }
-        return 0; 
+        return 0;
     });
-    
+
     return {
       questions: sortedQuestions as GeneratedQuestion[], // Cast as our type
     };
   }
 );
+
