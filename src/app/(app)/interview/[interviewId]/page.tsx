@@ -5,7 +5,7 @@ import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { db } from "@/lib/firebase";
-import { doc, getDoc, updateDoc, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, updateDoc, onSnapshot, Unsubscribe } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -61,30 +61,72 @@ export default function InterviewPage() {
 
 
   const stopMediaTracks = useCallback(() => {
+    console.log("InterviewPage: stopMediaTracks called.");
+    let tracksWereStopped = false;
     if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach(track => track.stop());
-      mediaStreamRef.current = null;
-      console.log("Media tracks stopped.");
+      console.log("InterviewPage: Found mediaStreamRef.current. Stopping its tracks.");
+      mediaStreamRef.current.getTracks().forEach(track => {
+        console.log(`InterviewPage: Stopping media track ID: ${track.id}, kind: ${track.kind}, label: '${track.label}', readyState: ${track.readyState}`);
+        if (track.readyState === 'live') {
+          track.stop();
+          console.log(`InterviewPage: Track ID: ${track.id} stopped.`);
+          tracksWereStopped = true;
+        } else {
+          console.log(`InterviewPage: Track ID: ${track.id} was already ended or not live.`);
+        }
+      });
+      mediaStreamRef.current = null; 
+      console.log("InterviewPage: mediaStreamRef.current cleared.");
+    } else {
+      console.log("InterviewPage: mediaStreamRef.current is null. No tracks from this ref to stop.");
     }
+
     if (videoRef.current && videoRef.current.srcObject) {
-      (videoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
-      videoRef.current.srcObject = null;
-      console.log("Video element srcObject tracks stopped.");
+      console.log("InterviewPage: Found videoRef.current.srcObject. Stopping its tracks.");
+      const videoStream = videoRef.current.srcObject as MediaStream;
+      videoStream.getTracks().forEach(track => {
+         console.log(`InterviewPage: Stopping videoRef track ID: ${track.id}, kind: ${track.kind}, label: '${track.label}', readyState: ${track.readyState}`);
+        if (track.readyState === 'live') {
+          track.stop();
+          console.log(`InterviewPage: videoRef track ID: ${track.id} stopped.`);
+          tracksWereStopped = true;
+        } else {
+            console.log(`InterviewPage: videoRef track ID: ${track.id} was already ended or not live.`);
+        }
+      });
+      videoRef.current.srcObject = null; 
+      console.log("InterviewPage: videoRef.current.srcObject cleared.");
+    } else {
+      console.log("InterviewPage: videoRef.current.srcObject is null. No tracks from video element to stop.");
+    }
+
+    if (tracksWereStopped) {
+      console.log("InterviewPage: Media tracks operation complete. Tracks should be stopped.");
+    } else {
+      console.log("InterviewPage: No live media tracks were found/stopped by stopMediaTracks.");
     }
   }, []);
   
   const stopSpeechRecognition = useCallback(() => {
+    console.log("InterviewPage: stopSpeechRecognition called.");
     if (recognitionRef.current) {
+      console.log("InterviewPage: Stopping existing speech recognition instance.");
       recognitionRef.current.stop(); 
     }
     setIsListening(false); 
+    console.log("InterviewPage: isListening set to false.");
   }, []);
 
   const cancelSpeechSynthesis = useCallback(() => {
+    console.log("InterviewPage: cancelSpeechSynthesis called.");
     if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
+      if(window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+        console.log("InterviewPage: Cancelling active or pending speech synthesis.");
+        window.speechSynthesis.cancel();
+      }
     }
     setIsAISpeaking(false); 
+    console.log("InterviewPage: isAISpeaking set to false.");
   }, []);
 
 
@@ -103,104 +145,149 @@ export default function InterviewPage() {
     }
   }, [toast]);
 
-
+  // Main useEffect for Firestore listener, media setup, and cleanup
   useEffect(() => {
-    if (!user || !interviewId) return;
+    console.log("InterviewPage: Main useEffect mounting/running. User:", user?.uid, "Interview ID:", interviewId);
+    if (!user || !interviewId) {
+      setIsLoading(false);
+      console.log("InterviewPage: Main useEffect - No user or interviewId. Aborting setup.");
+      return;
+    }
+
     setIsLoading(true);
     const sessionDocRef = doc(db, "users", user.uid, "interviews", interviewId);
     
-    const unsubscribe = onSnapshot(sessionDocRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data() as InterviewSession;
-        setSession(data);
-        setTranscriptLog(data.transcript ? data.transcript.split('\\n') : []);
+    let unsubscribe: Unsubscribe | null = null;
+    try {
+      unsubscribe = onSnapshot(sessionDocRef, (docSnap) => {
+        console.log("InterviewPage: Firestore onSnapshot triggered. Document exists:", docSnap.exists());
+        if (docSnap.exists()) {
+          const data = docSnap.data() as InterviewSession;
+          setSession(data);
+          setTranscriptLog(data.transcript ? data.transcript.split('\\n') : []);
 
-
-        if (data.status === "completed" || data.status === "cancelled") {
-          toast({ title: "Interview Ended", description: "This interview session is no longer active."});
-          cancelSpeechSynthesis();
-          stopMediaTracks();
-          stopSpeechRecognition();
-          router.push("/dashboard");
-          return;
-        }
-        
-        if (data.questions && data.questions.length > 0) {
-          const sortedQuestions = data.questions
-            .map(q => ({...q, answer: q.answer || ""})) // Ensure answer property exists
-            .sort((a, b) => { // Sort by oral then technical, then by ID
-                if (a.stage === 'oral' && b.stage === 'technical_written') return -1;
-                if (a.stage === 'technical_written' && b.stage === 'oral') return 1;
-                return (parseInt(a.id.substring(1)) || 0) - (parseInt(b.id.substring(1)) || 0);
-            });
+          if (data.status === "completed" || data.status === "cancelled") {
+            toast({ title: "Interview Ended", description: "This interview session is no longer active."});
+            console.log("InterviewPage: Interview status is completed/cancelled. Cleaning up and redirecting.");
+            cancelSpeechSynthesis();
+            stopSpeechRecognition();
+            stopMediaTracks();
+            router.push("/dashboard");
+            return;
+          }
           
-          setAllQuestions(sortedQuestions);
-          const firstUnansweredIndex = sortedQuestions.findIndex(q => !q.answer); // Find first question without an answer
-          setCurrentQuestionIndex(firstUnansweredIndex > -1 ? firstUnansweredIndex : (data.questions.length > 0 ? data.questions.length -1 : 0));
+          if (data.questions && data.questions.length > 0) {
+            const sortedQuestions = data.questions
+              .map(q => ({...q, answer: q.answer || ""})) 
+              .sort((a, b) => { 
+                  if (a.stage === 'oral' && b.stage === 'technical_written') return -1;
+                  if (a.stage === 'technical_written' && b.stage === 'oral') return 1;
+                  return (parseInt(a.id.substring(1)) || 0) - (parseInt(b.id.substring(1)) || 0);
+              });
+            
+            setAllQuestions(sortedQuestions);
+            const firstUnansweredIndex = sortedQuestions.findIndex(q => !q.answer); 
+            const newIndex = firstUnansweredIndex > -1 ? firstUnansweredIndex : (data.questions.length > 0 ? data.questions.length -1 : 0);
+            if (currentQuestionIndex !== newIndex) { // Only update if index changes to avoid unnecessary re-renders
+                setCurrentQuestionIndex(newIndex);
+            }
+            console.log("InterviewPage: Questions processed. Current index:", newIndex);
 
+          } else {
+            toast({ title: "Error", description: "No questions found for this session. Please start a new interview.", variant: "destructive" });
+            console.error("InterviewPage: No questions found in session data. Redirecting.");
+            cancelSpeechSynthesis();
+            stopSpeechRecognition();
+            stopMediaTracks();
+            router.push("/interview/start");
+          }
         } else {
-          toast({ title: "Error", description: "No questions found for this session. Please start a new interview.", variant: "destructive" });
+          toast({ title: "Error", description: "Interview session not found.", variant: "destructive" });
+          console.error("InterviewPage: Interview session document not found. Redirecting.");
           cancelSpeechSynthesis();
-          stopMediaTracks();
           stopSpeechRecognition();
-          router.push("/interview/start");
+          stopMediaTracks();
+          router.push("/dashboard");
         }
-      } else {
-        toast({ title: "Error", description: "Interview session not found.", variant: "destructive" });
-        cancelSpeechSynthesis();
-        stopMediaTracks();
-        stopSpeechRecognition();
-        router.push("/dashboard");
-      }
-      setIsLoading(false);
-    });
+        setIsLoading(false);
+      }, (error) => {
+        console.error("InterviewPage: Error in Firestore onSnapshot:", error);
+        toast({ title: "Firestore Error", description: "Could not listen to interview updates.", variant: "destructive" });
+        setIsLoading(false);
+      });
+    } catch (e) {
+        console.error("InterviewPage: Exception setting up Firestore listener:", e);
+        setIsLoading(false);
+    }
+
 
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       .then(stream => {
+        console.log("InterviewPage: Media stream acquired successfully.");
         mediaStreamRef.current = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
+          videoRef.current.onloadedmetadata = () => {
+            console.log("InterviewPage: Video metadata loaded, video should be playing.");
+          };
         }
       })
       .catch(err => {
-        console.error("Failed to get media stream:", err);
+        console.error("InterviewPage: Failed to get media stream:", err);
         toast({ title: "Media Error", description: "Could not access camera/microphone. Please check permissions.", variant: "destructive" });
       });
     
     return () => {
-      unsubscribe();
+      console.log("InterviewPage: Unmounting component. Running cleanup functions.");
+      if (unsubscribe) {
+        console.log("InterviewPage: Unsubscribing from Firestore snapshot listener.");
+        unsubscribe();
+      } else {
+        console.log("InterviewPage: No active Firestore subscription to unsubscribe from.");
+      }
+      console.log("InterviewPage: Calling cancelSpeechSynthesis from cleanup.");
       cancelSpeechSynthesis();
-      stopMediaTracks();
+      console.log("InterviewPage: Calling stopSpeechRecognition from cleanup.");
       stopSpeechRecognition();
+      console.log("InterviewPage: Calling stopMediaTracks from cleanup.");
+      stopMediaTracks();
+      console.log("InterviewPage: All cleanup functions called from main useEffect.");
     };
-  }, [user, interviewId, router, toast, stopMediaTracks, stopSpeechRecognition, cancelSpeechSynthesis]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, interviewId, router, toast]); // stopMediaTracks, stopSpeechRecognition, cancelSpeechSynthesis are memoized
 
   const currentQuestion = allQuestions[currentQuestionIndex];
 
-  // Effect for AI Speech Synthesis
   useEffect(() => {
     if (currentQuestion?.id !== previousQuestionIdRef.current) {
-      setHasSpokenCurrentQuestion(false); 
-      previousQuestionIdRef.current = currentQuestion?.id || null;
-      if (typeof window !== 'undefined' && window.speechSynthesis?.speaking) {
-        window.speechSynthesis.cancel(); // Cancel any ongoing speech from previous question
-        setIsAISpeaking(false);
-      }
+        console.log("InterviewPage: Question changed. Resetting hasSpokenCurrentQuestion.");
+        setHasSpokenCurrentQuestion(false);
+        previousQuestionIdRef.current = currentQuestion?.id || null;
+        if (typeof window !== 'undefined' && window.speechSynthesis?.speaking) {
+            console.log("InterviewPage: Cancelling speech from previous question.");
+            window.speechSynthesis.cancel();
+            setIsAISpeaking(false);
+        }
     }
 
     if (currentQuestion && currentQuestion.stage === 'oral' && !currentQuestion.answer && !isEndingInterview && session?.status !== 'completed' && !isListening && !hasSpokenCurrentQuestion) {
       if (typeof window !== 'undefined' && window.speechSynthesis) {
+        console.log("InterviewPage: AI attempting to speak question:", currentQuestion.text);
         const utterance = new SpeechSynthesisUtterance(currentQuestion.text);
         utterance.lang = 'en-US';
         utterance.rate = 0.9;
 
-        utterance.onstart = () => setIsAISpeaking(true);
+        utterance.onstart = () => {
+            console.log("InterviewPage: AI speech started.");
+            setIsAISpeaking(true);
+        };
         utterance.onend = () => {
+          console.log("InterviewPage: AI speech ended.");
           setIsAISpeaking(false);
           setHasSpokenCurrentQuestion(true);
         };
         utterance.onerror = (event) => {
-          console.error('SpeechSynthesis Error:', event);
+          console.error('InterviewPage: SpeechSynthesis Error:', event);
           setIsAISpeaking(false);
           setHasSpokenCurrentQuestion(true); 
           toast({ title: "AI Voice Error", description: "Could not play AI voice.", variant: "destructive" });
@@ -208,16 +295,17 @@ export default function InterviewPage() {
         
         window.speechSynthesis.speak(utterance);
       } else {
-        setIsAISpeaking(false); // Ensure state is correct if API not available
+        console.log("InterviewPage: SpeechSynthesis API not available or conditions not met for speaking.");
+        setIsAISpeaking(false);
       }
     } else if (currentQuestion?.stage !== 'oral' || currentQuestion?.answer || hasSpokenCurrentQuestion) {
-      if (window.speechSynthesis?.speaking) { // Still speaking from a previous oral question? Cancel it.
-          window.speechSynthesis.cancel();
-      }
-      setIsAISpeaking(false);
+        if (typeof window !== 'undefined' && window.speechSynthesis?.speaking) {
+            console.log("InterviewPage: Conditions for speaking not met, cancelling any ongoing speech.");
+            window.speechSynthesis.cancel();
+        }
+        setIsAISpeaking(false);
     }
-
-  }, [currentQuestion, isEndingInterview, session?.status, toast, hasSpokenCurrentQuestion]); // Removed isListening from deps
+  }, [currentQuestion, isEndingInterview, session?.status, toast, isListening, hasSpokenCurrentQuestion]);
 
 
   const handleToggleListening = useCallback(() => {
@@ -227,28 +315,33 @@ export default function InterviewPage() {
     }
 
     if (isListening) { 
+      console.log("InterviewPage: handleToggleListening - Stopping listening.");
       if (recognitionRef.current) {
         recognitionRef.current.stop();
       }
       setIsListening(false); 
     } else { 
-      if (window.speechSynthesis?.speaking) {
+      console.log("InterviewPage: handleToggleListening - Starting listening.");
+      if (typeof window !== 'undefined' && window.speechSynthesis?.speaking) {
+        console.log("InterviewPage: Cancelling AI speech before starting user listening.");
         window.speechSynthesis.cancel(); 
         setIsAISpeaking(false);
-        setHasSpokenCurrentQuestion(true); // Mark as spoken if interrupted
+        setHasSpokenCurrentQuestion(true); 
       }
 
-      setUserAnswer(''); // Clear previous answer
+      setUserAnswer(''); 
       setSpeechError(null);
 
       const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!recognitionRef.current) { 
+        console.log("InterviewPage: Initializing new SpeechRecognition instance.");
         recognitionRef.current = new SpeechRecognitionAPI();
         recognitionRef.current.continuous = true; 
         recognitionRef.current.interimResults = true; 
         recognitionRef.current.lang = 'en-US';
 
         recognitionRef.current.onstart = () => {
+          console.log("InterviewPage: Speech recognition started.");
           setIsListening(true);
           setSpeechError(null);
         };
@@ -267,7 +360,7 @@ export default function InterviewPage() {
         };
 
         recognitionRef.current.onerror = (event: any) => {
-          console.error("Speech recognition error", event.error);
+          console.error("InterviewPage: Speech recognition error", event.error);
           let errorMsg = "Speech recognition error: " + event.error;
           if (event.error === 'no-speech') errorMsg = "No speech detected. Please try again.";
           if (event.error === 'audio-capture') errorMsg = "Audio capture failed. Check microphone permissions.";
@@ -277,6 +370,7 @@ export default function InterviewPage() {
         };
 
         recognitionRef.current.onend = () => {
+          console.log("InterviewPage: Speech recognition ended.");
           setIsListening(false);
         };
       }
@@ -287,15 +381,23 @@ export default function InterviewPage() {
 
 
   const handleNextQuestion = async () => {
-    if (!user || !session || !allQuestions.length || currentQuestionIndex >= allQuestions.length) return;
+    if (!user || !session || !allQuestions.length || currentQuestionIndex >= allQuestions.length) {
+        console.warn("InterviewPage: handleNextQuestion - Preconditions not met. User, session, or questions invalid.");
+        return;
+    }
     
-    if (isListening) stopSpeechRecognition();
+    if (isListening) {
+      console.log("InterviewPage: handleNextQuestion - Stopping speech recognition first.");
+      stopSpeechRecognition();
+    }
     if (isAISpeaking) {
+       console.log("InterviewPage: handleNextQuestion - Cancelling AI speech first.");
        cancelSpeechSynthesis();
-       setHasSpokenCurrentQuestion(true); // Mark as spoken if interrupted by moving next
+       setHasSpokenCurrentQuestion(true); 
     }
 
     setIsSubmittingAnswer(true);
+    console.log("InterviewPage: handleNextQuestion - Submitting answer for question index:", currentQuestionIndex);
 
     const updatedQuestions = [...allQuestions];
     const currentQ = updatedQuestions[currentQuestionIndex];
@@ -312,24 +414,26 @@ export default function InterviewPage() {
     try {
         const sessionDocRef = doc(db, "users", user.uid, "interviews", interviewId);
         await updateDoc(sessionDocRef, {
-            questions: updatedQuestions.map(({answer, ...q}) => ({...q, answer: answer || ""})), // Save answers
+            questions: updatedQuestions.map(({answer, ...q}) => ({...q, answer: answer || ""})), 
             transcript: updatedTranscriptLogArray.join('\\n'),
             updatedAt: new Date().toISOString(),
         });
+        console.log("InterviewPage: Intermediate progress saved to Firestore.");
     } catch (error) {
-        console.error("Error saving intermediate progress:", error);
+        console.error("InterviewPage: Error saving intermediate progress:", error);
         toast({title: "Save Error", description: "Could not save current answer. Please check connection.", variant: "destructive"})
     }
 
     setUserAnswer(""); 
     setSpeechError(null);
-    setHasSpokenCurrentQuestion(false); // Reset for next question
+    setHasSpokenCurrentQuestion(false); 
     const nextQuestionIndex = currentQuestionIndex + 1;
 
     if (nextQuestionIndex < allQuestions.length) {
       setCurrentQuestionIndex(nextQuestionIndex);
+      console.log("InterviewPage: Moving to next question, index:", nextQuestionIndex);
     } else {
-      // All questions answered, automatically end interview
+      console.log("InterviewPage: All questions answered. Ending interview.");
       await handleEndInterview(updatedQuestions, updatedTranscriptLogArray.join('\\n'));
     }
     setIsSubmittingAnswer(false);
@@ -339,25 +443,29 @@ export default function InterviewPage() {
     if (!user || !interviewId || !session || !userProfile) {
       toast({ title: "Error", description: "User or session data missing.", variant: "destructive" });
       setIsEndingInterview(false); 
+      console.error("InterviewPage: handleEndInterview - User, interviewId, session, or userProfile missing.");
       return;
     }
+    console.log("InterviewPage: handleEndInterview - Starting process.");
     setIsEndingInterview(true);
     toast({ title: "Interview Complete", description: "Finalizing and analyzing your feedback..." });
 
+    console.log("InterviewPage: handleEndInterview - Calling cancelSpeechSynthesis.");
     cancelSpeechSynthesis();
+    console.log("InterviewPage: handleEndInterview - Calling stopSpeechRecognition.");
     stopSpeechRecognition();
+    console.log("InterviewPage: handleEndInterview - Calling stopMediaTracks.");
     stopMediaTracks(); 
 
     try {
       const sessionDocRef = doc(db, "users", user.uid, "interviews", interviewId);
       
-      // Ensure all question objects sent to Firestore have the 'answer' field, even if empty
       const questionsToStore = finalQuestionsData.map(q => ({
         id: q.id,
         text: q.text,
         stage: q.stage,
         type: q.type,
-        answer: q.answer || "", // Ensure answer is at least an empty string
+        answer: q.answer || "", 
       }));
 
       await updateDoc(sessionDocRef, {
@@ -366,30 +474,36 @@ export default function InterviewPage() {
         transcript: finalTranscriptString,
         updatedAt: new Date().toISOString(),
       });
+      console.log("InterviewPage: Interview session status updated to 'completed'.");
 
       const userDocRef = doc(db, "users", user.uid);
       await updateDoc(userDocRef, {
         interviewsTaken: (userProfile.interviewsTaken || 0) + 1,
-        updatedAt: new Date().toISOString(), // Also update user profile's updatedAt
+        updatedAt: new Date().toISOString(),
       });
+      console.log("InterviewPage: User interviewsTaken count updated.");
       await refreshUserProfile(); 
+      console.log("InterviewPage: User profile refreshed in context.");
       
       const feedbackInput: AnalyzeInterviewFeedbackInput = {
-        questions: questionsToStore, // Pass the structured questions with answers
+        questions: questionsToStore,
         jobDescription: userProfile.role || "General Role", 
         candidateProfile: `Field: ${userProfile.profileField}, Role: ${userProfile.role}, Education: ${userProfile.education}`,
-        interviewTranscript: finalTranscriptString, // Keep for overall context
+        interviewTranscript: finalTranscriptString, 
       };
+      console.log("InterviewPage: Generating feedback with input:", feedbackInput);
       const feedbackResult = await analyzeInterviewFeedback(feedbackInput);
+      console.log("InterviewPage: Feedback generation complete.");
       
       await updateDoc(sessionDocRef, {
         feedback: feedbackResult,
       });
+      console.log("InterviewPage: Feedback saved to Firestore.");
 
       router.push(`/feedback/${interviewId}`);
 
     } catch (error: any) {
-      console.error("Error ending interview / getting feedback:", error);
+      console.error("InterviewPage: Error ending interview / getting feedback:", error);
       toast({ title: "Error Finalizing Interview", description: error.message || "Failed to finalize interview or get feedback.", variant: "destructive" });
       setIsEndingInterview(false); 
     }
@@ -457,7 +571,7 @@ export default function InterviewPage() {
         </Card>
         <Card className="flex-grow flex flex-col shadow-lg">
           <CardHeader>
-            <CardTitle className="text-xl">Transcript</CardTitle>
+            <CardTitle className="text-xl">Transcript Log</CardTitle>
           </CardHeader>
           <CardContent className="flex-grow overflow-y-auto space-y-2 p-2 bg-muted/50 rounded-b-md">
             {transcriptLog.map((line, index) => (
@@ -488,7 +602,7 @@ export default function InterviewPage() {
                     <p className="text-md font-medium">AI is asking the question...</p>
                 </div>
             )}
-            {currentQuestion && (
+             {currentQuestion && (
                  <CardDescription className={`text-lg pt-2 whitespace-pre-wrap ${isAISpeaking && currentStage === 'oral' ? 'pb-1' : 'pb-0'}`}>{currentQuestion.text}</CardDescription>
             )}
           </CardHeader>
@@ -571,3 +685,5 @@ export default function InterviewPage() {
     </div>
   );
 }
+
+    
