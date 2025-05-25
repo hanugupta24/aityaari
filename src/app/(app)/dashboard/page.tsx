@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { PlusCircle, Loader2, AlertTriangle, ListChecks, User, DatabaseZap, ExternalLink, ShieldCheck, TrendingUp, Sparkles } from "lucide-react";
+import { PlusCircle, Loader2, AlertTriangle, ListChecks, User, DatabaseZap, ExternalLink, ShieldCheck, TrendingUp, Sparkles, CheckCircle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { InterviewSession } from "@/types";
 import { useEffect, useState, useCallback } from "react";
@@ -175,78 +175,81 @@ export default function DashboardPage() {
       </Card>
 
       {userProfile && !userProfile.isPlusSubscriber && (
-        <Card className="shadow-md">
-          <CardHeader>
-            <CardTitle className="text-xl flex items-center">
-              <TrendingUp className="mr-3 h-6 w-6 text-primary" />
-              Your Free Interview Credits
-            </CardTitle>
-            <CardDescription>Track your usage of free interview sessions.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="mb-2">You have used <span className="font-semibold">{interviewsTaken}</span> of your <span className="font-semibold">{FREE_INTERVIEW_LIMIT}</span> free interviews.</p>
-            <Progress value={(interviewsTaken / FREE_INTERVIEW_LIMIT) * 100} className="mb-2 h-3" />
-            {remainingFreeInterviews > 0 ? (
-              <p className="text-sm text-muted-foreground">You have <span className="font-semibold text-green-600 dark:text-green-400">{remainingFreeInterviews}</span> free {remainingFreeInterviews === 1 ? 'interview' : 'interviews'} remaining.</p>
-            ) : (
-              <p className="text-sm text-amber-600 dark:text-amber-400 font-medium">You've used all your free interviews. Upgrade to Plus for unlimited access!</p>
-            )}
-          </CardContent>
-          {remainingFreeInterviews <= 0 && (
-             <CardFooter>
-                <Link href="/subscription" passHref>
-                    <Button variant="default">
-                        <Sparkles className="mr-2 h-4 w-4" /> Upgrade to Plus
-                    </Button>
-                </Link>
-            </CardFooter>
-          )}
-        </Card>
-      )}
-      
-      {!userProfile?.isPlusSubscriber && (
-         <Card className="shadow-md bg-gradient-to-br from-primary/10 via-background to-background dark:from-primary/20">
+        <>
+          <Card className="shadow-md">
             <CardHeader>
-                <CardTitle className="text-xl flex items-center">
-                <ShieldCheck className="mr-3 h-6 w-6 text-primary" />
-                Unlock Your Full Potential with Plus!
-                </CardTitle>
-                <CardDescription>Go unlimited and access exclusive features to supercharge your preparation.</CardDescription>
+              <CardTitle className="text-xl flex items-center">
+                <TrendingUp className="mr-3 h-6 w-6 text-primary" />
+                Your Free Interview Credits
+              </CardTitle>
+              <CardDescription>Track your usage of free interview sessions.</CardDescription>
             </CardHeader>
             <CardContent>
-                <ul className="list-disc list-inside space-y-2 text-sm text-muted-foreground">
-                    <li><span className="font-semibold text-foreground">Unlimited</span> interview sessions.</li>
-                    <li>Access to <span className="font-semibold text-foreground">all question types</span> and difficulties.</li>
-                    <li>More <span className="font-semibold text-foreground">detailed performance analytics</span> (coming soon).</li>
-                    <li>Priority <span className="font-semibold text-foreground">AI model access</span> for faster responses.</li>
-                </ul>
+              <p className="mb-2">You have used <span className="font-semibold">{interviewsTaken}</span> of your <span className="font-semibold">{FREE_INTERVIEW_LIMIT}</span> free interviews.</p>
+              <Progress value={(interviewsTaken / FREE_INTERVIEW_LIMIT) * 100} className="mb-2 h-3" />
+              {remainingFreeInterviews > 0 ? (
+                <p className="text-sm text-muted-foreground">You have <span className="font-semibold text-green-600 dark:text-green-400">{remainingFreeInterviews}</span> free {remainingFreeInterviews === 1 ? 'interview' : 'interviews'} remaining.</p>
+              ) : (
+                <p className="text-sm text-amber-600 dark:text-amber-400 font-medium">You've used all your free interviews. Upgrade to Plus for unlimited access!</p>
+              )}
             </CardContent>
-            <CardFooter>
-                 <Link href="/subscription" passHref>
-                    <Button size="lg">
-                         <Sparkles className="mr-2 h-5 w-5" /> Upgrade to aiTyaari Plus
-                    </Button>
-                </Link>
-            </CardFooter>
-        </Card>
+            {remainingFreeInterviews <= 0 && (
+              <CardFooter>
+                  <Link href="/subscription" passHref>
+                      <Button variant="default">
+                          <Sparkles className="mr-2 h-4 w-4" /> Upgrade to Plus
+                      </Button>
+                  </Link>
+              </CardFooter>
+            )}
+          </Card>
+          
+          <Card className="shadow-md bg-gradient-to-br from-primary/10 via-background to-background dark:from-primary/20">
+              <CardHeader>
+                  <CardTitle className="text-xl flex items-center">
+                  <ShieldCheck className="mr-3 h-6 w-6 text-primary" />
+                  Unlock Your Full Potential with Plus!
+                  </CardTitle>
+                  <CardDescription>Go unlimited and access exclusive features to supercharge your preparation.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                  <ul className="list-disc list-inside space-y-2 text-sm text-muted-foreground">
+                      <li><span className="font-semibold text-foreground">Unlimited</span> interview sessions.</li>
+                      <li>Access to <span className="font-semibold text-foreground">all question types</span> and difficulties.</li>
+                      <li>More <span className="font-semibold text-foreground">detailed performance analytics</span> (coming soon).</li>
+                      <li>Priority <span className="font-semibold text-foreground">AI model access</span> for faster responses.</li>
+                  </ul>
+              </CardContent>
+              <CardFooter>
+                  <Link href="/subscription" passHref>
+                      <Button size="lg">
+                          <Sparkles className="mr-2 h-5 w-5" /> Upgrade to aiTyaari Plus
+                      </Button>
+                  </Link>
+              </CardFooter>
+          </Card>
+        </>
       )}
       
       {userProfile?.isPlusSubscriber && (
-         <Card className="shadow-md bg-gradient-to-br from-green-500/10 via-background to-background dark:from-green-600/20">
+         <Card className="shadow-md bg-gradient-to-br from-green-500/10 via-background to-background dark:from-green-600/20 border-green-500/30">
             <CardHeader>
-                <CardTitle className="text-xl flex items-center">
-                <ShieldCheck className="mr-3 h-6 w-6 text-green-600 dark:text-green-400" />
-                You are an aiTyaari Plus Member!
+                <CardTitle className="text-xl flex items-center gap-2">
+                  <CheckCircle className="mr-1 h-7 w-7 text-green-600 dark:text-green-400" />
+                  You are an aiTyaari Plus Member!
                 </CardTitle>
                 <CardDescription>Enjoy unlimited access to all features and prepare without limits.</CardDescription>
             </CardHeader>
             <CardContent>
                  <p className="text-sm text-muted-foreground">Thank you for being a Plus subscriber. You have unlimited interview sessions and access to all current and upcoming premium features.</p>
-                 {/* Optionally add a link to manage subscription if that page exists */}
-                 {/* <Link href="/manage-subscription" className="mt-2 inline-block">
-                    <Button variant="outline" size="sm">Manage Subscription</Button>
-                 </Link> */}
             </CardContent>
+            {/* Optionally add a link to manage subscription if that page exists 
+            <CardFooter>
+                 <Link href="/manage-subscription" passHref>
+                    <Button variant="outline" size="sm">Manage Subscription</Button>
+                 </Link>
+            </CardFooter>
+            */}
         </Card>
       )}
 
@@ -293,7 +296,7 @@ export default function DashboardPage() {
                     <p className="text-sm text-muted-foreground">
                       Feedback: {(session.feedback?.overallFeedback?.substring(0, 100) || "Feedback pending...") + (session.feedback?.overallFeedback && session.feedback.overallFeedback.length > 100 ? "..." : "")}
                     </p>
-                     {session.feedback?.overallScore !== undefined && (
+                     {session.feedback?.overallScore !== undefined && session.feedback.overallScore !== null && (
                         <p className="text-sm font-semibold mt-1">Score: {session.feedback.overallScore}/100</p>
                      )}
                   </CardContent>
@@ -313,6 +316,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-
-      

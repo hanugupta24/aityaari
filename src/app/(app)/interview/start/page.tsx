@@ -19,6 +19,7 @@ import { db } from "@/lib/firebase";
 import Link from "next/link";
 
 const LOCAL_STORAGE_RESUME_TEXT_KEY = 'tyaariResumeProcessedText';
+const FREE_INTERVIEW_LIMIT = 3;
 
 export default function StartInterviewPage() {
   const { user, userProfile, loading: authLoading, initialLoading: authInitialLoading, refreshUserProfile } = useAuth();
@@ -110,6 +111,7 @@ export default function StartInterviewPage() {
 
   useEffect(() => {
     if (!authInitialLoading && user && !userProfile && !authLoading) { 
+        console.log("StartInterviewPage: Auth checked, user exists, but no profile. Forcing refresh.");
         refreshUserProfile(); 
     }
   }, [authInitialLoading, user, userProfile, authLoading, refreshUserProfile]);
@@ -117,7 +119,9 @@ export default function StartInterviewPage() {
 
   const isProfileEssentialDataMissing = userProfile && (!userProfile.role || !userProfile.profileField);
   const isProfileNotLoadedAndAuthChecked = !authInitialLoading && user && !userProfile && !authLoading;
-  const interviewLimitReached = userProfile && (userProfile.interviewsTaken || 0) >= 3 && !userProfile.isPlusSubscriber;
+  
+  // Interview limit check
+  const interviewLimitReached = userProfile && !userProfile.isPlusSubscriber && (userProfile.interviewsTaken || 0) >= FREE_INTERVIEW_LIMIT;
 
   const isButtonDisabled = 
     authLoading || 
@@ -125,10 +129,13 @@ export default function StartInterviewPage() {
     isStartingSession || 
     !permissionsGranted || 
     !agreedToMonitoring ||
-    isProfileNotLoadedAndAuthChecked || 
-    !userProfile || 
+    !userProfile || // Ensure profile is loaded
+    isProfileNotLoadedAndAuthChecked || // Explicitly handle this edge case
     isProfileEssentialDataMissing || 
     interviewLimitReached;
+  
+  const isLoadingState = authInitialLoading || (authLoading && !userProfile);
+
 
   return (
     <div className="max-w-2xl mx-auto space-y-8 py-8">
@@ -138,14 +145,14 @@ export default function StartInterviewPage() {
           <CardDescription>Choose your preferred interview duration and prepare for a focused session.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {(authInitialLoading || (authLoading && !userProfile)) && (
+          {isLoadingState && (
             <div className="flex items-center justify-center p-4">
               <Loader2 className="h-6 w-6 animate-spin mr-2" />
               <p>Loading your information...</p>
             </div>
           )}
           
-          {isProfileNotLoadedAndAuthChecked && !authInitialLoading && !authLoading && (
+          {!isLoadingState && isProfileNotLoadedAndAuthChecked && (
              <Alert variant="destructive">
               <UserX className="h-4 w-4" />
               <AlertTitle>Profile Not Loaded</AlertTitle>
@@ -158,7 +165,7 @@ export default function StartInterviewPage() {
             </Alert>
           )}
 
-          {userProfile && isProfileEssentialDataMissing && !authInitialLoading && !authLoading && (
+          {!isLoadingState && userProfile && isProfileEssentialDataMissing && (
             <Alert variant="default" className="border-yellow-500 text-yellow-700 dark:border-yellow-400 dark:text-yellow-300">
               <Info className="h-4 w-4 !text-yellow-500 dark:!text-yellow-400" />
               <AlertTitle className="text-yellow-700 dark:text-yellow-300">Profile Incomplete</AlertTitle>
@@ -184,7 +191,7 @@ export default function StartInterviewPage() {
             <RadioGroup defaultValue="30" onValueChange={(value: "15" | "30" | "45") => setDuration(value)} className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
               {["15", "30", "45"].map((d) => (
                 <div key={d} className="flex items-center space-x-2">
-                  <RadioGroupItem value={d} id={`duration-${d}`} />
+                  <RadioGroupItem value={d} id={`duration-${d}`} disabled={isStartingSession || isLoadingState}/>
                   <Label htmlFor={`duration-${d}`} className="cursor-pointer">{d} minutes</Label>
                 </div>
               ))}
@@ -215,12 +222,12 @@ export default function StartInterviewPage() {
                 <p className="text-xs text-muted-foreground">Required for video and oral answers.</p>
               </div>
               {!permissionsGranted && (
-                <Button variant="outline" size="sm" onClick={requestPermissions} disabled={authLoading || authInitialLoading || isStartingSession}>Grant Access</Button>
+                <Button variant="outline" size="sm" onClick={requestPermissions} disabled={isStartingSession || isLoadingState}>Grant Access</Button>
               )}
             </div>
 
             <div className="items-top flex space-x-2 p-3 border rounded-md">
-              <Checkbox id="terms" checked={agreedToMonitoring} onCheckedChange={(checked) => setAgreedToMonitoring(!!checked)} />
+              <Checkbox id="terms" checked={agreedToMonitoring} onCheckedChange={(checked) => setAgreedToMonitoring(!!checked)} disabled={isStartingSession || isLoadingState} />
               <div className="grid gap-1.5 leading-none">
                 <Label htmlFor="terms" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                   I agree to the interview monitoring terms and conditions.
@@ -231,12 +238,12 @@ export default function StartInterviewPage() {
               </div>
             </div>
           </div>
-           {userProfile && interviewLimitReached && (
+           {!isLoadingState && userProfile && interviewLimitReached && (
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
               <AlertTitle>Free Interview Limit Reached</AlertTitle>
               <AlertDescription>
-                You have used all {userProfile.interviewsTaken || 0} free interviews. Please <Button variant="link" className="p-0 h-auto text-destructive-foreground underline" onClick={() => router.push('/subscription')}>upgrade to Plus</Button> for unlimited interviews.
+                You have used all {userProfile.interviewsTaken || 0} of your {FREE_INTERVIEW_LIMIT} free interviews. Please <Button variant="link" className="p-0 h-auto text-destructive-foreground underline hover:text-destructive-foreground/80" onClick={() => router.push('/subscription')}>upgrade to Plus</Button> for unlimited interviews.
               </AlertDescription>
             </Alert>
           )}
@@ -249,8 +256,8 @@ export default function StartInterviewPage() {
             disabled={isButtonDisabled}
             aria-label={`Start ${duration}-Minute Interview ${isButtonDisabled ? '(Disabled)' : ''}`}
           >
-            {(isStartingSession || authLoading || authInitialLoading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {authLoading || authInitialLoading ? 'Loading Profile...' : (isStartingSession ? 'Starting Session...' : `Start ${duration}-Minute Interview`)}
+            {(isStartingSession || isLoadingState) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isLoadingState ? 'Loading Profile...' : (isStartingSession ? 'Starting Session...' : `Start ${duration}-Minute Interview`)}
           </Button>
         </CardFooter>
       </Card>
