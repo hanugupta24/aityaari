@@ -7,13 +7,14 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { BarChart as BarChartIcon, Users, DollarSign, Activity, CreditCard, Loader2, AlertTriangle, TrendingUp, Package, CalendarDays, CalendarRange, Calendar } from "lucide-react";
+import { BarChart as BarChartIcon, Users, DollarSign, TrendingUp, CreditCard, Loader2, AlertTriangle, CalendarDays, CalendarRange, Calendar } from "lucide-react";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts"; // Removed ResponsiveContainer for now as ChartContainer handles it
 import { db } from "@/lib/firebase";
 import { collection, getDocs } from "firebase/firestore";
 import type { UserProfile } from "@/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { format, subDays, startOfDay } from 'date-fns';
 
 // Plan prices
 const PLAN_PRICES = {
@@ -22,15 +23,8 @@ const PLAN_PRICES = {
   yearly: 99.99,
 };
 
-// Mock data for sales chart (remains mock)
-const mockSalesData = [
-  { date: "2024-07-01", sales: 150 }, { date: "2024-07-02", sales: 200 }, { date: "2024-07-03", sales: 120 },
-  { date: "2024-07-04", sales: 250 }, { date: "2024-07-05", sales: 180 }, { date: "2024-07-06", sales: 300 },
-  { date: "2024-07-07", sales: 220 },
-];
-
 const chartConfig = {
-  sales: { label: "Sales ($)", color: "hsl(var(--primary))" },
+  newSubscriptions: { label: "New Plus Subscriptions", color: "hsl(var(--primary))" },
 } satisfies Record<string, any>;
 
 
@@ -39,6 +33,7 @@ export default function AdminPage() {
   const router = useRouter();
 
   const [allUsersData, setAllUsersData] = useState<UserProfile[]>([]);
+  const [dailySubscriptionData, setDailySubscriptionData] = useState<Array<{ date: string; newSubscriptions: number }>>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
@@ -61,6 +56,7 @@ export default function AdminPage() {
             usersList.push({ uid: doc.id, ...doc.data() } as UserProfile);
           });
           setAllUsersData(usersList);
+          processSubscriptionData(usersList);
         } catch (error: any) {
           console.error("Error fetching all users:", error);
           setFetchError(error.message || "Failed to fetch user data. Check Firestore rules and connectivity.");
@@ -72,6 +68,43 @@ export default function AdminPage() {
     }
   }, [isAdmin]);
 
+  const processSubscriptionData = (users: UserProfile[]) => {
+    const today = startOfDay(new Date());
+    const last7DaysData: Array<{ date: string; newSubscriptions: number }> = [];
+    const dailyCounts: Record<string, number> = {};
+
+    for (let i = 6; i >= 0; i--) {
+      const date = subDays(today, i);
+      const formattedDate = format(date, "yyyy-MM-dd");
+      dailyCounts[formattedDate] = 0;
+    }
+
+    users.forEach(u => {
+      if (u.isPlusSubscriber && u.updatedAt) {
+        try {
+          const updatedAtDate = startOfDay(new Date(u.updatedAt));
+          const formattedUpdatedAt = format(updatedAtDate, "yyyy-MM-dd");
+          if (dailyCounts.hasOwnProperty(formattedUpdatedAt)) {
+            dailyCounts[formattedUpdatedAt]++;
+          }
+        } catch (e) {
+          console.warn("Could not parse updatedAt date for user:", u.uid, u.updatedAt);
+        }
+      }
+    });
+
+    for (let i = 6; i >= 0; i--) {
+      const date = subDays(today, i);
+      const formattedDate = format(date, "yyyy-MM-dd");
+      last7DaysData.push({
+        date: formattedDate,
+        newSubscriptions: dailyCounts[formattedDate] || 0,
+      });
+    }
+    setDailySubscriptionData(last7DaysData);
+  };
+
+
   if (authInitialLoading || (!isAdmin && !authInitialLoading)) {
     return <div className="flex justify-center items-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   }
@@ -80,7 +113,6 @@ export default function AdminPage() {
      return <div className="flex justify-center items-center h-screen"><p>Access Denied</p></div>;
   }
 
-  // Calculate dynamic statistics
   const totalUsers = allUsersData.length;
   const plusSubscribers = allUsersData.filter(u => u.isPlusSubscriber);
   const totalPlusSubscriptions = plusSubscribers.length;
@@ -88,7 +120,7 @@ export default function AdminPage() {
   const monthlySubscribers = plusSubscribers.filter(u => u.subscriptionPlan === 'monthly').length;
   const quarterlySubscribers = plusSubscribers.filter(u => u.subscriptionPlan === 'quarterly').length;
   const yearlySubscribers = plusSubscribers.filter(u => u.subscriptionPlan === 'yearly').length;
-  const unknownPlanSubscribers = plusSubscribers.filter(u => !u.subscriptionPlan).length;
+  const unknownPlanSubscribers = plusSubscribers.filter(u => u.isPlusSubscriber && !u.subscriptionPlan).length;
 
 
   let estimatedMonthlyRevenue = 0;
@@ -100,14 +132,13 @@ export default function AdminPage() {
     } else if (u.subscriptionPlan === 'yearly') {
       estimatedMonthlyRevenue += PLAN_PRICES.yearly / 12;
     } else {
-      // Fallback for Plus subscribers with no plan specified (e.g., older data)
+      // Fallback for Plus subscribers with no plan specified
       estimatedMonthlyRevenue += PLAN_PRICES.monthly; 
     }
   });
 
-
-  const today = new Date();
-  const twentyFourHoursAgo = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+  const todayDate = new Date();
+  const twentyFourHoursAgo = new Date(todayDate.getTime() - 24 * 60 * 60 * 1000);
   const plusSubscriptionsToday = allUsersData.filter(u => 
     u.isPlusSubscriber && 
     u.updatedAt && 
@@ -115,7 +146,6 @@ export default function AdminPage() {
   ).length;
 
   const totalInterviewsTaken = allUsersData.reduce((sum, u) => sum + (u.interviewsTaken || 0), 0);
-
 
   return (
     <div className="space-y-6">
@@ -160,12 +190,12 @@ export default function AdminPage() {
             </Card>
              <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Plus Signups Today</CardTitle>
+                <CardTitle className="text-sm font-medium">Plus Signups (Last 24h)</CardTitle>
                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{plusSubscriptionsToday}</div>
-                <p className="text-xs text-muted-foreground">(Estimated based on profile update)</p>
+                <p className="text-xs text-muted-foreground">(Based on profile update)</p>
               </CardContent>
             </Card>
             <Card>
@@ -227,25 +257,50 @@ export default function AdminPage() {
             </CardContent>
           </Card>
 
-
           <Card>
             <CardHeader>
-              <CardTitle>Daily Plus Subscription Sales (Mock Data)</CardTitle>
+              <CardTitle>Daily New Plus Subscriptions (Last 7 Days)</CardTitle>
               <CardDescription>
-                Sales trends for the last 7 days. This chart currently uses mock data.
-                Dynamic daily sales tracking requires a dedicated subscription event data model.
+                Count of new Plus subscriptions based on recent profile updates.
+                This is an estimation and may not reflect exact sales dates.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <ChartContainer config={chartConfig} className="h-[300px] w-full">
-                <LineChart data={mockSalesData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} />
-                  <YAxis tickLine={false} axisLine={false} tickMargin={8} />
-                  <ChartTooltip content={<ChartTooltipContent indicator="line" />} />
-                  <ChartLegend content={<ChartLegendContent />} />
-                  <Line type="monotone" dataKey="sales" stroke="var(--color-sales)" strokeWidth={2} dot={false} />
-                </LineChart>
+                {dailySubscriptionData.length > 0 ? (
+                  <LineChart data={dailySubscriptionData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis 
+                      dataKey="date" 
+                      tickLine={false} 
+                      axisLine={false} 
+                      tickMargin={8} 
+                      tickFormatter={(value) => format(new Date(value), 'MMM d')} 
+                    />
+                    <YAxis tickLine={false} axisLine={false} tickMargin={8} allowDecimals={false} />
+                    <ChartTooltip 
+                      content={<ChartTooltipContent indicator="line" labelFormatter={(label, payload) => {
+                        if (payload && payload.length) {
+                          return format(new Date(payload[0].payload.date), "MMMM d, yyyy");
+                        }
+                        return label;
+                      }}/>} 
+                    />
+                    <ChartLegend content={<ChartLegendContent />} />
+                    <Line 
+                      type="monotone" 
+                      dataKey="newSubscriptions" 
+                      stroke="var(--color-newSubscriptions)" 
+                      strokeWidth={2} 
+                      dot={{ r: 4, fill: "var(--color-newSubscriptions)", stroke: "var(--background)" }} 
+                      activeDot={{r: 6}}
+                    />
+                  </LineChart>
+                ) : (
+                  <div className="flex items-center justify-center h-full">
+                    <p className="text-muted-foreground">No subscription data available for the last 7 days.</p>
+                  </div>
+                )}
               </ChartContainer>
             </CardContent>
           </Card>
@@ -279,7 +334,7 @@ export default function AdminPage() {
                             : "Free"}
                         </Badge>
                       </TableCell>
-                      <TableCell>{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "N/A"}</TableCell>
+                      <TableCell>{u.createdAt ? format(new Date(u.createdAt), "P") : "N/A"}</TableCell>
                       <TableCell className="text-right">{u.interviewsTaken || 0}</TableCell>
                       <TableCell>
                         <Badge variant={u.isAdmin ? "destructive" : "outline"}>
@@ -300,4 +355,3 @@ export default function AdminPage() {
     </div>
   );
 }
-
