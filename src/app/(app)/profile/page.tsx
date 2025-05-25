@@ -26,16 +26,17 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, FileText, UploadCloud, XCircle, DownloadCloud } from "lucide-react";
 import type { UserProfile } from "@/types";
 
-// Schema now reflects that resume data is handled client-side via localStorage
-// and not part of the Firestore submission for the core profile.
+
 const profileFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }).max(50),
-  email: z.string().email({ message: "Please enter a valid email."}).optional(), // Display only, not for submission
+  // Email is optional in the schema if it can be null (for phone-only signups)
+  email: z.string().email({ message: "Please enter a valid email."}).optional().nullable().or(z.literal('')),
   profileField: z.string().min(2, { message: "Profile field is required." }).max(100),
   role: z.string().min(2, { message: "Current role is required." }).max(100),
   company: z.string().max(100).optional().nullable(),
   education: z.string().min(2, { message: "Education details are required." }).max(200),
-  phoneNumber: z.string().max(20).optional().nullable(),
+  // Phone number is submitted with the form, can be empty or have a value
+  phoneNumber: z.string().max(20).optional().nullable().or(z.literal('')),
 });
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
@@ -60,9 +61,8 @@ export default function ProfilePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFetchingProfile, setIsFetchingProfile] = useState(true);
 
-  // State for client-side resume handling (localStorage)
   const [displayedFileName, setDisplayedFileName] = useState<string | null>(null);
-  const [clientSideResumeText, setClientSideResumeText] = useState<string | null>(null);
+  const [clientSideResumeText, setClientSideResumeText] = useState<string | null>(null); // Holds text from localStorage or current upload for AI
   const [isReadingFile, setIsReadingFile] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -71,16 +71,15 @@ export default function ProfilePage() {
     resolver: zodResolver(profileFormSchema),
     defaultValues: {
       name: "",
-      email: "", // Will be populated from user.email and be read-only
+      email: "", // Will be populated from user.email (if exists) and be read-only
       profileField: "",
       role: "",
       company: null,
       education: "",
-      phoneNumber: null,
+      phoneNumber: "", // Updated from user.phoneNumber or editable
     },
   });
 
-  // Load resume info from localStorage on mount
   useEffect(() => {
     console.log("ProfilePage: Attempting to load resume info from localStorage.");
     if (typeof window !== "undefined") {
@@ -88,11 +87,9 @@ export default function ProfilePage() {
       const storedResumeText = localStorage.getItem(LOCAL_STORAGE_RESUME_TEXT_KEY);
       if (storedFileName) {
         setDisplayedFileName(storedFileName);
-        console.log("ProfilePage: Loaded fileName from localStorage:", storedFileName);
       }
       if (storedResumeText) {
         setClientSideResumeText(storedResumeText);
-        console.log("ProfilePage: Loaded resumeText from localStorage, length:", storedResumeText.length);
       }
     }
   }, []);
@@ -100,25 +97,29 @@ export default function ProfilePage() {
   useEffect(() => {
     console.log("ProfilePage: useEffect for userProfile/user triggered. AuthLoading:", authLoading, "InitialLoading:", initialLoading, "User:", !!user, "UserProfile:", !!userProfile);
     if (!initialLoading && !authLoading && user) {
-      form.setValue("email", user.email || ""); // Set read-only email from auth user
+      // Email is from Firebase Auth user object and is read-only for display
+      // Phone number can be from Firebase Auth (if phone signup) or from Firestore profile
+      const initialEmail = user.email || ""; // Firebase Auth email can be null
+      const initialPhoneNumber = user.phoneNumber || userProfile?.phoneNumber || "";
+
       if (userProfile) {
         console.log("ProfilePage: User profile found, resetting form with profile data.", userProfile);
         form.reset({
-          name: userProfile.name || "",
-          email: user.email || "", // Ensure auth email is used
+          name: userProfile.name || user.displayName || "",
+          email: initialEmail, // Display user.email, make it read-only if it's the primary auth
           profileField: userProfile.profileField || "",
           role: userProfile.role || "",
           company: userProfile.company || null,
           education: userProfile.education || "",
-          phoneNumber: userProfile.phoneNumber || null,
+          phoneNumber: initialPhoneNumber,
         });
       } else {
-        // User exists, but no profile yet (e.g., fresh signup redirected here)
-        console.log("ProfilePage: User authenticated, but no Firestore profile yet. Resetting to defaults, keeping email.");
+        console.log("ProfilePage: User authenticated, but no Firestore profile yet. Resetting to defaults.");
         form.reset({
           ...form.formState.defaultValues,
-          email: user.email || "", // Keep auth email
-          name: user.displayName || "", // Pre-fill name from auth if available
+          name: user.displayName || "",
+          email: initialEmail,
+          phoneNumber: initialPhoneNumber,
         });
       }
       setIsFetchingProfile(false);
@@ -130,94 +131,68 @@ export default function ProfilePage() {
   }, [user, userProfile, form, authLoading, initialLoading]);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    console.log("ProfilePage: handleFileChange triggered.");
     const file = event.target.files?.[0];
+    if (fileInputRef.current) fileInputRef.current.value = ""; // Allow re-selecting same file
+
+    if (!file) { // User cancelled file selection
+        console.log("ProfilePage: File selection cancelled.");
+        // Do not clear existing loaded/saved resume from localStorage or state here
+        return;
+    }
     
-    // Always reset the file input value to allow re-selecting the same file
-    if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-    }
-
-    if (!file) {
-      console.log("ProfilePage: File selection cancelled or no file selected. Not altering localStorage.");
-      return; // User cancelled, don't clear localStorage or current display
-    }
-
-    console.log("ProfilePage: New file selected:", file.name, "Size:", file.size, "Type:", file.type);
+    console.log("ProfilePage: New file selected:", file.name);
     setIsReadingFile(true);
-    // Clear previous display for the new file while it's being processed
-    setDisplayedFileName(file.name); // Tentatively set name
-    setClientSideResumeText(null);  // Clear old text
+    // Immediately clear previous local states for the new file
+    setDisplayedFileName(null); 
+    setClientSideResumeText(null);
 
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-      toast({
-        title: "File Too Large",
-        description: `Please upload a file smaller than ${MAX_FILE_SIZE_MB}MB. Your file is ${(file.size / (1024 * 1024)).toFixed(2)}MB.`,
-        variant: "destructive",
-      });
-      // Revert display to what's in localStorage, as this upload failed
+      toast({title: "File Too Large", description: `Max ${MAX_FILE_SIZE_MB}MB.`, variant: "destructive"});
+      // Revert display to what's in localStorage if any
       setDisplayedFileName(localStorage.getItem(LOCAL_STORAGE_RESUME_FILENAME_KEY));
       setClientSideResumeText(localStorage.getItem(LOCAL_STORAGE_RESUME_TEXT_KEY));
       setIsReadingFile(false);
-      console.log("ProfilePage: File too large. UI reverted to localStorage state.");
       return;
     }
-
     if (!ACCEPTED_MIME_TYPES.includes(file.type) && !ACCEPT_FILE_EXTENSIONS.split(',').some(ext => file.name.toLowerCase().endsWith(ext))) {
-      toast({
-        title: "Unsupported File Type",
-        description: `Please upload a supported file type (${ACCEPT_FILE_EXTENSIONS}). You uploaded: ${file.name} (type: ${file.type || 'unknown'}). Plain text versions (.txt, .md) are best for AI.`,
-        variant: "destructive",
-      });
+      toast({ title: "Unsupported File Type", description: `Please use ${ACCEPT_FILE_EXTENSIONS}. Plain text (.txt, .md) is best for AI.`, variant: "destructive" });
       setDisplayedFileName(localStorage.getItem(LOCAL_STORAGE_RESUME_FILENAME_KEY));
       setClientSideResumeText(localStorage.getItem(LOCAL_STORAGE_RESUME_TEXT_KEY));
       setIsReadingFile(false);
-      console.log("ProfilePage: Unsupported file type. UI reverted.");
       return;
     }
-    
     if (['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.type)) {
-      toast({
-        title: "File Type Notice",
-        description: `Attempting to extract text from ${file.name}. For PDF/Word documents, text extraction might be incomplete. A plain text (.txt, .md) version is recommended for AI processing.`,
-        duration: 8000,
-      });
+      toast({ title: "File Type Notice", description: `Attempting to extract text. For PDF/Word, text extraction might be incomplete. A plain text version is recommended.`, duration: 7000 });
     }
 
     const reader = new FileReader();
     reader.onload = (e) => {
       const text = e.target?.result as string;
-      setClientSideResumeText(text);
-      setDisplayedFileName(file.name); // Confirm display name
       localStorage.setItem(LOCAL_STORAGE_RESUME_TEXT_KEY, text);
       localStorage.setItem(LOCAL_STORAGE_RESUME_FILENAME_KEY, file.name);
-      toast({ title: "Resume Processed for AI", description: `Text from ${file.name} has been extracted and stored in this browser. It will be used if you start an interview.` });
+      setClientSideResumeText(text); // For AI use
+      setDisplayedFileName(file.name); // For UI
+      toast({ title: "Resume Processed for AI", description: `Text from ${file.name} stored in browser.` });
       setIsReadingFile(false);
-      console.log("ProfilePage: File read successfully. Text stored in localStorage. Length:", text?.length);
     };
     reader.onerror = (errorEvent) => {
       console.error("ProfilePage: Error reading file:", errorEvent);
-      toast({ title: "File Read Error", description: "Could not read the resume file content.", variant: "destructive" });
-      // Revert display to localStorage state on error
+      toast({ title: "File Read Error", description: "Could not read resume content.", variant: "destructive" });
       setDisplayedFileName(localStorage.getItem(LOCAL_STORAGE_RESUME_FILENAME_KEY));
       setClientSideResumeText(localStorage.getItem(LOCAL_STORAGE_RESUME_TEXT_KEY));
       setIsReadingFile(false);
-      console.log("ProfilePage: File read error. UI reverted.");
     };
     reader.readAsText(file);
   };
 
-  const clearResume = async () => {
+  const clearResume = () => {
     console.log("ProfilePage: clearResume initiated for localStorage.");
     localStorage.removeItem(LOCAL_STORAGE_RESUME_FILENAME_KEY);
     localStorage.removeItem(LOCAL_STORAGE_RESUME_TEXT_KEY);
     setDisplayedFileName(null);
     setClientSideResumeText(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-    toast({ title: "Resume Cleared", description: "Resume information has been removed from this browser session." });
-    console.log("ProfilePage: Resume cleared from localStorage and UI.");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    toast({ title: "Resume Cleared", description: "Resume removed from browser storage." });
   };
 
   const onSubmit = async (values: ProfileFormValues) => {
@@ -225,38 +200,35 @@ export default function ProfilePage() {
       toast({ title: "Error", description: "You must be logged in.", variant: "destructive" });
       return;
     }
-    // The email from the form (`values.email`) is just for display consistency if needed;
-    // the actual email for the UserProfile object should come from `user.email`.
-    console.log("ProfilePage: onSubmit triggered. Form Values (excluding resume):", JSON.stringify(values, null, 2));
-    
+    console.log("ProfilePage: onSubmit triggered. Form Values:", JSON.stringify(values, null, 2));
     setIsSubmitting(true);
 
     try {
-      console.log("ProfilePage: Starting profile update process (resume handled by localStorage).");
-      
       const profileDataToSave: UserProfile = {
         uid: user.uid,
-        email: user.email, // Crucially use the authenticated user's email
+        // Email in Firestore profile can be different from auth email if user changes it here,
+        // but primary login email is user.email from auth.
+        // If user signed up with phone, user.email might be null. In that case, values.email is what they entered.
+        email: values.email || user.email || null, 
         name: values.name,
         profileField: values.profileField,
         role: values.role,
         company: values.company || null,
         education: values.education,
-        phoneNumber: values.phoneNumber || null,
-        // Resume fields are NOT saved to Firestore in this version
+        phoneNumber: values.phoneNumber || user.phoneNumber || null, // Prioritize form input, then auth phone
         createdAt: userProfile?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         interviewsTaken: userProfile?.interviewsTaken || 0,
         isPlusSubscriber: userProfile?.isPlusSubscriber || false,
         subscriptionPlan: userProfile?.subscriptionPlan || null,
         isAdmin: userProfile?.isAdmin || false,
+        // No resume fields saved to Firestore
       };
       
-      console.log("ProfilePage: FINAL data to save to Firestore (NO RESUME DATA):", JSON.stringify(profileDataToSave, null, 2));
+      console.log("ProfilePage: FINAL data to save to Firestore:", JSON.stringify(profileDataToSave, null, 2));
       const userDocRef = doc(db, "users", user.uid);
-      await setDoc(userDocRef, profileDataToSave, { merge: true }); // merge:true is good practice
+      await setDoc(userDocRef, profileDataToSave, { merge: true });
       console.log("ProfilePage: Profile data successfully saved to Firestore.");
-
       toast({ title: "Profile Updated", description: "Your profile has been successfully updated." });
       
       refreshUserProfile().then(() => {
@@ -270,18 +242,16 @@ export default function ProfilePage() {
       const description = error.code ? `${error.message} (Code: ${error.code})` : error.message || "Could not update profile.";
       toast({ title: "Update Failed", description: description, variant: "destructive" });
     } finally {
-      console.log("ProfilePage: onSubmit - Reached finally block. Preparing to set isSubmitting to false.");
       setIsSubmitting(false);
-      console.log("ProfilePage: onSubmit - isSubmitting has been set to false.");
     }
   };
 
   const canSubmit = !isSubmitting && !authLoading && !isReadingFile && !isFetchingProfile;
+  const isEmailFromAuthProvider = !!user?.email; // Check if email comes from Firebase Auth (not null)
 
   if (isFetchingProfile || initialLoading || (authLoading && !userProfile && !initialLoading) ) {
      return <div className="flex justify-center items-center h-[calc(100vh-var(--header-height,4rem)-2rem)]"><Loader2 className="h-12 w-12 animate-spin text-primary" /> <p className="ml-3">Loading profile...</p></div>;
   }
-
 
   return (
     <Card className="max-w-2xl mx-auto shadow-lg">
@@ -297,11 +267,21 @@ export default function ProfilePage() {
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email (Login ID)</FormLabel>
+                    <FormLabel>{isEmailFromAuthProvider ? "Email (Login ID)" : "Email (Optional, add to link account)"}</FormLabel>
                     <FormControl>
-                      <Input placeholder="your-login-email@example.com" {...field} readOnly className="bg-muted/50 cursor-not-allowed" />
+                      <Input 
+                        placeholder={isEmailFromAuthProvider ? "your-login-email@example.com" : "you@example.com"} 
+                        {...field} 
+                        value={field.value ?? ""}
+                        readOnly={isEmailFromAuthProvider} // Read-only if it's the primary auth email
+                        className={isEmailFromAuthProvider ? "bg-muted/50 cursor-not-allowed" : ""}
+                      />
                     </FormControl>
-                    <FormDescription>Your login email cannot be changed here.</FormDescription>
+                    <FormDescription>
+                      {isEmailFromAuthProvider 
+                        ? "Your login email cannot be changed here." 
+                        : "Add an email to your account. This will not change your phone login method."}
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -316,11 +296,22 @@ export default function ProfilePage() {
                 name="phoneNumber"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Phone Number (Optional)</FormLabel>
+                    <FormLabel>Phone Number {user?.phoneNumber ? "(Login ID)" : "(Optional)"}</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., +1 555-123-4567 or 0123456789" {...field} value={field.value ?? ""} type="tel" />
+                      <Input 
+                        placeholder="e.g., +15551234567" 
+                        {...field} 
+                        value={field.value ?? ""} 
+                        type="tel"
+                        readOnly={!!user?.phoneNumber} // Read-only if it's the primary auth phone
+                        className={!!user?.phoneNumber ? "bg-muted/50 cursor-not-allowed" : ""}
+                      />
                     </FormControl>
-                    <FormDescription>Your contact phone number.</FormDescription>
+                    <FormDescription>
+                      {user?.phoneNumber 
+                        ? "Your login phone number cannot be changed here." 
+                        : "Your contact phone number."}
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -335,20 +326,15 @@ export default function ProfilePage() {
                     ref={fileInputRef}
                     accept={ACCEPT_FILE_EXTENSIONS}
                     onChange={handleFileChange}
-                    className="block w-full text-sm text-slate-500 dark:text-slate-400
-                      file:mr-4 file:py-2 file:px-4
-                      file:rounded-full file:border-0
-                      file:text-sm file:font-semibold
-                      file:bg-primary/10 file:text-primary
-                      hover:file:bg-primary/20"
+                    className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
                     disabled={isReadingFile || isSubmitting}
                   />
                 </FormControl>
                 {isReadingFile && <Loader2 className="h-5 w-5 animate-spin" />}
               </div>
               <FormDescription>
-                Upload your resume ({ACCEPT_FILE_EXTENSIONS}, max {MAX_FILE_SIZE_MB}MB). Text will be extracted for AI question generation and stored locally in your browser.
-                Plain text versions (.txt, .md) are best for AI processing. PDF/Word text extraction may be incomplete.
+                Upload your resume ({ACCEPT_FILE_EXTENSIONS}, max {MAX_FILE_SIZE_MB}MB). Text stored locally in browser for AI.
+                Plain text versions (.txt, .md) are best for AI processing.
               </FormDescription>
 
               {displayedFileName && !isReadingFile && (
@@ -376,3 +362,5 @@ export default function ProfilePage() {
     </Card>
   );
 }
+
+    
