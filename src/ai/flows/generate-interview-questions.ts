@@ -14,8 +14,8 @@ import {z} from 'genkit';
 import type { GeneratedQuestion } from '@/types';
 
 const GenerateInterviewQuestionsInputSchema = z.object({
-  profileField: z.string().describe('The user profile field, e.g., Software Engineering, Data Science.'),
-  role: z.string().describe('The user role, e.g., Frontend Developer, Product Manager.'),
+  profileField: z.string().describe('The user profile field, e.g., Software Engineering, Data Science, Product Management.'),
+  role: z.string().describe('The user role, e.g., Frontend Developer, Product Manager, Marketing Specialist.'),
   interviewDuration: z.enum(['15', '30', '45']).describe('The selected interview duration in minutes.'),
   resumeProcessedText: z.string().optional().describe('Optional: The client-side processed text content of the candidate\'s resume, used to tailor questions.'),
 });
@@ -23,7 +23,8 @@ export type GenerateInterviewQuestionsInput = z.infer<
   typeof GenerateInterviewQuestionsInputSchema
 >;
 
-// This schema is used both for output of this flow AND as part of input to the feedback flow
+// This schema is used for output of this flow.
+// It's also structurally compatible with how questions are stored in InterviewSession and used by the feedback flow.
 const GeneratedQuestionSchemaInternal = z.object({
   id: z.string().describe('A unique ID for the question (e.g., q1, q2).'),
   text: z.string().describe('The question text.'),
@@ -69,8 +70,11 @@ Determine if the role is technical. Roles are considered technical if they inclu
 
 Question Stages & Types:
 Questions are categorized by 'stage' ('oral' or 'technical_written') and 'type' ('conversational', 'behavioral', 'technical', 'coding', 'resume_based').
-- 'oral' stage: For questions answered verbally. 'technical' type questions in this stage are for conceptual discussions.
+- 'oral' stage: For questions answered verbally.
+    - For Technical Roles: 'technical' type questions in this stage are for conceptual discussions (e.g., "Explain how React hooks work conceptually", "Discuss the trade-offs of microservices vs. monolithic architecture", "What are LLMs and how do they generally learn?").
+    - For Non-Technical Roles: Questions are primarily 'conversational', 'behavioral', or 'resume_based', focusing on job-specific scenarios, processes, and problem-solving (e.g., "Describe a time you managed a challenging project", "How would you approach market research for a new product in the X domain?", "Walk me through your experience with Y strategy mentioned in your resume.").
 - 'technical_written' stage: For questions requiring typed answers (e.g., code, detailed technical explanations). This stage is primarily for technical roles.
+    - Examples for Technical Roles: "Write a Python function to reverse a linked list.", "Describe the database schema you would design for an e-commerce platform, explaining your choices.", "Explain the CI/CD pipeline for the project X from your resume in writing."
 
 Question Distribution and Types based on Duration:
 The 'id' for each question MUST be unique (q1, q2, q3, etc.).
@@ -78,7 +82,7 @@ Sequence: All 'oral' stage questions must come before all 'technical_written' st
 
 *   **For Non-Technical Roles (e.g., Product Management, Marketing, Sales):**
     *   All questions generated MUST be of the 'oral' stage. No 'technical_written' questions should be generated.
-    *   The questions should be a diverse mix of 'conversational', 'behavioral', and 'resume_based' types (if resume content is available).
+    *   The questions should be a diverse mix of 'conversational', 'behavioral', and 'resume_based' types, focusing on job-specific scenarios, work processes, and how the candidate approaches tasks relevant to their field.
     *   Ensure the total number of these oral questions aligns with the specified interview duration:
         *   **15 minutes (Total 6-7 questions):** Generate 6-7 diverse 'oral' questions.
         *   **30 minutes (Total 10-12 questions):** Generate 10-12 diverse 'oral' questions.
@@ -88,13 +92,13 @@ Sequence: All 'oral' stage questions must come before all 'technical_written' st
     The distribution below should be followed within the total question count for the duration.
     *   **Technical Oral Questions (approx. 45% of total questions for the duration):**
         *   stage: 'oral'
-        *   type: 'technical' (e.g., "Explain concept X", "Discuss trade-offs of Y") or type: 'resume_based' (e.g., "Tell me more about your experience with technology Z mentioned in your resume"). These are for verbal discussion of technical topics.
+        *   type: 'technical' (e.g., for a web developer: "Explain the concept of closures in JavaScript", "What is the difference between virtual DOM and shadow DOM?"; for a data scientist: "Describe different types of biases in machine learning models.", "Explain the concept of overfitting and how to prevent it.") or type: 'resume_based' (e.g., "Tell me more about your experience with the XYZ framework mentioned in your resume and a challenging problem you solved with it."). These are for verbal discussion of technical topics, understanding of concepts, and problem-solving approaches.
     *   **Technical Written Questions (approx. 30% of total questions for the duration):**
         *   stage: 'technical_written'
-        *   type: 'technical' (e.g., "Describe the architecture of system A in writing"), type: 'coding' (e.g., "Write a function to do B"), or type: 'resume_based' (e.g., "Explain the implementation details of project P from your resume in writing").
+        *   type: 'technical' (e.g., for a web developer: "Describe the key components of a RESTful API and how you would secure it.", "Explain the architecture of a recent web application you built."), type: 'coding' (e.g., "Write a function to find the second largest number in an array.", "Implement a basic caching mechanism."), or type: 'resume_based' (e.g., "Provide a detailed written explanation of the algorithm you implemented for project P from your resume."). These require typed, in-depth answers or code.
     *   **Non-Technical Oral Questions (approx. 25% of total questions for the duration):**
         *   stage: 'oral'
-        *   type: 'conversational', type: 'behavioral', or type: 'resume_based' (focusing on non-technical aspects from resume like teamwork, problem-solving approaches).
+        *   type: 'conversational', type: 'behavioral', or type: 'resume_based' (focusing on non-technical aspects from resume like teamwork, communication, problem-solving approaches in a general context).
 
     *Specific counts for Technical Roles based on duration and above percentages:*
 
@@ -181,6 +185,3 @@ const generateInterviewQuestionsFlow = ai.defineFlow(
     };
   }
 );
-    
-
-    
