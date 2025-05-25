@@ -32,12 +32,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log("AuthContext: fetchUserProfile called with no Firebase user. Clearing profile.");
       setUserProfile(null);
       setIsAdmin(false);
-      setLoading(false); // Explicitly set profile loading to false
+      setLoading(false); 
       return;
     }
 
     console.log(`AuthContext: Attempting to fetch profile for UID: ${fbUser.uid}`);
-    setLoading(true); // Indicate profile fetch is starting
+    setLoading(true); 
     try {
       const userDocRef = doc(db, "users", fbUser.uid);
       const userDocSnap = await getDoc(userDocRef);
@@ -46,20 +46,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (userDocSnap.exists()) {
         const profileData = userDocSnap.data() as UserProfile;
         setUserProfile(profileData);
-        setIsAdmin(profileData.role === "admin");
+        // Prioritize the isAdmin boolean field. Fallback to role if isAdmin is not defined.
+        if (typeof profileData.isAdmin === 'boolean') {
+          setIsAdmin(profileData.isAdmin);
+          console.log(`AuthContext: Admin status set from 'isAdmin' field: ${profileData.isAdmin}`);
+        } else if (profileData.role === "admin") { // Fallback for older setups, though isAdmin is preferred
+          setIsAdmin(true);
+          console.log("AuthContext: Admin status set from 'role' field (isAdmin field missing).");
+        } else {
+          setIsAdmin(false);
+          console.log("AuthContext: User is not an admin based on profile data.");
+        }
         console.log(`AuthContext: Profile loaded for UID: ${fbUser.uid}`, profileData);
       } else {
         setUserProfile(null);
-        setIsAdmin(false);
+        setIsAdmin(false); // Ensure isAdmin is false if profile doesn't exist
         console.warn(`AuthContext: User profile document not found for UID: ${fbUser.uid}`);
       }
     } catch (error: any) {
       console.error(`AuthContext: Error fetching user profile for UID: ${fbUser.uid}. Message: ${error.message}, Code: ${error.code}`, error);
       setUserProfile(null);
-      setIsAdmin(false);
+      setIsAdmin(false); // Ensure isAdmin is false on error
     } finally {
       console.log(`AuthContext: fetchUserProfile finally block for UID: ${fbUser?.uid}. Setting profile loading to false.`);
-      setLoading(false); // Indicate profile fetch is complete (success or fail)
+      setLoading(false); 
     }
   }, []);
 
@@ -72,25 +82,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(firebaseUser);
           console.log("AuthContext: Firebase user detected, calling fetchUserProfile.");
           await fetchUserProfile(firebaseUser);
-          console.log("AuthContext: fetchUserProfile call completed (or errored).");
         } else {
           console.log("AuthContext: No Firebase user. Clearing user, profile, admin status, and profile loading state.");
           setUser(null);
           setUserProfile(null);
           setIsAdmin(false);
-          setLoading(false); // Ensure profile-specific loading is also false if no user
+          setLoading(false); 
         }
       } catch (error) {
          console.error("AuthContext: Critical error during onAuthStateChanged processing:", error);
-         // Reset all auth-related states to ensure a clean slate on error
          setUser(null);
          setUserProfile(null);
          setIsAdmin(false);
          setLoading(false);
       } finally {
-        // This is crucial: initialLoading MUST be set to false after the first auth check and profile fetch attempt.
         setInitialLoading(false);
-        console.log("AuthContext: initialLoading set to false after auth state processing. User:", !!user, "Profile Loaded:", !!userProfile, "Profile Fetch Loading:", loading);
+        console.log("AuthContext: initialLoading set to false after auth state processing. User:", !!user, "Profile Loaded:", !!userProfile, "isAdmin:", isAdmin, "Profile Fetch Loading:", loading);
       }
     });
 
@@ -98,7 +105,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log("AuthContext: Unmounting and unsubscribing from onAuthStateChanged.");
       unsubscribe();
     };
-  }, [fetchUserProfile]); // fetchUserProfile is memoized and its dependencies are stable.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchUserProfile]); 
 
   const signOut = async () => {
     console.log("AuthContext: signOut called.");
