@@ -12,7 +12,19 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
-import { GeneratedQuestionSchema } from './generate-interview-questions'; // Import for input type
+// Do not import GeneratedQuestionSchema from generate-interview-questions.ts as it's a 'use server' file
+// Redefine it here if needed for the input schema.
+
+// Schema for a single generated question, used as part of the input to this flow.
+// This needs to match the structure of questions stored in the InterviewSession document.
+const InterviewQuestionWithAnswerSchema = z.object({
+  id: z.string().describe('A unique ID for the question (e.g., q1, q2).'),
+  text: z.string().describe('The question text.'),
+  stage: z.enum(['oral', 'technical_written']).describe('The stage of the interview this question belongs to: "oral" for spoken answers, "technical_written" for typed/coding answers.'),
+  type: z.enum(['behavioral', 'technical', 'coding', 'conversational', 'resume_based']).describe('The type of question.'),
+  answer: z.string().optional().describe("The user's answer to this question."),
+});
+
 
 // Schema for a single question's detailed feedback (part of the output)
 const DetailedQuestionFeedbackItemSchema = z.object({
@@ -26,7 +38,7 @@ const DetailedQuestionFeedbackItemSchema = z.object({
 
 // Input schema for the feedback analysis flow
 const AnalyzeInterviewFeedbackInputSchema = z.object({
-  questions: z.array(GeneratedQuestionSchema).describe('An array of all questions asked during the interview, including the user\'s answers.'),
+  questions: z.array(InterviewQuestionWithAnswerSchema).describe('An array of all questions asked during the interview, including the user\'s answers.'),
   jobDescription: z
     .string()
     .describe('The job description for the role the candidate interviewed for.'),
@@ -51,13 +63,13 @@ export type AnalyzeInterviewFeedbackInput = z.infer<
 const AnalyzeInterviewFeedbackOutputSchema = z.object({
   overallScore: z.number().min(0).max(100).optional().describe('Overall score for the interview from 0 to 100. Optional.'),
   overallFeedback: z.string().describe('Overall feedback on the interview performance, including general impressions and summary.'),
-  strengthsSummary: z // Renamed
+  strengthsSummary: z 
     .string()
     .describe('Summary of strengths, well-answered questions, or positive aspects of the candidate\'s responses.'),
-  weaknessesSummary: z // Renamed
+  weaknessesSummary: z 
     .string()
     .describe('Summary of weaknesses, poorly answered questions, or areas where the candidate struggled.'),
-  overallAreasForImprovement: z // Renamed
+  overallAreasForImprovement: z 
     .string()
     .describe('Specific, actionable advice and areas for overall improvement based on the interview performance.'),
   detailedQuestionFeedback: z.array(DetailedQuestionFeedbackItemSchema).optional().describe('An array containing detailed feedback for each question asked.'),
@@ -139,3 +151,4 @@ const analyzeInterviewFeedbackFlow = ai.defineFlow(
     return output;
   }
 );
+

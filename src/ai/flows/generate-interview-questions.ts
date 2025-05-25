@@ -7,7 +7,6 @@
  * - generateInterviewQuestions - A function that generates interview questions.
  * - GenerateInterviewQuestionsInput - The input type for the generateInterviewQuestions function.
  * - GenerateInterviewQuestionsOutput - The output type for the generateInterviewQuestions function.
- * - GeneratedQuestionSchema - Zod schema for a single generated question.
  */
 
 import {ai} from '@/ai/genkit';
@@ -25,16 +24,17 @@ export type GenerateInterviewQuestionsInput = z.infer<
 >;
 
 // This schema is used both for output of this flow AND as part of input to the feedback flow
-export const GeneratedQuestionSchema = z.object({
+// DO NOT EXPORT THIS ZOD SCHEMA OBJECT from a 'use server' file
+const GeneratedQuestionSchema = z.object({
   id: z.string().describe('A unique ID for the question (e.g., q1, q2).'),
   text: z.string().describe('The question text.'),
   stage: z.enum(['oral', 'technical_written']).describe('The stage of the interview this question belongs to: "oral" for spoken answers, "technical_written" for typed/coding answers.'),
   type: z.enum(['behavioral', 'technical', 'coding', 'conversational', 'resume_based']).describe('The type of question. "conversational", "behavioral", and "resume_based" are for oral stage. "technical" and "coding" are for technical_written stage. "resume_based" can also be used if the question is directly derived from the resume content for any stage.'),
-  answer: z.string().optional().describe("The user's answer to this question, if provided/applicable at the time of feedback generation."),
+  answer: z.string().optional().describe("The user's answer to this question, if provided/applicable at the time of feedback generation. This field should NOT be part of this generation output."),
 });
 
 const GenerateInterviewQuestionsOutputSchema = z.object({
-  questions: z.array(GeneratedQuestionSchema).describe('An array of generated interview questions with stages and types.'),
+  questions: z.array(GeneratedQuestionSchema.omit({ answer: true })).describe('An array of generated interview questions with stages and types. The "answer" field should not be included in the output of this flow.'),
 });
 export type GenerateInterviewQuestionsOutput = z.infer<
   typeof GenerateInterviewQuestionsOutputSchema
