@@ -65,21 +65,24 @@ Candidate Information:
 ---
 {{/if}}
 
-Determine if the role is technical. Roles are considered technical if they include keywords such as: ${technicalRolesKeywords.join(', ')}. Examples: "Software Developer", "Data Scientist", "Frontend Developer", "Flutter Developer".
+Determine if the role is technical. Roles are considered technical if they include keywords such as: ${technicalRolesKeywords.join(', ')}. Examples: "Software Developer", "Data Scientist", "Frontend Developer", "Flutter Developer". Roles like "Product Manager", "Marketing Manager", "Sales Representative" are non-technical.
 
 Question Stages & Types:
 Questions are categorized by 'stage' ('oral' or 'technical_written') and 'type' ('conversational', 'behavioral', 'technical', 'coding', 'resume_based').
-- 'oral' stage: For questions answered verbally.
+- 'oral' stage: For questions answered verbally. 'technical' type questions in this stage are for conceptual discussions.
 - 'technical_written' stage: For questions requiring typed answers (e.g., code, detailed technical explanations). This stage is primarily for technical roles.
 
 Question Distribution and Types based on Duration:
 The 'id' for each question MUST be unique (q1, q2, q3, etc.).
 Sequence: All 'oral' stage questions must come before all 'technical_written' stage questions.
 
-*   **For Non-Technical Roles:**
-    *   **15 minutes (Total 6-7 questions):** 6-7 'oral' questions (mix of 'conversational', 'behavioral', 'resume_based' if resumeProcessedText exists).
-    *   **30 minutes (Total 10-12 questions):** 10-12 'oral' questions (mix of 'conversational', 'behavioral', 'resume_based' if resumeProcessedText exists).
-    *   **45 minutes (Total 15-16 questions):** 15-16 'oral' questions (mix of 'conversational', 'behavioral', 'resume_based' if resumeProcessedText exists).
+*   **For Non-Technical Roles (e.g., Product Management, Marketing, Sales):**
+    *   All questions generated MUST be of the 'oral' stage. No 'technical_written' questions should be generated.
+    *   The questions should be a diverse mix of 'conversational', 'behavioral', and 'resume_based' types (if resume content is available).
+    *   Ensure the total number of these oral questions aligns with the specified interview duration:
+        *   **15 minutes (Total 6-7 questions):** Generate 6-7 diverse 'oral' questions.
+        *   **30 minutes (Total 10-12 questions):** Generate 10-12 diverse 'oral' questions.
+        *   **45 minutes (Total 15-16 questions):** Generate 15-16 diverse 'oral' questions.
 
 *   **For Technical Roles (Identified by keywords like ${technicalRolesKeywords.join(', ')}):**
     The distribution below should be followed within the total question count for the duration.
@@ -178,5 +181,6 @@ const generateInterviewQuestionsFlow = ai.defineFlow(
     };
   }
 );
+    
 
     
