@@ -7,7 +7,7 @@ import { useEffect, useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Users, DollarSign, TrendingUp, CreditCard, Loader2, AlertTriangle, CalendarDays, CalendarRange, CalendarCheck2, CalendarClock, BarChart3, Calendar as CalendarIcon, FilterX, Filter } from "lucide-react"; // Added CalendarIcon, FilterX
+import { Users, DollarSign, TrendingUp, CreditCard, Loader2, AlertTriangle, CalendarDays, CalendarRange, CalendarCheck2, CalendarClock, BarChart3, Calendar as CalendarIcon, FilterX, Filter } from "lucide-react";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar, Legend } from "recharts";
 import { db } from "@/lib/firebase";
@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format, subDays, startOfDay, subMonths, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
+import { cn } from "@/lib/utils"; // Added import
 
 // Plan prices
 const PLAN_PRICES = {
@@ -122,10 +123,11 @@ export default function AdminPage() {
             dailyCounts[formattedUpdatedAtDay]++;
           }
 
-          if (updatedAtDate >= subDays(new Date(), 1)) {
+          // Check if updatedAtDate is today
+          if (updatedAtDayStart.getTime() === today.getTime()) {
             signupsTodayCount++;
           }
-
+          
           if (updatedAtDayStart >= currentMonthStart) {
             signupsCurrentMonthCount++;
           }
@@ -158,16 +160,16 @@ export default function AdminPage() {
     const monthlyCounts: Record<string, number> = {}; 
     const today = new Date();
 
-    for (let i = 5; i >= 0; i--) {
+    for (let i = 5; i >= 0; i--) { // Data for the last 6 months (current month + 5 previous)
         const monthDate = subMonths(today, i);
-        const monthKey = format(monthDate, "yyyy-MM");
+        const monthKey = format(monthDate, "yyyy-MM"); // e.g., "2023-10"
         monthlyCounts[monthKey] = 0;
     }
 
     users.forEach(u => {
         if (u.isPlusSubscriber && u.updatedAt) {
             try {
-                const updatedAtDate = startOfDay(new Date(u.updatedAt));
+                const updatedAtDate = startOfDay(new Date(u.updatedAt)); // Normalize to start of day
                 const monthKey = format(updatedAtDate, "yyyy-MM");
                 if (monthlyCounts.hasOwnProperty(monthKey)) {
                     monthlyCounts[monthKey]++;
@@ -180,10 +182,10 @@ export default function AdminPage() {
 
     const chartData = Object.entries(monthlyCounts)
         .map(([monthKey, count]) => ({
-            month: format(new Date(monthKey + '-01'), "MMM yyyy"), 
+            month: format(new Date(monthKey + '-01'), "MMM yyyy"), // Display format like "Oct 2023"
             subscriptions: count,
         }))
-        .sort((a, b) => new Date(a.month).getTime() - new Date(b.month).getTime()); 
+        .sort((a, b) => new Date(a.month).getTime() - new Date(b.month).getTime()); // Ensure chronological order
 
     setMonthlySubscriptionData(chartData);
   };
@@ -217,10 +219,12 @@ export default function AdminPage() {
       if (u.subscriptionPlan === 'monthly') {
         estimatedMonthlyRevenue += PLAN_PRICES.monthly;
       } else if (u.subscriptionPlan === 'quarterly') {
-        estimatedMonthlyRevenue += PLAN_PRICES.quarterly / 3;
+        estimatedMonthlyRevenue += PLAN_PRICES.quarterly / 3; // Average monthly
       } else if (u.subscriptionPlan === 'yearly') {
-        estimatedMonthlyRevenue += PLAN_PRICES.yearly / 12;
+        estimatedMonthlyRevenue += PLAN_PRICES.yearly / 12; // Average monthly
       } else {
+        // If plan is unknown but they are a Plus subscriber, assume a default for revenue (e.g., monthly)
+        // Or you could choose to exclude them from this specific revenue calculation
         estimatedMonthlyRevenue += PLAN_PRICES.monthly; 
       }
     });
@@ -255,10 +259,15 @@ export default function AdminPage() {
       
       let dateMatch = true;
       if (u.createdAt && (dateRangeFilter.from || dateRangeFilter.to)) {
-        const userJoinedDate = startOfDay(parseISO(u.createdAt));
-        const from = dateRangeFilter.from ? startOfDay(dateRangeFilter.from) : new Date(0); // Beginning of time
-        const to = dateRangeFilter.to ? startOfDay(dateRangeFilter.to) : new Date(); // Today
-        dateMatch = isWithinInterval(userJoinedDate, { start: from, end: to });
+        try {
+            const userJoinedDate = startOfDay(parseISO(u.createdAt));
+            const from = dateRangeFilter.from ? startOfDay(dateRangeFilter.from) : new Date(0); // Beginning of time
+            const to = dateRangeFilter.to ? startOfDay(dateRangeFilter.to) : new Date(); // Today
+            dateMatch = isWithinInterval(userJoinedDate, { start: from, end: to });
+        } catch (e) {
+            console.warn("Could not parse createdAt date for user:", u.uid, u.createdAt);
+            dateMatch = false; // Or true, depending on desired behavior for unparseable dates
+        }
       }
       return nameMatch && emailMatch && planMatch && adminMatch && dateMatch;
     });
@@ -276,8 +285,8 @@ export default function AdminPage() {
     return <div className="flex justify-center items-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   }
   
-  if (!isAdmin) { 
-     return <div className="flex justify-center items-center h-screen"><p>Access Denied</p></div>;
+  if (!isAdmin) { // This check is after initialLoading, so we know user state is resolved
+     return <div className="flex justify-center items-center h-screen"><p>Access Denied</p></div>; // Or redirect
   }
 
   return (
@@ -301,6 +310,7 @@ export default function AdminPage() {
 
       {!isLoadingData && !fetchError && (
         <>
+          {/* Summary Cards */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             <Card className="shadow-md hover:shadow-lg transition-shadow duration-300">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -341,6 +351,7 @@ export default function AdminPage() {
             </Card>
           </div>
 
+          {/* Signup Metrics Cards */}
           <div className="grid gap-4 md:grid-cols-3">
              <Card className="shadow-md hover:shadow-lg transition-shadow duration-300">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -374,6 +385,7 @@ export default function AdminPage() {
             </Card>
           </div>
 
+          {/* Subscription Plan Breakdown */}
           <Card className="shadow-md hover:shadow-lg transition-shadow duration-300">
             <CardHeader>
                 <CardTitle>Subscription Plan Breakdown</CardTitle>
@@ -413,6 +425,7 @@ export default function AdminPage() {
             </CardContent>
           </Card>
           
+          {/* Monthly New Subscriptions Chart */}
           <Card className="shadow-md hover:shadow-lg transition-shadow duration-300">
             <CardHeader>
               <CardTitle>New Plus Subscriptions (Last 6 Months)</CardTitle>
@@ -451,6 +464,7 @@ export default function AdminPage() {
             </CardContent>
           </Card>
 
+          {/* Daily New Subscriptions Chart */}
           <Card className="shadow-md hover:shadow-lg transition-shadow duration-300">
             <CardHeader>
               <CardTitle>Daily New Plus Subscriptions (Last 7 Days)</CardTitle>
@@ -468,12 +482,13 @@ export default function AdminPage() {
                       tickLine={false} 
                       axisLine={false} 
                       tickMargin={8} 
-                      tickFormatter={(value) => format(new Date(value + 'T00:00:00'), 'MMM d')} 
+                      tickFormatter={(value) => format(new Date(value + 'T00:00:00'), 'MMM d')} // Ensure correct date parsing for formatter
                     />
                     <YAxis tickLine={false} axisLine={false} tickMargin={8} allowDecimals={false} />
                     <ChartTooltip 
                       content={<ChartTooltipContent indicator="line" labelFormatter={(label, payload) => {
                         if (payload && payload.length && payload[0].payload.date) {
+                          // Ensure date is treated as local, add T00:00:00 if only date string
                           return format(new Date(payload[0].payload.date + 'T00:00:00'), "MMMM d, yyyy");
                         }
                         return label;
@@ -498,6 +513,7 @@ export default function AdminPage() {
             </CardContent>
           </Card>
 
+          {/* User Management Table with Filters */}
           <Card className="shadow-md hover:shadow-lg transition-shadow duration-300">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -506,6 +522,7 @@ export default function AdminPage() {
               <CardDescription>View and manage user accounts. Use filters below to refine the list.</CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Filters Section */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6 p-4 border rounded-lg bg-muted/30">
                 <Input placeholder="Filter by Name..." value={nameFilter} onChange={(e) => setNameFilter(e.target.value)} />
                 <Input placeholder="Filter by Email..." value={emailFilter} onChange={(e) => setEmailFilter(e.target.value)} />
@@ -562,6 +579,7 @@ export default function AdminPage() {
                 </Button>
               </div>
 
+              {/* User Table */}
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
@@ -611,5 +629,3 @@ export default function AdminPage() {
     </div>
   );
 }
-
-    
