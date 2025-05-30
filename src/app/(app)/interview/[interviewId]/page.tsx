@@ -30,12 +30,15 @@ declare global {
 }
 
 // Proctoring Constants
+const DISTRACTION_CHECK_INTERVAL_MS = 20 * 1000; // Check for simulated distraction every ~20 seconds
+const DISTRACTION_PROBABILITY = 0.15; // 15% chance of simulated distraction per interval
+
 const FACE_DETECTION_INTERVAL_MS = 5 * 1000; // Check face presence every ~5s for simple warning
+const CONSECUTIVE_NO_FACE_CHECKS_TO_WARN_FACE_AWAY = 1; // How many consecutive checks must fail to trigger a warning
+
 const PROLONGED_FACE_ABSENCE_TIMEOUT_MS = 60 * 1000; // 1 minute of continuous absence terminates
 const INACTIVITY_TIMEOUT_ORAL_MS = 60 * 1000; // 1 minute
 const INACTIVITY_TIMEOUT_WRITTEN_MS = 2 * 60 * 1000; // 2 minutes
-const DISTRACTION_CHECK_INTERVAL_MS = 20 * 1000; // Check for simulated distraction every ~20 seconds
-const DISTRACTION_PROBABILITY = 0.15; // 15% chance of simulated distraction per interval
 const ON_SCREEN_WARNING_DURATION_MS = 7000; // How long simple warnings stay on screen
 
 type ProctoringIssueType = 'tabSwitch' | 'faceNotDetected_short' | 'task_inactivity' | 'distraction';
@@ -77,9 +80,9 @@ export default function InterviewPage() {
   // Proctoring States
   const [proctoringIssues, setProctoringIssues] = useState<{
     tabSwitch: number;
-    faceNotDetected_short: number; // For short, simple warnings
-    task_inactivity: number;
-    distraction: number;
+    faceNotDetected_short: number; // For short, simple warnings (not terminating)
+    task_inactivity: number; // Simple warnings (not terminating)
+    distraction: number; // Simple warnings (not terminating)
   }>({ tabSwitch: 0, faceNotDetected_short: 0, task_inactivity: 0, distraction: 0 });
   
   const [isFaceCurrentlyVisible, setIsFaceCurrentlyVisible] = useState(true); // UI feedback for prolonged absence check
@@ -88,6 +91,7 @@ export default function InterviewPage() {
   
   const [onScreenProctoringWarning, setOnScreenProctoringWarning] = useState<OnScreenWarning>({ type: 'none', message: null });
   const onScreenWarningTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const consecutiveNoFaceChecksRef = useRef(0);
 
 
   // Refs for state values used in callbacks to avoid stale closures
@@ -166,6 +170,7 @@ export default function InterviewPage() {
         case "all_questions_answered": toastTitle = "Interview Complete"; break;
         case "completed_by_user": toastTitle = "Interview Submitted"; break;
     }
+    // This toast is for actual termination. Simple warnings are now on-screen.
     toast({ title: toastTitle, description: toastMessage, variant: "destructive", duration: 7000 });
 
     cancelSpeechSynthesis();
@@ -223,7 +228,7 @@ export default function InterviewPage() {
       toast({ title: "Error Finalizing Interview", description: error.message || "Failed to finalize and get feedback. Please check your past interviews later.", variant: "destructive", duration: 10000 });
       router.push('/dashboard'); 
     }
-  }, [user, interviewId, session, userProfile, router, toast, refreshUserProfile, cancelSpeechSynthesis, stopSpeechRecognition, stopMediaTracks, proctoringIssues]);
+  }, [user, interviewId, session, userProfile, router, toast, refreshUserProfile, cancelSpeechSynthesis, stopSpeechRecognition, stopMediaTracks, proctoringIssues]); // Added proctoringIssues to deps
 
 
   // Main useEffect for Firestore listener, media setup, and cleanup
@@ -410,14 +415,21 @@ export default function InterviewPage() {
 
 
   const showOnScreenWarning = useCallback((type: ProctoringIssueType, message: string) => {
+    if (isEndingInterviewRef.current) return;
+
     if (onScreenWarningTimerRef.current) {
       clearTimeout(onScreenWarningTimerRef.current);
+      console.log("InterviewPage: Cleared existing on-screen warning timer.");
     }
     setOnScreenProctoringWarning({ type, message });
+    console.log(`InterviewPage: Showing on-screen warning: ${type} - ${message}`);
+
     onScreenWarningTimerRef.current = setTimeout(() => {
       setOnScreenProctoringWarning({ type: 'none', message: null });
+      console.log("InterviewPage: On-screen warning timer expired, clearing warning.");
+      onScreenWarningTimerRef.current = null; // Clear the ref after timeout
     }, ON_SCREEN_WARNING_DURATION_MS);
-  }, []);
+  }, []); 
 
   const logProctoringEvent = useCallback((type: ProctoringIssueType) => {
     if (!isInterviewEffectivelyActive() || isEndingInterviewRef.current) return;
@@ -429,44 +441,48 @@ export default function InterviewPage() {
   }, [isInterviewEffectivelyActive]);
 
 
-  // Simple Warning: Tab Switch
+  // Simple Warning: Tab Switch (Non-terminating)
   const prevTabSwitchCountRef = useRef(proctoringIssues.tabSwitch);
   useEffect(() => {
     if (!isInterviewEffectivelyActive() || isEndingInterviewRef.current) return;
     const currentTabSwitches = proctoringIssues.tabSwitch;
     if (currentTabSwitches > prevTabSwitchCountRef.current) {
-      showOnScreenWarning('tabSwitch', "Simple Warning: Please remain focused on the interview tab.");
+      console.log(`InterviewPage: Tab switch detected. Count: ${currentTabSwitches}`);
+      showOnScreenWarning('tabSwitch', "Warning: Please remain focused on the interview tab.");
     }
     prevTabSwitchCountRef.current = currentTabSwitches;
   }, [proctoringIssues.tabSwitch, isInterviewEffectivelyActive, showOnScreenWarning]);
 
-  // Simple Warning: Face Not Detected (Short Absence)
+  // Simple Warning: Face Not Detected (Short Absence - Non-terminating)
   const prevFaceNotDetectedShortCountRef = useRef(proctoringIssues.faceNotDetected_short);
   useEffect(() => {
     if (!isInterviewEffectivelyActive() || isEndingInterviewRef.current) return;
     if (proctoringIssues.faceNotDetected_short > prevFaceNotDetectedShortCountRef.current) {
-        showOnScreenWarning('faceNotDetected_short', "Simple Warning: Face not clearly visible. Please ensure you are in front of the camera.");
+        console.log(`InterviewPage: Short face absence warning. Count: ${proctoringIssues.faceNotDetected_short}`);
+        showOnScreenWarning('faceNotDetected_short', "Reminder: Please ensure your face is visible to the camera.");
     }
     prevFaceNotDetectedShortCountRef.current = proctoringIssues.faceNotDetected_short;
   }, [proctoringIssues.faceNotDetected_short, isInterviewEffectivelyActive, showOnScreenWarning]);
 
 
-  // Simple Warning: Task Inactivity
+  // Simple Warning: Task Inactivity (Non-terminating)
   const prevTaskInactivityCountRef = useRef(proctoringIssues.task_inactivity);
   useEffect(() => {
     if (!isInterviewEffectivelyActive() || isEndingInterviewRef.current) return;
     if (proctoringIssues.task_inactivity > prevTaskInactivityCountRef.current) {
-      showOnScreenWarning('task_inactivity', "Simple Warning: No activity detected for a while. Please continue with your answer.");
+      console.log(`InterviewPage: Task inactivity warning. Count: ${proctoringIssues.task_inactivity}`);
+      showOnScreenWarning('task_inactivity', "Reminder: Please continue with your answer.");
     }
     prevTaskInactivityCountRef.current = proctoringIssues.task_inactivity;
   }, [proctoringIssues.task_inactivity, isInterviewEffectivelyActive, showOnScreenWarning]);
   
-  // Simple Warning: Distraction
+  // Simple Warning: Distraction (Non-terminating)
   const prevDistractionCountRef = useRef(proctoringIssues.distraction);
   useEffect(() => {
     if (!isInterviewEffectivelyActive() || isEndingInterviewRef.current) return;
     if (proctoringIssues.distraction > prevDistractionCountRef.current) {
-      showOnScreenWarning('distraction', "Simple Warning: Attention Reminder - Please try to maintain focus on the screen.");
+      console.log(`InterviewPage: Distraction warning. Count: ${proctoringIssues.distraction}`);
+      showOnScreenWarning('distraction', "Proctoring: Attention Reminder - Please try to maintain focus on the screen.");
     }
     prevDistractionCountRef.current = proctoringIssues.distraction;
   }, [proctoringIssues.distraction, isInterviewEffectivelyActive, showOnScreenWarning]);
@@ -499,10 +515,8 @@ export default function InterviewPage() {
   useEffect(() => {
     let faceDetectionInterval: NodeJS.Timeout | null = null;
     const mockCheckFacePresence = (): boolean => {
-        // Simulation: ~90% chance face is present in each check for demo purposes.
-        // In a real app, this would use a CV library.
-        const isPresent = Math.random() > 0.1;
-        setIsFaceCurrentlyVisible(isPresent); // For constant UI feedback (EyeOff icon)
+        const isPresent = Math.random() > 0.1; // Simulates face presence ~90% of the time
+        setIsFaceCurrentlyVisible(isPresent);
         return isPresent;
     };
 
@@ -513,12 +527,17 @@ export default function InterviewPage() {
         const facePresent = mockCheckFacePresence();
         
         if (!facePresent) {
-            logProctoringEvent('faceNotDetected_short'); // Log for simple warning display
+            consecutiveNoFaceChecksRef.current += 1;
+            if (consecutiveNoFaceChecksRef.current >= CONSECUTIVE_NO_FACE_CHECKS_TO_WARN_FACE_AWAY) {
+                logProctoringEvent('faceNotDetected_short'); // Log for simple warning display
+                consecutiveNoFaceChecksRef.current = 0; // Reset after warning
+            }
             if (continuousFaceNotDetectedStartTime === null) {
                 console.log("InterviewPage: Continuous face not detected timer started.");
                 setContinuousFaceNotDetectedStartTime(Date.now());
             }
         } else {
+            consecutiveNoFaceChecksRef.current = 0; // Reset if face is detected
             if (continuousFaceNotDetectedStartTime !== null) {
                  console.log("InterviewPage: Continuous face not detected timer reset (face now visible).");
             }
@@ -597,7 +616,7 @@ export default function InterviewPage() {
         setIsAISpeaking(false); 
         setHasSpokenCurrentQuestion(true);
       }
-      setUserAnswer(''); // Clear previous answer for "Listen Again"
+      setUserAnswer(''); 
       setSpeechError(null); 
       setLastActivityTime(Date.now());
 
@@ -640,7 +659,7 @@ export default function InterviewPage() {
         };
 
         recognitionRef.current.onend = () => {
-            setIsListening(false); // Ensure listening state is false when recognition ends
+            setIsListening(false); 
             console.log("InterviewPage: Speech recognition ended.");
         };
       }
@@ -746,19 +765,21 @@ export default function InterviewPage() {
           </CardHeader>
           <CardContent>
             <video ref={videoRef} autoPlay muted className="w-full aspect-video rounded-md bg-muted object-cover" data-ai-hint="video conference"></video>
-             {!isFaceCurrentlyVisible && isInterviewEffectivelyActive() && (
-                <Alert variant="default" className="mt-2 border-amber-500 text-amber-700 dark:text-amber-300">
-                    <EyeOff className="h-4 w-4 !text-amber-500 dark:!text-amber-400" />
-                    <AlertTitle className="text-amber-700 dark:text-amber-300">Face Not Visible?</AlertTitle>
-                    <AlertDescription className="text-amber-600 dark:text-amber-200">Please ensure your face is clearly visible in the camera.</AlertDescription>
-                </Alert>
-            )}
+            {/* Display on-screen warning if active */}
             {onScreenProctoringWarning.message && (
               <Alert variant="default" className="mt-2 border-yellow-500 text-yellow-700 dark:border-yellow-400 dark:text-yellow-300">
                 <Info className="h-4 w-4 !text-yellow-500 dark:!text-yellow-400" />
                 <AlertTitle className="text-yellow-700 dark:text-yellow-300">Proctoring Notice</AlertTitle>
                 <AlertDescription className="text-yellow-600 dark:text-yellow-200">{onScreenProctoringWarning.message}</AlertDescription>
               </Alert>
+            )}
+            {/* Display constant "Face Not Visible?" alert only if no other on-screen warning is active */}
+            {!isFaceCurrentlyVisible && isInterviewEffectivelyActive() && !onScreenProctoringWarning.message && (
+                <Alert variant="default" className="mt-2 border-amber-500 text-amber-700 dark:text-amber-300">
+                    <EyeOff className="h-4 w-4 !text-amber-500 dark:!text-amber-400" />
+                    <AlertTitle className="text-amber-700 dark:text-amber-300">Face Not Visible?</AlertTitle>
+                    <AlertDescription className="text-amber-600 dark:text-amber-200">Please ensure your face is clearly visible in the camera.</AlertDescription>
+                </Alert>
             )}
           </CardContent>
         </Card>
