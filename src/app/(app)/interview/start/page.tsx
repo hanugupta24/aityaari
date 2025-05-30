@@ -10,7 +10,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, Info, Video, Mic, AlertTriangle, UserX, FileText } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea"; // Added Textarea
+import { Loader2, Info, Video, Mic, AlertTriangle, UserX, FileText, Briefcase } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { generateInterviewQuestions, type GenerateInterviewQuestionsInput } from "@/ai/flows/generate-interview-questions";
 import type { UserProfile, InterviewSession, GeneratedQuestion } from "@/types";
@@ -26,6 +27,7 @@ export default function StartInterviewPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [duration, setDuration] = useState<"15" | "30" | "45">("30");
+  const [jobDescriptionInput, setJobDescriptionInput] = useState(""); // New state for job description
   const [permissionsGranted, setPermissionsGranted] = useState(false);
   const [agreedToMonitoring, setAgreedToMonitoring] = useState(false);
   const [isStartingSession, setIsStartingSession] = useState(false);
@@ -53,7 +55,6 @@ export default function StartInterviewPage() {
     toast({ title: "Preparing Interview", description: "Generating questions, please wait..." });
 
     try {
-      // Retrieve resume text from localStorage
       const resumeProcessedTextFromLocalStorage = typeof window !== "undefined" ? localStorage.getItem(LOCAL_STORAGE_RESUME_TEXT_KEY) : null;
 
       const questionGenInput: GenerateInterviewQuestionsInput = {
@@ -61,6 +62,7 @@ export default function StartInterviewPage() {
         role: userProfile.role,
         interviewDuration: duration,
         resumeProcessedText: resumeProcessedTextFromLocalStorage || undefined, 
+        jobDescription: jobDescriptionInput.trim() || undefined, // Pass job description
       };
       const questionGenOutput = await generateInterviewQuestions(questionGenInput);
 
@@ -80,6 +82,8 @@ export default function StartInterviewPage() {
         status: "questions_generated", 
         createdAt: new Date().toISOString(),
         questions: questionGenOutput.questions as GeneratedQuestion[],
+        // Optionally store the jobDescription used for this session for later review
+        jobDescriptionUsed: jobDescriptionInput.trim() || undefined,
       };
       await setDoc(newInterviewRef, initialSessionData);
       
@@ -89,7 +93,7 @@ export default function StartInterviewPage() {
     } catch (error: any) {
       console.error("Error starting interview:", error);
       let description = error.message || "An unexpected error occurred while starting the interview.";
-      if (error.message && (error.message.includes("503") || error.message.toLowerCase().includes("overloaded") || error.message.toLowerCase().includes("service unavailable"))) {
+       if (error.message && (error.message.includes("503") || error.message.toLowerCase().includes("overloaded") || error.message.toLowerCase().includes("service unavailable") || error.message.toLowerCase().includes("model is overloaded"))) {
         description = "The AI service is currently busy or unavailable. Please try again in a few moments.";
       }
       toast({ title: "Failed to Start Interview", description, variant: "destructive" });
@@ -134,7 +138,7 @@ export default function StartInterviewPage() {
     isProfileEssentialDataMissing || 
     interviewLimitReached;
   
-  const isLoadingState = authInitialLoading || (authLoading && !userProfile);
+  const isLoadingState = authInitialLoading || (authLoading && !userProfile && !initialLoading);
 
 
   return (
@@ -152,7 +156,7 @@ export default function StartInterviewPage() {
             </div>
           )}
           
-          {!isLoadingState && isProfileNotLoadedAndAuthChecked && (
+          {!isLoadingState && isProfileNotLoadedAndAuthChecked && !userProfile && (
              <Alert variant="destructive">
               <UserX className="h-4 w-4" />
               <AlertTitle>Profile Not Loaded</AlertTitle>
@@ -176,13 +180,13 @@ export default function StartInterviewPage() {
             </Alert>
           )}
 
-          {!isLoadingState && !userProfile && !isProfileNotLoadedAndAuthChecked && (
-            <Alert variant="default" className="border-blue-500 text-blue-700 dark:border-blue-400 dark:text-blue-300">
-                <UserX className="h-4 w-4 !text-blue-500 dark:!text-blue-400" />
-                <AlertTitle className="text-blue-700 dark:text-blue-300">Profile Not Found</AlertTitle>
-                <AlertDescription className="text-blue-600 dark:text-blue-200">
+          {!isLoadingState && !userProfile && !isProfileNotLoadedAndAuthChecked && !authLoading && (
+             <Alert variant="destructive">
+                <UserX className="h-4 w-4" />
+                <AlertTitle>User Profile Not Found</AlertTitle>
+                <AlertDescription>
                 It seems you haven't created a profile yet, or we couldn't load it. Please 
-                <Link href="/profile" className="font-semibold underline hover:text-blue-800 dark:hover:text-blue-100 ml-1">
+                <Link href="/profile" className="font-semibold underline hover:text-destructive-foreground/80 ml-1">
                     go to your profile
                 </Link>
                 to create or complete it. Key details like your 'Role' and 'Profile Field' are needed for tailored interview questions.
@@ -194,11 +198,11 @@ export default function StartInterviewPage() {
             <FileText className="h-4 w-4" />
             <AlertTitle>Personalized Questions</AlertTitle>
             <AlertDescription>
-              Interview questions will be based on your targeted role and profile field. Uploading your resume in the 
-              <Link href="/profile" className="font-semibold underline hover:text-foreground/80"> profile section</Link> (text from it will be stored in your browser) can further tailor the questions to your experience, making your practice more fruitful!
+              Interview questions will be based on your targeted role and profile field.
+              Uploading your resume in the <Link href="/profile" className="font-semibold underline hover:text-foreground/80">profile section</Link> (text from it will be stored in your browser)
+              and providing a job description below can further tailor questions to your experience and target role.
             </AlertDescription>
           </Alert>
-
 
           <div>
             <Label className="text-lg font-semibold mb-2 block">Select Interview Duration</Label>
@@ -211,6 +215,25 @@ export default function StartInterviewPage() {
               ))}
             </RadioGroup>
           </div>
+
+          {/* New Job Description Textarea */}
+          <div>
+            <Label htmlFor="jobDescriptionInput" className="text-lg font-semibold mb-2 block flex items-center">
+                <Briefcase className="h-5 w-5 mr-2 text-primary" />
+                Targeted Job Description (Optional)
+            </Label>
+            <Textarea
+                id="jobDescriptionInput"
+                placeholder="Paste the job description here to get more aligned questions..."
+                value={jobDescriptionInput}
+                onChange={(e) => setJobDescriptionInput(e.target.value)}
+                rows={6}
+                className="text-sm"
+                disabled={isStartingSession || isLoadingState}
+            />
+            <p className="text-xs text-muted-foreground mt-1">Providing a job description helps us generate highly relevant questions.</p>
+          </div>
+
 
           <Alert>
             <Info className="h-4 w-4" />
