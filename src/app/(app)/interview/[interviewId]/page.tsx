@@ -8,7 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { db } from "@/lib/firebase";
 import { doc, getDoc, updateDoc, onSnapshot, Unsubscribe } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Mic, Send, Video, Terminal, AlertTriangle, Volume2, MicOff, TimerIcon, EyeOff, Zap } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -33,15 +33,15 @@ declare global {
 const MAX_TAB_SWITCH_WARNINGS = 2; // Ends on 3rd infraction
 const MAX_FACE_NOT_DETECTED_WARNINGS = 2; // Ends on 3rd infraction (for short absences)
 
-const FACE_DETECTION_INTERVAL_MS = 4 * 1000; // Check face presence every ~4s (for >3s rule)
+const FACE_DETECTION_INTERVAL_MS = 5 * 1000; // Check face presence every ~5s
 const CONSECUTIVE_NO_FACE_CHECKS_TO_WARN_FACE_AWAY = 1; // Issue a "faceNotDetected" warning on the 1st failed check
 const PROLONGED_FACE_ABSENCE_TIMEOUT_MS = 60 * 1000; // 1 minute of continuous absence terminates
 
 const INACTIVITY_TIMEOUT_ORAL_MS = 60 * 1000; 
 const INACTIVITY_TIMEOUT_WRITTEN_MS = 2 * 60 * 1000; 
 
-const DISTRACTION_CHECK_INTERVAL_MS = 5 * 1000; // Check for simulated distraction every 5 seconds
-const DISTRACTION_PROBABILITY = 0.30; // 30% chance of simulated distraction per interval (~3s average feel)
+const DISTRACTION_CHECK_INTERVAL_MS = 3 * 1000; // Check for simulated distraction every ~3 seconds
+const DISTRACTION_PROBABILITY = 0.50; // 50% chance of simulated distraction per interval
 
 type ProctoringIssueType = 'tabSwitch' | 'faceNotDetected' | 'task_inactivity' | 'distraction';
 
@@ -80,9 +80,9 @@ export default function InterviewPage() {
   // Proctoring States
   const [proctoringIssues, setProctoringIssues] = useState<{
     tabSwitch: number;
-    faceNotDetected: number;
-    task_inactivity: number;
-    distraction: number;
+    faceNotDetected: number; // For strict warnings (5s off screen)
+    task_inactivity: number; // For simple warnings
+    distraction: number; // For simple warnings (~3s inappropriate activity simulation)
   }>({ tabSwitch: 0, faceNotDetected: 0, task_inactivity: 0, distraction: 0 });
   
   const [isFaceCurrentlyVisible, setIsFaceCurrentlyVisible] = useState(true); 
@@ -141,8 +141,8 @@ export default function InterviewPage() {
 
   const handleEndInterview = useCallback(async (
     reason: "completed_by_user" | "time_up" | "face_not_detected_limit" | "prolonged_face_absence" | "all_questions_answered" | "tab_switch_limit",
-    questionsDataParam?: AnsweredQuestion[], // Use current state if not provided
-    transcriptStringParam?: string // Use current state if not provided
+    questionsDataParam?: AnsweredQuestion[], 
+    transcriptStringParam?: string 
   ) => {
     const currentQuestions = questionsDataParam || allQuestionsRef.current;
     const currentTranscript = transcriptStringParam || transcriptLogRef.current.join('\\n');
@@ -259,7 +259,7 @@ export default function InterviewPage() {
     prevTabSwitchCountRef.current = currentTabSwitches;
   }, [proctoringIssues.tabSwitch, toast, isInterviewEffectivelyActive, handleEndInterview]);
 
-  // useEffect for Strict Warnings & Termination (Face Not Detected - short absences)
+  // useEffect for Strict Warnings & Termination (Face Not Detected - approx 5s off screen)
   const prevFaceNotDetectedCountRef = useRef(proctoringIssues.faceNotDetected);
   useEffect(() => {
     if (!isInterviewEffectivelyActive() || isEndingInterviewRef.current) return;
@@ -269,7 +269,7 @@ export default function InterviewPage() {
 
     if (currentFaceWarnings > previousFaceWarnings) { 
         if (currentFaceWarnings <= MAX_FACE_NOT_DETECTED_WARNINGS) {
-            let warningMessage = `Your face does not seem to be clearly visible (or you might be away for >3s). Please ensure you are in front of the camera. Warning ${currentFaceWarnings} of ${MAX_FACE_NOT_DETECTED_WARNINGS}.`;
+            let warningMessage = `Your face does not seem to be clearly visible. Please ensure you are in front of the camera. Warning ${currentFaceWarnings} of ${MAX_FACE_NOT_DETECTED_WARNINGS}.`;
              if (currentFaceWarnings === MAX_FACE_NOT_DETECTED_WARNINGS) {
                 warningMessage = `LAST WARNING: Your face is not consistently visible. Further instances will terminate the interview.`;
             }
@@ -303,14 +303,14 @@ export default function InterviewPage() {
     prevTaskInactivityCountRef.current = proctoringIssues.task_inactivity;
   }, [proctoringIssues.task_inactivity, toast, isInterviewEffectivelyActive]);
   
-  // useEffect for Simple Warnings (Distraction - simulated for moving a lot, looking away, phone use, or few secs of inattention)
+  // useEffect for Simple Warnings (Distraction - simulated for ~3s of inappropriate activity)
   const prevDistractionCountRef = useRef(proctoringIssues.distraction);
   useEffect(() => {
     if (!isInterviewEffectivelyActive() || isEndingInterviewRef.current) return;
     if (proctoringIssues.distraction > prevDistractionCountRef.current) {
       toast({
         title: "Proctoring: Attention Reminder",
-        description: `Please try to maintain focus on the screen and avoid excessive movement or looking away (e.g. phone use or brief inattention). (This is a simple reminder and does not count towards termination).`,
+        description: `Please try to maintain focus on the screen and avoid excessive movement or looking away. (This is a simple reminder and does not count towards termination).`,
         variant: "default", 
         duration: 5000,
       });
@@ -349,7 +349,6 @@ export default function InterviewPage() {
               .sort((a, b) => {
                   if (a.stage === 'oral' && b.stage === 'technical_written') return -1;
                   if (a.stage === 'technical_written' && b.stage === 'oral') return 1;
-                  // Fallback to ID-based sort if stages are same or not standard
                   const idANum = parseInt((a.id || 'q0').substring(1)) || 0;
                   const idBNum = parseInt((b.id || 'q0').substring(1)) || 0;
                   return idANum - idBNum;
@@ -447,14 +446,14 @@ export default function InterviewPage() {
         let desiredVoice = availableVoices.find(voice => voice.lang.startsWith('en-IN') && voice.name.toLowerCase().includes('female'));
         if (!desiredVoice) desiredVoice = availableVoices.find(voice => voice.lang.startsWith('en-IN'));
         if (!desiredVoice) desiredVoice = availableVoices.find(voice => voice.lang === 'en-US' && voice.name.toLowerCase().includes('female'));
-        if (!desiredVoice) desiredVoice = availableVoices.find(voice => voice.lang === 'en-US' && voice.name.toLowerCase().includes('google')); // Prefer Google voices if specific not found
+        if (!desiredVoice) desiredVoice = availableVoices.find(voice => voice.lang === 'en-US' && voice.name.toLowerCase().includes('google'));
         if (!desiredVoice) desiredVoice = availableVoices.find(voice => voice.lang === 'en-US');
         
         if (desiredVoice) {
           utterance.voice = desiredVoice;
           console.log("InterviewPage: Using voice for AI dictation:", desiredVoice.name, desiredVoice.lang);
         } else {
-          console.log("InterviewPage: No specific 'en-IN' or 'en-US Female/Google' voice found, using browser default for AI dictation.");
+          console.log("InterviewPage: No specific Indian accent or 'en-US Female/Google' voice found, using browser default for AI dictation.");
         }
 
         utterance.onstart = () => { setIsAISpeaking(true); console.log("InterviewPage: AI speech started.");};
@@ -501,7 +500,7 @@ export default function InterviewPage() {
          clearInterval(timerIntervalRef.current);
     }
     return () => { if (timerIntervalRef.current) clearInterval(timerIntervalRef.current); };
-  }, [isInterviewEffectivelyActive, timeLeftInSeconds, handleEndInterview]);
+  }, [isInterviewEffectivelyActive, timeLeftInSeconds, handleEndInterview, toast]); // Added toast as it's used in handleEndInterview
 
 
   // Proctoring: Tab Switch Detection (Strict)
@@ -527,15 +526,12 @@ export default function InterviewPage() {
   }, [isInterviewEffectivelyActive, handleFocusChange]);
 
 
-  // Proctoring: Face Presence Detection (Strict, for short absences) & UI Feedback
+  // Proctoring: Face Presence Detection (Strict, for ~5s absences) & UI Feedback
   useEffect(() => {
     let faceDetectionInterval: NodeJS.Timeout | null = null;
-    // This is a simulation for face presence.
-    // In a real app, you'd use a CV library here.
     const mockCheckFacePresence = (): boolean => {
-        // Simulate face being present most of the time, occasionally not.
-        const isPresent = Math.random() > 0.1; // ~90% chance face is "present"
-        setIsFaceCurrentlyVisible(isPresent); // Update UI feedback state
+        const isPresent = Math.random() > 0.1; 
+        setIsFaceCurrentlyVisible(isPresent); 
         return isPresent;
     };
 
@@ -549,7 +545,7 @@ export default function InterviewPage() {
             setConsecutiveNoFaceCountForWarning(prev => {
                 const newCount = prev + 1;
                 if (newCount >= CONSECUTIVE_NO_FACE_CHECKS_TO_WARN_FACE_AWAY) {
-                    console.log("InterviewPage: Face not detected by mock check, logging event for strict warning.");
+                    console.log("InterviewPage: Face not detected by mock check (approx 5s), logging event for strict warning.");
                     logProctoringEvent('faceNotDetected'); 
                     return 0; 
                 }
@@ -582,7 +578,7 @@ export default function InterviewPage() {
               }
           }
       }
-  }, [isFaceCurrentlyVisible, continuousFaceNotDetectedStartTime, isInterviewEffectivelyActive, handleEndInterview]);
+  }, [isFaceCurrentlyVisible, continuousFaceNotDetectedStartTime, isInterviewEffectivelyActive, handleEndInterview, toast]); // Added toast
 
 
   // Proctoring: Task Inactivity (No Speech/Typing - simple warning)
@@ -592,8 +588,8 @@ export default function InterviewPage() {
       const timeoutDuration = currentQuestion.stage === 'oral' ? INACTIVITY_TIMEOUT_ORAL_MS : INACTIVITY_TIMEOUT_WRITTEN_MS;
       inactivityInterval = setInterval(() => {
         if (isEndingInterviewRef.current) return;
-        if (isListening || isAISpeaking) { // Don't count inactivity if AI is speaking or user is actively trying to speak
-            setLastActivityTime(Date.now()); // Reset activity timer
+        if (isListening || isAISpeaking) { 
+            setLastActivityTime(Date.now()); 
             return;
         }
         if (Date.now() - lastActivityTime > timeoutDuration) {
@@ -601,19 +597,19 @@ export default function InterviewPage() {
           logProctoringEvent('task_inactivity');
           setLastActivityTime(Date.now()); 
         }
-      }, 30000); // Check every 30s
+      }, 30000); 
     }
     return () => { if (inactivityInterval) clearInterval(inactivityInterval); };
   }, [isInterviewEffectivelyActive, currentQuestion, lastActivityTime, logProctoringEvent, isListening, isAISpeaking]);
 
-  // Proctoring: Distraction Detection (Simulated - for moving around, looking away, phone use, or brief inattention - simple warning)
+  // Proctoring: Distraction Detection (Simulated - for ~3s of inappropriate activity - simple warning)
   useEffect(() => {
     let distractionInterval: NodeJS.Timeout | null = null;
     if (isInterviewEffectivelyActive()) {
         distractionInterval = setInterval(() => {
             if (isEndingInterviewRef.current) return;
             if (Math.random() < DISTRACTION_PROBABILITY) {
-                console.log("InterviewPage: Simulated distraction detected, logging event for simple warning.");
+                console.log("InterviewPage: Simulated distraction detected (approx 3s), logging event for simple warning.");
                 logProctoringEvent('distraction');
             }
         }, DISTRACTION_CHECK_INTERVAL_MS);
@@ -627,13 +623,13 @@ export default function InterviewPage() {
       toast({ title: "Speech Input Not Supported", description: "Cannot start voice input. Please type your answer if possible or contact support.", variant: "destructive"});
       return;
     }
-    if (isListening) { // User is stopping
+    if (isListening) { 
       if (recognitionRef.current) {
           console.log("InterviewPage: Manually stopping listening via button.");
-          recognitionRef.current.stop(); // This will trigger onend
+          recognitionRef.current.stop(); 
       }
-      setIsListening(false); // Immediate UI feedback
-    } else { // User is starting
+      setIsListening(false); 
+    } else { 
       if (typeof window !== 'undefined' && window.speechSynthesis?.speaking) {
         window.speechSynthesis.cancel(); 
         setIsAISpeaking(false); 
@@ -712,7 +708,7 @@ export default function InterviewPage() {
     const currentQ = updatedQuestions[currentQuestionIndex];
     currentQ.answer = userAnswer.trim();
     setAllQuestions(updatedQuestions); 
-    allQuestionsRef.current = updatedQuestions; // Update ref for callbacks
+    allQuestionsRef.current = updatedQuestions; 
 
     const newTranscriptLogEntries = [
         `AI (${currentQ.stage} - ${currentQ.type}): ${currentQ.text}`,
@@ -720,7 +716,7 @@ export default function InterviewPage() {
     ];
     const updatedTranscriptLogArray = [...transcriptLog, ...newTranscriptLogEntries];
     setTranscriptLog(updatedTranscriptLogArray); 
-    transcriptLogRef.current = updatedTranscriptLogArray; // Update ref
+    transcriptLogRef.current = updatedTranscriptLogArray; 
     
     try {
         const sessionDocRef = doc(db, "users", user.uid, "interviews", interviewId);
