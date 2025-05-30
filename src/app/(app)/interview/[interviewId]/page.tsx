@@ -29,9 +29,9 @@ declare global {
   }
 }
 
-const MAX_PROCTORING_WARNINGS = 2;
-const INACTIVITY_TIMEOUT_ORAL_MS = 60 * 1000; // 1 minute
-const INACTIVITY_TIMEOUT_WRITTEN_MS = 2 * 60 * 1000; // 2 minutes
+const MAX_FACE_NOT_DETECTED_WARNINGS = 2; // Ends on 3rd
+const INACTIVITY_TIMEOUT_ORAL_MS = 60 * 1000; 
+const INACTIVITY_TIMEOUT_WRITTEN_MS = 2 * 60 * 1000; 
 const FACE_DETECTION_INTERVAL_MS = 15 * 1000;
 const CONSECUTIVE_NO_FACE_CHECKS_TO_WARN = 2;
 
@@ -65,6 +65,7 @@ export default function InterviewPage() {
   const [isAISpeaking, setIsAISpeaking] = useState(false);
   const [hasSpokenCurrentQuestion, setHasSpokenCurrentQuestion] = useState(false);
   const previousQuestionIdRef = useRef<string | null>(null);
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
 
   const [timeLeftInSeconds, setTimeLeftInSeconds] = useState<number | null>(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -90,6 +91,25 @@ export default function InterviewPage() {
   const isInterviewEffectivelyActive = useCallback(() => {
     return session && session.status !== "completed" && session.status !== "cancelled" && !isEndingInterviewRef.current;
   }, [session]);
+
+  useEffect(() => {
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      if (voices.length > 0) {
+        setAvailableVoices(voices);
+        console.log("InterviewPage: Speech synthesis voices loaded:", voices.length);
+      }
+    };
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      loadVoices(); // Initial attempt
+      window.speechSynthesis.onvoiceschanged = loadVoices; // Event listener
+    }
+    return () => {
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.onvoiceschanged = null;
+      }
+    };
+  }, []);
 
   const stopMediaTracks = useCallback(() => {
     console.log("InterviewPage: stopMediaTracks called.");
@@ -135,8 +155,9 @@ export default function InterviewPage() {
       return;
     }
     
+    console.log(`InterviewPage: handleEndInterview called with reason: ${reason}`);
     setIsEndingInterview(true);
-    isEndingInterviewRef.current = true; // Ensure ref is updated immediately
+    isEndingInterviewRef.current = true; 
 
     let toastMessage = "Finalizing and analyzing your feedback...";
     let toastTitle = "Interview Ended";
@@ -204,60 +225,54 @@ export default function InterviewPage() {
     }));
   }, [isInterviewEffectivelyActive]);
 
-  // useEffect for Tab Switch Warnings
+  // useEffect for simple Tab Switch Warnings (does not terminate)
   const prevTabSwitchCountRef = useRef(0);
   useEffect(() => {
-    if (isInterviewEffectivelyActive() && proctoringIssues.tabSwitch > prevTabSwitchCountRef.current && proctoringIssues.tabSwitch <= MAX_PROCTORING_WARNINGS) {
+    if (isInterviewEffectivelyActive() && proctoringIssues.tabSwitch > prevTabSwitchCountRef.current) {
       toast({
         title: "Proctoring Warning",
-        description: `Switching away from the interview tab is not recommended. This is warning ${proctoringIssues.tabSwitch} of ${MAX_PROCTORING_WARNINGS}.`,
+        description: `Switching away from the interview tab is not recommended. (Tab Switch count: ${proctoringIssues.tabSwitch})`,
         variant: "default",
-        duration: 7000,
+        duration: 5000,
       });
     }
     prevTabSwitchCountRef.current = proctoringIssues.tabSwitch;
   }, [proctoringIssues.tabSwitch, toast, isInterviewEffectivelyActive]);
 
-  // useEffect for Face Not Detected Warnings
-  const prevFaceNotDetectedCountRef = useRef(0);
-  useEffect(() => {
-    if (isInterviewEffectivelyActive() && proctoringIssues.faceNotDetected > prevFaceNotDetectedCountRef.current && proctoringIssues.faceNotDetected <= MAX_PROCTORING_WARNINGS) {
-      toast({
-        title: "Proctoring Warning",
-        description: `Your face does not seem to be clearly visible. Please ensure you are in front of the camera. Warning ${proctoringIssues.faceNotDetected} of ${MAX_PROCTORING_WARNINGS}.`,
-        variant: "default",
-        duration: 7000,
-      });
-    }
-    prevFaceNotDetectedCountRef.current = proctoringIssues.faceNotDetected;
-  }, [proctoringIssues.faceNotDetected, toast, isInterviewEffectivelyActive]);
-
-  // useEffect for Inactivity Warnings
+  // useEffect for simple Inactivity Warnings (does not terminate)
   const prevInactivityCountRef = useRef(0);
   useEffect(() => {
-    if (isInterviewEffectivelyActive() && proctoringIssues.inactivity > prevInactivityCountRef.current && proctoringIssues.inactivity <= MAX_PROCTORING_WARNINGS) {
+    if (isInterviewEffectivelyActive() && proctoringIssues.inactivity > prevInactivityCountRef.current) {
       toast({
         title: "Proctoring Warning",
-        description: `No activity detected for a while. Please continue with the interview. Warning ${proctoringIssues.inactivity} of ${MAX_PROCTORING_WARNINGS}.`,
+        description: `No activity detected for a while. Please continue. (Inactivity count: ${proctoringIssues.inactivity})`,
         variant: "default",
-        duration: 7000,
+        duration: 5000,
       });
     }
     prevInactivityCountRef.current = proctoringIssues.inactivity;
   }, [proctoringIssues.inactivity, toast, isInterviewEffectivelyActive]);
 
-  // useEffect for Proctoring Terminations
+  // useEffect for Face Not Detected Warnings & Termination
+  const prevFaceNotDetectedCountRef = useRef(0);
   useEffect(() => {
-    if (!isInterviewEffectivelyActive() || isEndingInterviewRef.current) return;
-
-    if (proctoringIssues.tabSwitch > MAX_PROCTORING_WARNINGS) {
-      handleEndInterview('tab_switch_limit', allQuestionsRef.current, transcriptLogRef.current.join('\\n'));
-    } else if (proctoringIssues.faceNotDetected > MAX_PROCTORING_WARNINGS) {
-      handleEndInterview('face_not_detected_limit', allQuestionsRef.current, transcriptLogRef.current.join('\\n'));
-    } else if (proctoringIssues.inactivity > MAX_PROCTORING_WARNINGS) {
-      handleEndInterview('inactivity_limit', allQuestionsRef.current, transcriptLogRef.current.join('\\n'));
+    if (isInterviewEffectivelyActive() && proctoringIssues.faceNotDetected > prevFaceNotDetectedCountRef.current) {
+      if (proctoringIssues.faceNotDetected <= MAX_FACE_NOT_DETECTED_WARNINGS) {
+        toast({
+          title: "Proctoring Warning: Face Not Visible",
+          description: `Your face does not seem to be clearly visible. Please ensure you are in front of the camera. Warning ${proctoringIssues.faceNotDetected} of ${MAX_FACE_NOT_DETECTED_WARNINGS}.`,
+          variant: "destructive",
+          duration: 7000,
+        });
+      }
     }
-  }, [proctoringIssues, handleEndInterview, isInterviewEffectivelyActive]);
+    prevFaceNotDetectedCountRef.current = proctoringIssues.faceNotDetected;
+
+    if (isInterviewEffectivelyActive() && proctoringIssues.faceNotDetected > MAX_FACE_NOT_DETECTED_WARNINGS && !isEndingInterviewRef.current) {
+        console.log("InterviewPage: Terminating interview due to excessive face not detected warnings.");
+        handleEndInterview('face_not_detected_limit', allQuestionsRef.current, transcriptLogRef.current.join('\\n'));
+    }
+  }, [proctoringIssues.faceNotDetected, toast, isInterviewEffectivelyActive, handleEndInterview]);
 
 
   // Main useEffect for Firestore listener, media setup, and cleanup
@@ -276,8 +291,11 @@ export default function InterviewPage() {
           setTranscriptLog(data.transcript ? data.transcript.split('\\n') : []);
 
           if ((data.status === "completed" || data.status === "cancelled")) {
-            toast({ title: "Interview Ended", description: "This interview session is no longer active."});
-            router.push("/dashboard"); return;
+            if (!isEndingInterviewRef.current) { // Prevent double toast if already ending
+                toast({ title: "Interview Ended", description: "This interview session is no longer active."});
+                router.push("/dashboard");
+            }
+            return;
           }
           
           if (data.questions && data.questions.length > 0) {
@@ -316,7 +334,7 @@ export default function InterviewPage() {
       cancelSpeechSynthesis(); stopSpeechRecognition(); stopMediaTracks();
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     };
-  }, [user, interviewId, router, toast, cancelSpeechSynthesis, stopSpeechRecognition, stopMediaTracks]); // Added stopMediaTracks
+  }, [user, interviewId, router, toast, cancelSpeechSynthesis, stopSpeechRecognition, stopMediaTracks]);
 
   const currentQuestion = allQuestions[currentQuestionIndex];
 
@@ -339,6 +357,21 @@ export default function InterviewPage() {
       if (typeof window !== 'undefined' && window.speechSynthesis) {
         const utterance = new SpeechSynthesisUtterance(currentQuestion.text);
         utterance.lang = 'en-US'; utterance.rate = 0.9;
+        
+        let desiredVoice = availableVoices.find(voice => voice.lang === 'en-IN');
+        if (!desiredVoice) {
+            desiredVoice = availableVoices.find(voice => voice.lang === 'en-US' && voice.name.toLowerCase().includes('female'));
+        }
+        if (!desiredVoice) {
+            desiredVoice = availableVoices.find(voice => voice.lang === 'en-US');
+        }
+        if (desiredVoice) {
+          utterance.voice = desiredVoice;
+          console.log("InterviewPage: Using voice:", desiredVoice.name, desiredVoice.lang);
+        } else {
+          console.log("InterviewPage: No specific 'en-IN' or 'en-US Female' voice found, using browser default.");
+        }
+
         utterance.onstart = () => setIsAISpeaking(true);
         utterance.onend = () => { setIsAISpeaking(false); setHasSpokenCurrentQuestion(true); setLastActivityTime(Date.now()); };
         utterance.onerror = (event) => {
@@ -351,7 +384,7 @@ export default function InterviewPage() {
         if (typeof window !== 'undefined' && window.speechSynthesis?.speaking) window.speechSynthesis.cancel();
         setIsAISpeaking(false);
     }
-  }, [currentQuestion, isInterviewEffectivelyActive, toast, isListening, hasSpokenCurrentQuestion, isAISpeaking]);
+  }, [currentQuestion, isInterviewEffectivelyActive, toast, isListening, hasSpokenCurrentQuestion, isAISpeaking, availableVoices]);
 
   useEffect(() => {
     if (session && session.duration && isInterviewEffectivelyActive() && timeLeftInSeconds === null) {
@@ -377,7 +410,7 @@ export default function InterviewPage() {
       }, 1000);
     }
     return () => { if (timerIntervalRef.current) clearInterval(timerIntervalRef.current); };
-  }, [isInterviewEffectivelyActive, timeLeftInSeconds, handleEndInterview]); // Removed toast from here
+  }, [isInterviewEffectivelyActive, timeLeftInSeconds, handleEndInterview]);
 
   const handleFocusChange = useCallback(() => {
     if (!isEndingInterviewRef.current && isInterviewEffectivelyActive()) {
@@ -402,7 +435,9 @@ export default function InterviewPage() {
   useEffect(() => {
     let faceDetectionInterval: NodeJS.Timeout | null = null;
     const mockCheckFacePresence = (): boolean => {
-        const isPresent = Math.random() > 0.1;
+        // Simulate face presence: ~90% chance face is present
+        const isPresent = Math.random() > 0.1; 
+        console.log("InterviewPage: mockCheckFacePresence - Is face visible?", isPresent);
         setIsFaceCurrentlyVisible(isPresent);
         return isPresent;
     };
@@ -416,12 +451,12 @@ export default function InterviewPage() {
                 const newCount = prev + 1;
                 if (newCount >= CONSECUTIVE_NO_FACE_CHECKS_TO_WARN) {
                     logProctoringEvent('faceNotDetected');
-                    return 0;
+                    return 0; // Reset consecutive count after logging an event
                 }
                 return newCount;
             });
         } else {
-            setConsecutiveNoFaceCount(0);
+            setConsecutiveNoFaceCount(0); // Reset if face is detected
         }
       }, FACE_DETECTION_INTERVAL_MS);
     }
@@ -436,9 +471,9 @@ export default function InterviewPage() {
         if (isEndingInterviewRef.current) return;
         if (Date.now() - lastActivityTime > timeoutDuration) {
           logProctoringEvent('inactivity');
-          setLastActivityTime(Date.now());
+          setLastActivityTime(Date.now()); // Reset activity timer after logging to avoid continuous events
         }
-      }, 30000);
+      }, 30000); // Check every 30 seconds for inactivity
     }
     return () => { if (inactivityInterval) clearInterval(inactivityInterval); };
   }, [isInterviewEffectivelyActive, currentQuestion, lastActivityTime, logProctoringEvent]);
@@ -450,7 +485,7 @@ export default function InterviewPage() {
     }
     if (isListening) {
       if (recognitionRef.current) recognitionRef.current.stop();
-      setIsListening(false);
+      setIsListening(false); // UI feedback
     } else {
       if (typeof window !== 'undefined' && window.speechSynthesis?.speaking) {
         window.speechSynthesis.cancel(); setIsAISpeaking(false); setHasSpokenCurrentQuestion(true);
