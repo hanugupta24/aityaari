@@ -1,4 +1,3 @@
-
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,9 +16,10 @@ import {
   FormDescription,
   FormField,
   FormItem,
-  FormLabel,
+  FormLabel, // This is for the main form
   FormMessage,
 } from "@/components/ui/form";
+import { Label } from "@/components/ui/label"; // Use this basic Label for modals
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -115,15 +115,16 @@ export default function ProfilePage() {
         setProjects(userProfile.projects || []);
         setEducationHistory(userProfile.educationHistory || []);
         
-        if (userProfile.resumeFileName) setSelectedFileName(userProfile.resumeFileName);
-        setClientSideResumeText(userProfile.resumeProcessedText || null); 
-
+        setSelectedFileName(userProfile.resumeFileName || null);
+        // Do not set clientSideResumeText directly from userProfile.resumeProcessedText here
+        // as it's meant for the text from a *newly uploaded* file.
+        // The "Resume on file" display relies on selectedFileName being set if userProfile.resumeFileName exists.
       } else {
         form.reset({ 
             name: user.displayName || "", 
             email: initialEmail, 
             phoneNumber: initialPhoneNumber, 
-            profileField: "", // Ensure mandatory fields are at least empty strings
+            profileField: "", 
             role: "", 
             company: "", 
             accomplishments:"" 
@@ -154,9 +155,9 @@ export default function ProfilePage() {
       setCurrentItemData(itemToEdit);
     } else {
       setEditingItem(null);
-      if (type === "experience") setCurrentItemData({ jobTitle: '', companyName: '', startDate: '', endDate: '', description: '' });
-      else if (type === "project") setCurrentItemData({ title: '', description: '', technologiesUsed: [], projectUrl: '' });
-      else if (type === "education") setCurrentItemData({ degree: '', institution: '', yearOfCompletion: '', details: '' });
+      if (type === "experience") setCurrentItemData({ id: uuidv4(), jobTitle: '', companyName: '', startDate: '', endDate: '', description: '' });
+      else if (type === "project") setCurrentItemData({ id: uuidv4(), title: '', description: '', technologiesUsed: [], projectUrl: '' });
+      else if (type === "education") setCurrentItemData({ id: uuidv4(), degree: '', institution: '', yearOfCompletion: '', details: '' });
     }
     setIsModalOpen(true);
   };
@@ -166,17 +167,12 @@ export default function ProfilePage() {
     setCurrentItemData((prev: any) => ({ ...prev, [name]: value }));
   };
   
-  const handleModalTechnologiesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-     setCurrentItemData((prev: any) => ({ ...prev, technologiesUsed: e.target.value.split(',').map(t => t.trim()).filter(Boolean) }));
-  };
-
-
   const handleSaveItem = () => {
     if (!modalType) return;
 
-    // Basic validation
-    if (modalType === 'experience' && (!currentItemData.jobTitle || !currentItemData.companyName || !currentItemData.startDate || !currentItemData.endDate)) {
-      toast({ title: "Missing Fields", description: "Please fill in job title, company, start date, and end date.", variant: "destructive" });
+    // Basic validation (can be enhanced with Zod for modals too if needed)
+    if (modalType === 'experience' && (!currentItemData.jobTitle || !currentItemData.companyName || !currentItemData.startDate)) {
+      toast({ title: "Missing Fields", description: "Please fill in job title, company, and start date.", variant: "destructive" });
       return;
     }
     if (modalType === 'project' && (!currentItemData.title || !currentItemData.description)) {
@@ -188,16 +184,16 @@ export default function ProfilePage() {
       return;
     }
 
-
     if (editingItem) { 
       if (modalType === "experience") setExperiences(experiences.map(exp => exp.id === editingItem.id ? { ...currentItemData, id: editingItem.id } as ExperienceItem : exp));
       else if (modalType === "project") setProjects(projects.map(proj => proj.id === editingItem.id ? { ...currentItemData, id: editingItem.id } as ProjectItem : proj));
       else if (modalType === "education") setEducationHistory(educationHistory.map(edu => edu.id === editingItem.id ? { ...currentItemData, id: editingItem.id } as EducationItem : edu));
+      toast({title: "Item Updated", description: "Changes saved. Click 'Save All Profile Changes' at the bottom to make it permanent."});
     } else { 
-      const newItemId = uuidv4();
-      if (modalType === "experience") setExperiences([...experiences, { ...currentItemData, id: newItemId } as ExperienceItem]);
-      else if (modalType === "project") setProjects([...projects, { ...currentItemData, id: newItemId } as ProjectItem]);
-      else if (modalType === "education") setEducationHistory([...educationHistory, { ...currentItemData, id: newItemId } as EducationItem]);
+      if (modalType === "experience") setExperiences([...experiences, { ...currentItemData } as ExperienceItem]);
+      else if (modalType === "project") setProjects([...projects, { ...currentItemData } as ProjectItem]);
+      else if (modalType === "education") setEducationHistory([...educationHistory, { ...currentItemData } as EducationItem]);
+      toast({title: "Item Added", description: "Item added. Click 'Save All Profile Changes' at the bottom to make it permanent."});
     }
     setIsModalOpen(false);
     setEditingItem(null);
@@ -208,46 +204,45 @@ export default function ProfilePage() {
     if (type === "experience") setExperiences(experiences.filter(exp => exp.id !== itemId));
     else if (type === "project") setProjects(projects.filter(proj => proj.id !== itemId));
     else if (type === "education") setEducationHistory(educationHistory.filter(edu => edu.id !== itemId));
-    toast({ title: "Item Removed", description: "Item removed. Save profile to make changes permanent." });
+    toast({ title: "Item Removed", description: "Item removed locally. Save all profile changes to make it permanent." });
   };
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     console.log("ProfilePage: handleFileChange initiated.");
     const file = event.target.files?.[0];
     
-    // Always clear the visual input value so the same file can be re-selected if needed
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (fileInputRef.current) fileInputRef.current.value = ""; // Always clear visual input
 
     if (!file) {
       console.log("ProfilePage: File selection cancelled by user.");
-      // If user cancels, don't change existing loaded/saved resume data in form or display
-      return;
+      return; // Don't change existing loaded/saved resume data
     }
 
     console.log("ProfilePage: New file selected:", file.name);
-    setSelectedFile(file); 
-    setSelectedFileName(file.name); 
-    setClientSideResumeText(null); 
     setIsReadingFile(true);
+    setSelectedFile(file); 
+    setSelectedFileName(file.name);
+    setClientSideResumeText(null); // Clear previous extracted text for the new file
+    form.setValue("resumeProcessedText", null, { shouldValidate: true }); // Clear from form as well
 
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
       toast({ title: "File Too Large", description: `Maximum file size is ${MAX_FILE_SIZE_MB}MB.`, variant: "destructive" });
-      setSelectedFile(null); // Clear the invalid file
-      setSelectedFileName(userProfile?.resumeFileName || null); // Revert display to saved name
-      setClientSideResumeText(userProfile?.resumeProcessedText || null); // Revert processed text
+      setSelectedFile(null);
+      setSelectedFileName(userProfile?.resumeFileName || null);
+      setClientSideResumeText(null);
       setIsReadingFile(false);
       return;
     }
 
     if (!ACCEPTED_MIME_TYPES.includes(file.type) && !ACCEPT_FILE_EXTENSIONS.split(',').some(ext => file.name.toLowerCase().endsWith(ext))) {
-      toast({ title: "Unsupported File Type", description: `Please upload one of the following types: ${ACCEPT_FILE_EXTENSIONS}. Plain text (.txt, .md) is recommended.`, variant: "destructive" });
+      toast({ title: "Unsupported File Type", description: `Please upload one of: ${ACCEPT_FILE_EXTENSIONS}. Plain text (.txt, .md) recommended.`, variant: "destructive" });
       setSelectedFile(null);
       setSelectedFileName(userProfile?.resumeFileName || null);
-      setClientSideResumeText(userProfile?.resumeProcessedText || null);
+      setClientSideResumeText(null);
       setIsReadingFile(false);
       return;
     }
-
+    
     if (['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.type)) {
       toast({ title: "File Type Notice", description: `Attempting to extract text from ${file.name}. For PDF/Word, extraction might be incomplete. Plain text (.txt, .md) is best.`, duration: 7000, variant: "default" });
     }
@@ -255,7 +250,7 @@ export default function ProfilePage() {
     const reader = new FileReader();
     reader.onload = (e) => {
       const text = e.target?.result as string;
-      setClientSideResumeText(text);
+      setClientSideResumeText(text); 
       console.log("ProfilePage: File read successfully, clientSideResumeText set.");
       toast({ title: "Resume Content Loaded", description: `Text extracted from ${file.name}. Save profile to update for AI use.` });
       setIsReadingFile(false);
@@ -263,9 +258,9 @@ export default function ProfilePage() {
     reader.onerror = (errorEvent) => {
       console.error("ProfilePage: Error reading file:", errorEvent);
       toast({ title: "File Read Error", description: "Could not read resume content. Please try a different file or format.", variant: "destructive" });
-      setSelectedFile(null); // Clear invalid file
-      setSelectedFileName(userProfile?.resumeFileName || null); // Revert display
-      setClientSideResumeText(userProfile?.resumeProcessedText || null); // Revert text
+      setSelectedFile(null);
+      setSelectedFileName(userProfile?.resumeFileName || null);
+      setClientSideResumeText(null);
       setIsReadingFile(false);
     };
     reader.readAsText(file);
@@ -285,23 +280,24 @@ export default function ProfilePage() {
       setClientSideResumeText(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
       
+      // Update Firestore to remove resume fields
       if (user) {
         const userDocRef = doc(db, "users", user.uid);
         await setDoc(userDocRef, {
           resumeFileName: null,
           resumeFileUrl: null,
           resumeStoragePath: null,
-          resumeProcessedText: null,
+          resumeProcessedText: null, // Explicitly set to null
           updatedAt: new Date().toISOString(),
         }, { merge: true });
         toast({ title: "Resume Cleared", description: "Resume removed from profile and storage." });
         refreshUserProfile(); 
       } else {
-        toast({ title: "Resume Cleared", description: "Local resume selection cleared." });
+         toast({ title: "Resume Cleared Locally", description: "Local resume selection cleared." });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("ProfilePage: Error clearing resume:", error);
-      toast({ title: "Clear Resume Failed", description: "Could not remove resume. Please try again.", variant: "destructive" });
+      toast({ title: "Clear Resume Failed", description: error.message || "Could not remove resume. Please try again.", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -328,25 +324,27 @@ export default function ProfilePage() {
       resumeFileName: string | null;
       resumeFileUrl: string | null;
       resumeStoragePath: string | null;
-      resumeProcessedText: string | null;
+      resumeProcessedText: string | null; 
     } = {
       resumeFileName: userProfile?.resumeFileName || null,
       resumeFileUrl: userProfile?.resumeFileUrl || null,
       resumeStoragePath: userProfile?.resumeStoragePath || null,
-      resumeProcessedText: clientSideResumeText || userProfile?.resumeProcessedText || null, 
+      resumeProcessedText: clientSideResumeText || userProfile?.resumeProcessedText || null,
     };
 
     try {
-      if (selectedFile) {
+      if (selectedFile) { // A new file was selected for upload
         console.log("ProfilePage: New resume file selected, starting upload:", selectedFile.name);
         setIsUploading(true);
 
+        // Delete old file from storage if it exists
         if (userProfile?.resumeStoragePath) {
           try {
             const oldFileRef = storageRef(storage, userProfile.resumeStoragePath);
             await deleteObject(oldFileRef);
             console.log("ProfilePage: Old resume deleted from Firebase Storage:", userProfile.resumeStoragePath);
           } catch (deleteError: any) {
+            // Log warning but continue, as new upload is more important
             console.warn("ProfilePage: Failed to delete old resume, continuing with new upload:", deleteError.message);
           }
         }
@@ -365,6 +363,7 @@ export default function ProfilePage() {
             (error) => {
               console.error("ProfilePage: File upload error:", error);
               toast({ title: "Resume Upload Failed", description: error.message, variant: "destructive" });
+              setIsUploading(false); // Reset uploading state on error
               reject(error);
             },
             async () => {
@@ -375,31 +374,38 @@ export default function ProfilePage() {
                   resumeFileName: selectedFile.name,
                   resumeFileUrl: downloadURL,
                   resumeStoragePath: filePath,
-                  resumeProcessedText: clientSideResumeText, 
+                  resumeProcessedText: clientSideResumeText, // Use the text extracted from the new file
                 };
-                console.log("ProfilePage: New resume data prepared:", newResumeData);
+                console.log("ProfilePage: New resume data prepared after upload:", newResumeData);
+                setIsUploading(false);
                 resolve();
               } catch (urlError) {
                 console.error("ProfilePage: Error getting download URL:", urlError);
                 toast({ title: "Upload Post-Processing Failed", description: "Could not get resume URL.", variant: "destructive" });
+                setIsUploading(false);
                 reject(urlError);
               }
             }
           );
         });
       } else if (selectedFileName === null && userProfile?.resumeFileName !== null) {
+        // This means resume was explicitly cleared (selectedFileName is nullified by clearResume or by selecting then deselecting files)
+        // And there was a resume previously saved.
         newResumeData = {
           resumeFileName: null,
           resumeFileUrl: null,
           resumeStoragePath: null,
-          resumeProcessedText: null,
+          resumeProcessedText: null, // Also clear processed text
         };
-        console.log("ProfilePage: Resume was cleared (no new file selected, and selectedFileName is null). newResumeData reflects null values.");
-      } else if (clientSideResumeText !== userProfile?.resumeProcessedText) {
-          // If only text was changed without a new file upload (e.g. user cleared a file, then pasted text, though UI doesn't support this directly)
-          // This case primarily handles if `clientSideResumeText` was populated without a new `selectedFile`
-          newResumeData.resumeProcessedText = clientSideResumeText;
-          console.log("ProfilePage: clientSideResumeText changed without new file upload, updating resumeProcessedText.");
+        console.log("ProfilePage: Resume was cleared (no new file selected, selectedFileName is null). newResumeData reflects null values.");
+      } else if (clientSideResumeText !== (userProfile?.resumeProcessedText || null)) {
+          // This handles the case where only text was changed (e.g., user cleared a file, pasted text, or if new file selected but upload part was skipped/failed but text extracted)
+          // Or if a new file was uploaded and processed, this is already set in newResumeData.
+          // This is primarily for if there's new text but no new file to upload.
+          if (!selectedFile) { // Only update processed text if no file was uploaded.
+             newResumeData.resumeProcessedText = clientSideResumeText;
+             console.log("ProfilePage: clientSideResumeText changed or populated, and no new file was uploaded. Updating resumeProcessedText.");
+          }
       }
 
 
@@ -436,6 +442,9 @@ export default function ProfilePage() {
       }).catch(err => {
          console.error("ProfilePage: Error refreshing user profile in context after save:", err);
       });
+      
+      // Reset selectedFile after successful save to prevent re-upload on next save if no changes
+      setSelectedFile(null); 
 
     } catch (error: any) {
       console.error("ProfilePage: onSubmit - Profile update error:", error);
@@ -444,7 +453,7 @@ export default function ProfilePage() {
     } finally {
       console.log("ProfilePage: onSubmit - Reached finally block.");
       setIsSubmitting(false);
-      setIsUploading(false);
+      setIsUploading(false); // Ensure this is also reset
       setUploadProgress(null);
     }
   };
@@ -462,29 +471,29 @@ export default function ProfilePage() {
       case "experience":
         return (
           <div className="space-y-3">
-            <div><FormLabel htmlFor="jobTitle">Job Title*</FormLabel><Input id="jobTitle" name="jobTitle" value={currentItemData.jobTitle || ''} onChange={handleModalFormChange} /></div>
-            <div><FormLabel htmlFor="companyName">Company Name*</FormLabel><Input id="companyName" name="companyName" value={currentItemData.companyName || ''} onChange={handleModalFormChange} /></div>
-            <div><FormLabel htmlFor="startDate">Start Date*</FormLabel><Input id="startDate" name="startDate" type="month" value={currentItemData.startDate || ''} onChange={handleModalFormChange} /></div>
-            <div><FormLabel htmlFor="endDate">End Date* (or select month for 'Present')</FormLabel><Input id="endDate" name="endDate" type="month" value={currentItemData.endDate || ''} onChange={handleModalFormChange} /></div>
-            <div><FormLabel htmlFor="description">Description (Responsibilities, Achievements)</FormLabel><Textarea id="description" name="description" value={currentItemData.description || ''} onChange={handleModalFormChange} rows={4}/></div>
+            <div><Label htmlFor="jobTitle">Job Title*</Label><Input id="jobTitle" name="jobTitle" value={currentItemData.jobTitle || ''} onChange={handleModalFormChange} /></div>
+            <div><Label htmlFor="companyName">Company Name*</Label><Input id="companyName" name="companyName" value={currentItemData.companyName || ''} onChange={handleModalFormChange} /></div>
+            <div><Label htmlFor="startDate">Start Date*</Label><Input id="startDate" name="startDate" type="month" value={currentItemData.startDate || ''} onChange={handleModalFormChange} /></div>
+            <div><Label htmlFor="endDate">End Date (or select month for 'Present')</Label><Input id="endDate" name="endDate" type="month" value={currentItemData.endDate || ''} onChange={handleModalFormChange} /></div>
+            <div><Label htmlFor="description">Description (Responsibilities, Achievements)</Label><Textarea id="description" name="description" value={currentItemData.description || ''} onChange={handleModalFormChange} rows={4}/></div>
           </div>
         );
       case "project":
         return (
           <div className="space-y-3">
-            <div><FormLabel htmlFor="title">Project Title*</FormLabel><Input id="title" name="title" value={currentItemData.title || ''} onChange={handleModalFormChange} /></div>
-            <div><FormLabel htmlFor="description">Description*</FormLabel><Textarea id="description" name="description" value={currentItemData.description || ''} onChange={handleModalFormChange} rows={4}/></div>
-            <div><FormLabel htmlFor="technologiesUsed">Technologies Used (comma-separated)</FormLabel><Input id="technologiesUsed" name="technologiesUsed" value={Array.isArray(currentItemData.technologiesUsed) ? currentItemData.technologiesUsed.join(', ') : (currentItemData.technologiesUsed || '')} onChange={(e) => setCurrentItemData((prev: any) => ({ ...prev, technologiesUsed: e.target.value.split(',').map(t => t.trim()).filter(Boolean) }))} /></div>
-            <div><FormLabel htmlFor="projectUrl">Project URL (optional)</FormLabel><Input id="projectUrl" name="projectUrl" type="url" value={currentItemData.projectUrl || ''} onChange={handleModalFormChange} placeholder="https://example.com"/></div>
+            <div><Label htmlFor="title">Project Title*</Label><Input id="title" name="title" value={currentItemData.title || ''} onChange={handleModalFormChange} /></div>
+            <div><Label htmlFor="description">Description*</Label><Textarea id="description" name="description" value={currentItemData.description || ''} onChange={handleModalFormChange} rows={4}/></div>
+            <div><Label htmlFor="technologiesUsed">Technologies Used (comma-separated)</Label><Input id="technologiesUsed" name="technologiesUsed" value={Array.isArray(currentItemData.technologiesUsed) ? currentItemData.technologiesUsed.join(', ') : (currentItemData.technologiesUsed || '')} onChange={(e) => setCurrentItemData((prev: any) => ({ ...prev, technologiesUsed: e.target.value.split(',').map(t => t.trim()).filter(Boolean) }))} /></div>
+            <div><Label htmlFor="projectUrl">Project URL (optional)</Label><Input id="projectUrl" name="projectUrl" type="url" value={currentItemData.projectUrl || ''} onChange={handleModalFormChange} placeholder="https://example.com"/></div>
           </div>
         );
       case "education":
         return (
           <div className="space-y-3">
-            <div><FormLabel htmlFor="degree">Degree/Certificate*</FormLabel><Input id="degree" name="degree" value={currentItemData.degree || ''} onChange={handleModalFormChange} /></div>
-            <div><FormLabel htmlFor="institution">Institution*</FormLabel><Input id="institution" name="institution" value={currentItemData.institution || ''} onChange={handleModalFormChange} /></div>
-            <div><FormLabel htmlFor="yearOfCompletion">Year of Completion (YYYY)*</FormLabel><Input id="yearOfCompletion" name="yearOfCompletion" type="text" maxLength={4} pattern="\d{4}" placeholder="YYYY" value={currentItemData.yearOfCompletion || ''} onChange={handleModalFormChange} /></div>
-            <div><FormLabel htmlFor="details">Additional Details (e.g., CGPA, Honors - optional)</FormLabel><Textarea id="details" name="details" value={currentItemData.details || ''} onChange={handleModalFormChange} rows={3}/></div>
+            <div><Label htmlFor="degree">Degree/Certificate*</Label><Input id="degree" name="degree" value={currentItemData.degree || ''} onChange={handleModalFormChange} /></div>
+            <div><Label htmlFor="institution">Institution*</Label><Input id="institution" name="institution" value={currentItemData.institution || ''} onChange={handleModalFormChange} /></div>
+            <div><Label htmlFor="yearOfCompletion">Year of Completion (YYYY)*</Label><Input id="yearOfCompletion" name="yearOfCompletion" type="text" maxLength={4} pattern="\d{4}" placeholder="YYYY" value={currentItemData.yearOfCompletion || ''} onChange={handleModalFormChange} /></div>
+            <div><Label htmlFor="details">Additional Details (e.g., CGPA, Honors - optional)</Label><Textarea id="details" name="details" value={currentItemData.details || ''} onChange={handleModalFormChange} rows={3}/></div>
           </div>
         );
       default: return null;
@@ -515,7 +524,7 @@ export default function ProfilePage() {
           <Card className="shadow-md">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl"><Lightbulb className="h-6 w-6 text-primary" /> Key Skills</CardTitle>
-              <CardDescription>Highlight your top professional skills.</CardDescription>
+              <CardDescription>Highlight your top professional skills. Changes here are saved when you click 'Save All Profile Changes'.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex gap-2 items-center">
@@ -541,7 +550,7 @@ export default function ProfilePage() {
           <Card className="shadow-md">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl"><Briefcase className="h-6 w-6 text-primary" /> Work Experience</CardTitle>
-              <CardDescription>Detail your professional journey.</CardDescription>
+              <CardDescription>Detail your professional journey. Add, edit, or remove entries. Changes are saved when you click 'Save All Profile Changes'.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {experiences.length === 0 && <p className="text-sm text-muted-foreground">No work experience added yet.</p>}
@@ -569,7 +578,7 @@ export default function ProfilePage() {
           <Card className="shadow-md">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl"><Lightbulb className="h-6 w-6 text-primary" /> Projects</CardTitle>
-              <CardDescription>Showcase your personal or professional projects.</CardDescription>
+              <CardDescription>Showcase your personal or professional projects. Changes are saved when you click 'Save All Profile Changes'.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {projects.length === 0 && <p className="text-sm text-muted-foreground">No projects added yet.</p>}
@@ -598,7 +607,7 @@ export default function ProfilePage() {
           <Card className="shadow-md">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl"><GraduationCap className="h-6 w-6 text-primary" /> Education History</CardTitle>
-              <CardDescription>List your educational qualifications.</CardDescription>
+              <CardDescription>List your educational qualifications. Changes are saved when you click 'Save All Profile Changes'.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {educationHistory.length === 0 && <p className="text-sm text-muted-foreground">No education history added yet.</p>}
@@ -629,7 +638,7 @@ export default function ProfilePage() {
                 <CardDescription>Share your significant achievements, awards, or recognitions (optional).</CardDescription>
             </CardHeader>
             <CardContent>
-                <FormField control={form.control} name="accomplishments" render={({ field }) => (<FormItem><FormControl><Textarea placeholder="e.g., 'Led a team to successfully launch Product X...' or 'Published research paper Y...'" {...field} value={field.value ?? ""} rows={5} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField control={form.control} name="accomplishments" render={({ field }) => (<FormItem><FormLabel>Accomplishments</FormLabel><FormControl><Textarea placeholder="e.g., 'Led a team to successfully launch Product X...' or 'Published research paper Y...'" {...field} value={field.value ?? ""} rows={5} /></FormControl><FormMessage /></FormItem>)} />
             </CardContent>
           </Card>
 
@@ -685,7 +694,7 @@ export default function ProfilePage() {
                   </div>
                 </div>
               )}
-               {!selectedFileName && userProfile?.resumeFileName && !isUploading && (
+               {!selectedFileName && userProfile?.resumeFileName && !isUploading && ( // Display saved resume if no new one is selected
                 <div className="mt-2 text-sm text-muted-foreground flex items-center justify-between p-2 border rounded-md bg-secondary/50">
                    <div className="flex items-center gap-2 overflow-hidden">
                     <FileText className="h-4 w-4 text-primary shrink-0" />
