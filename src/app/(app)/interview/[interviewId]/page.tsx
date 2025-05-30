@@ -30,18 +30,19 @@ declare global {
 }
 
 // Proctoring Constants
-const MAX_TAB_SWITCH_WARNINGS = 2; // Ends on 3rd infraction
-const MAX_FACE_NOT_DETECTED_WARNINGS = 2; // Ends on 3rd infraction (for short absences)
+// For simple warnings (no termination)
+const FACE_DETECTION_INTERVAL_MS = 5 * 1000; // Check face presence every ~5s for a simple warning
+const CONSECUTIVE_NO_FACE_CHECKS_TO_WARN_SIMPLE = 1; // Issue a simple warning on the 1st failed check
 
-const FACE_DETECTION_INTERVAL_MS = 5 * 1000; // Check face presence every ~5s
-const CONSECUTIVE_NO_FACE_CHECKS_TO_WARN_FACE_AWAY = 1; // Issue a "faceNotDetected" warning on the 1st failed check
+// For termination
 const PROLONGED_FACE_ABSENCE_TIMEOUT_MS = 60 * 1000; // 1 minute of continuous absence terminates
 
+// For simple warnings (no termination)
 const INACTIVITY_TIMEOUT_ORAL_MS = 60 * 1000; 
 const INACTIVITY_TIMEOUT_WRITTEN_MS = 2 * 60 * 1000; 
 
-const DISTRACTION_CHECK_INTERVAL_MS = 3 * 1000; // Check for simulated distraction every ~3 seconds
-const DISTRACTION_PROBABILITY = 0.50; // 50% chance of simulated distraction per interval
+const DISTRACTION_CHECK_INTERVAL_MS = 20 * 1000; // Check for simulated distraction every ~20 seconds
+const DISTRACTION_PROBABILITY = 0.15; // 15% chance of simulated distraction per interval
 
 type ProctoringIssueType = 'tabSwitch' | 'faceNotDetected' | 'task_inactivity' | 'distraction';
 
@@ -80,13 +81,13 @@ export default function InterviewPage() {
   // Proctoring States
   const [proctoringIssues, setProctoringIssues] = useState<{
     tabSwitch: number;
-    faceNotDetected: number; 
+    faceNotDetected: number; // Count for simple warnings
     task_inactivity: number; 
     distraction: number; 
   }>({ tabSwitch: 0, faceNotDetected: 0, task_inactivity: 0, distraction: 0 });
   
   const [isFaceCurrentlyVisible, setIsFaceCurrentlyVisible] = useState(true); 
-  const [consecutiveNoFaceCountForWarning, setConsecutiveNoFaceCountForWarning] = useState(0);
+  const [consecutiveNoFaceCountForSimpleWarning, setConsecutiveNoFaceCountForSimpleWarning] = useState(0);
   const [continuousFaceNotDetectedStartTime, setContinuousFaceNotDetectedStartTime] = useState<number | null>(null);
   const [lastActivityTime, setLastActivityTime] = useState<number>(Date.now());
 
@@ -138,9 +139,8 @@ export default function InterviewPage() {
     setIsAISpeaking(false);
   }, []);
 
-
   const handleEndInterview = useCallback(async (
-    reason: "completed_by_user" | "time_up" | "face_not_detected_limit" | "prolonged_face_absence" | "all_questions_answered" | "tab_switch_limit",
+    reason: "completed_by_user" | "time_up" | "prolonged_face_absence" | "all_questions_answered", // Removed other termination reasons
     questionsDataParam?: AnsweredQuestion[], 
     transcriptStringParam?: string 
   ) => {
@@ -162,8 +162,6 @@ export default function InterviewPage() {
 
     switch(reason) {
         case "time_up": toastTitle = "Time's Up!"; toastMessage = "The interview time has concluded."; break;
-        case "tab_switch_limit": toastTitle = "Proctoring Alert"; toastMessage = "Interview terminated due to excessive tab/window switching."; break;
-        case "face_not_detected_limit": toastTitle = "Proctoring Alert"; toastMessage = "Interview terminated due to face not being consistently visible."; break;
         case "prolonged_face_absence": toastTitle = "Proctoring Alert"; toastMessage = "Interview terminated due to prolonged absence from screen."; break;
         case "all_questions_answered": toastTitle = "Interview Complete"; break;
         case "completed_by_user": toastTitle = "Interview Submitted"; break;
@@ -231,7 +229,7 @@ export default function InterviewPage() {
   }, [isInterviewEffectivelyActive]);
 
 
-  // useEffect for Tab Switch Warnings & Termination (Strict)
+  // useEffect for Simple Tab Switch Warnings (No Termination)
   const prevTabSwitchCountRef = useRef(proctoringIssues.tabSwitch);
   useEffect(() => {
     if (!isInterviewEffectivelyActive() || isEndingInterviewRef.current) return;
@@ -240,62 +238,44 @@ export default function InterviewPage() {
     const previousTabSwitches = prevTabSwitchCountRef.current;
 
     if (currentTabSwitches > previousTabSwitches) {
-      if (currentTabSwitches <= MAX_TAB_SWITCH_WARNINGS) {
-        let warningMessage = `Switching away from the interview tab is not recommended. Warning ${currentTabSwitches} of ${MAX_TAB_SWITCH_WARNINGS}.`;
-        if (currentTabSwitches === MAX_TAB_SWITCH_WARNINGS) {
-          warningMessage = `LAST WARNING: Switching away from the interview tab is not recommended. Further instances will terminate the interview.`;
-        }
         toast({
-          title: "Proctoring Alert: Tab/Window Change",
-          description: warningMessage,
-          variant: "destructive",
-          duration: 7000,
+          title: "Proctoring Reminder: Tab Change",
+          description: "Please try to stay focused on the interview tab.",
+          variant: "default", 
+          duration: 5000,
         });
-      } else if (currentTabSwitches > MAX_TAB_SWITCH_WARNINGS && !isEndingInterviewRef.current) {
-        console.log("InterviewPage: Terminating interview due to excessive tab/window switching.");
-        handleEndInterview('tab_switch_limit', allQuestionsRef.current, transcriptLogRef.current.join('\\n'));
-      }
     }
     prevTabSwitchCountRef.current = currentTabSwitches;
-  }, [proctoringIssues.tabSwitch, toast, isInterviewEffectivelyActive, handleEndInterview]);
+  }, [proctoringIssues.tabSwitch, toast, isInterviewEffectivelyActive]);
 
-  // useEffect for Face Not Detected Warnings & Termination (Strict)
-  const prevFaceNotDetectedCountRef = useRef(proctoringIssues.faceNotDetected);
+  // useEffect for Simple Face Not Detected Warnings (No Termination)
+  const prevFaceNotDetectedSimpleCountRef = useRef(proctoringIssues.faceNotDetected);
   useEffect(() => {
     if (!isInterviewEffectivelyActive() || isEndingInterviewRef.current) return;
 
     const currentFaceWarnings = proctoringIssues.faceNotDetected;
-    const previousFaceWarnings = prevFaceNotDetectedCountRef.current;
+    const previousFaceWarnings = prevFaceNotDetectedSimpleCountRef.current;
 
     if (currentFaceWarnings > previousFaceWarnings) { 
-        if (currentFaceWarnings <= MAX_FACE_NOT_DETECTED_WARNINGS) {
-            let warningMessage = `Your face does not seem to be clearly visible. Please ensure you are in front of the camera. Warning ${currentFaceWarnings} of ${MAX_FACE_NOT_DETECTED_WARNINGS}.`;
-             if (currentFaceWarnings === MAX_FACE_NOT_DETECTED_WARNINGS) {
-                warningMessage = `LAST WARNING: Your face is not consistently visible. Further instances will terminate the interview.`;
-            }
-            toast({
-                title: "Proctoring Alert: Face Not Visible",
-                description: warningMessage,
-                variant: "destructive",
-                duration: 7000,
-            });
-        } else if (currentFaceWarnings > MAX_FACE_NOT_DETECTED_WARNINGS && !isEndingInterviewRef.current) {
-            console.log("InterviewPage: Terminating interview due to excessive face not detected warnings (short absences).");
-            handleEndInterview('face_not_detected_limit', allQuestionsRef.current, transcriptLogRef.current.join('\\n'));
-        }
+        toast({
+            title: "Proctoring Reminder: Face Not Visible",
+            description: "Your face does not seem to be clearly visible. Please ensure you are in front of the camera.",
+            variant: "default", 
+            duration: 5000,
+        });
     }
-    prevFaceNotDetectedCountRef.current = currentFaceWarnings;
+    prevFaceNotDetectedSimpleCountRef.current = currentFaceWarnings;
   }, [proctoringIssues.faceNotDetected, toast, isInterviewEffectivelyActive, handleEndInterview]);
 
 
-  // useEffect for Simple Warnings (Task Inactivity - no speech/typing)
+  // useEffect for Simple Task Inactivity Warnings (No Termination)
   const prevTaskInactivityCountRef = useRef(proctoringIssues.task_inactivity);
   useEffect(() => {
     if (!isInterviewEffectivelyActive() || isEndingInterviewRef.current) return;
     if (proctoringIssues.task_inactivity > prevTaskInactivityCountRef.current) {
       toast({
         title: "Proctoring: Inactivity Reminder",
-        description: `No activity detected for a while. Please continue with your answer. (This is a simple reminder).`,
+        description: `No activity detected for a while. Please continue with your answer.`,
         variant: "default", 
         duration: 5000,
       });
@@ -303,14 +283,14 @@ export default function InterviewPage() {
     prevTaskInactivityCountRef.current = proctoringIssues.task_inactivity;
   }, [proctoringIssues.task_inactivity, toast, isInterviewEffectivelyActive]);
   
-  // useEffect for Simple Warnings (Distraction - simulated for ~3s of inappropriate activity)
+  // useEffect for Simple Distraction Warnings (No Termination)
   const prevDistractionCountRef = useRef(proctoringIssues.distraction);
   useEffect(() => {
     if (!isInterviewEffectivelyActive() || isEndingInterviewRef.current) return;
     if (proctoringIssues.distraction > prevDistractionCountRef.current) {
       toast({
         title: "Proctoring: Attention Reminder",
-        description: `Please try to maintain focus on the screen and avoid excessive movement or looking away. (This is a simple reminder).`,
+        description: `Please try to maintain focus on the screen and avoid excessive movement or looking away.`,
         variant: "default", 
         duration: 5000,
       });
@@ -433,7 +413,7 @@ export default function InterviewPage() {
   useEffect(() => {
     if (currentQuestion && currentQuestion.stage === 'oral' && !currentQuestion.answer && isInterviewEffectivelyActive() && !hasSpokenCurrentQuestion && !isAISpeaking && availableVoices.length > 0) {
       if (typeof window !== 'undefined' && window.speechSynthesis) {
-        if(window.speechSynthesis.speaking) window.speechSynthesis.cancel(); // Cancel any ongoing speech
+        if(window.speechSynthesis.speaking) window.speechSynthesis.cancel(); 
 
         const utterance = new SpeechSynthesisUtterance(currentQuestion.text);
         utterance.lang = 'en-US'; utterance.rate = 0.9;
@@ -498,10 +478,10 @@ export default function InterviewPage() {
   }, [isInterviewEffectivelyActive, timeLeftInSeconds, handleEndInterview, toast]); 
 
 
-  // Proctoring: Tab Switch Detection (Strict)
+  // Proctoring: Tab Switch Detection (Simple Warning)
   const handleFocusChange = useCallback(() => {
     if (!isEndingInterviewRef.current && isInterviewEffectivelyActive()) {
-      console.log("InterviewPage: Window/tab focus lost or changed.");
+      console.log("InterviewPage: Window/tab focus lost or changed. Logging tabSwitch event.");
       logProctoringEvent('tabSwitch');
     }
   }, [isInterviewEffectivelyActive, logProctoringEvent]); 
@@ -521,11 +501,11 @@ export default function InterviewPage() {
   }, [isInterviewEffectivelyActive, handleFocusChange]);
 
 
-  // Proctoring: Face Presence Detection (Strict, for ~5s absences) & UI Feedback
+  // Proctoring: Face Presence Detection (Simple Warning for short absence, strict for prolonged) & UI Feedback
   useEffect(() => {
     let faceDetectionInterval: NodeJS.Timeout | null = null;
     const mockCheckFacePresence = (): boolean => {
-        const isPresent = Math.random() > 0.1; 
+        const isPresent = Math.random() > 0.1; // ~90% chance face is present in simulation
         setIsFaceCurrentlyVisible(isPresent); 
         return isPresent;
     };
@@ -537,10 +517,10 @@ export default function InterviewPage() {
         const facePresent = mockCheckFacePresence();
         
         if (!facePresent) {
-            setConsecutiveNoFaceCountForWarning(prev => {
+            setConsecutiveNoFaceCountForSimpleWarning(prev => {
                 const newCount = prev + 1;
-                if (newCount >= CONSECUTIVE_NO_FACE_CHECKS_TO_WARN_FACE_AWAY) {
-                    console.log("InterviewPage: Face not detected by mock check (approx 5s), logging event for strict warning.");
+                if (newCount >= CONSECUTIVE_NO_FACE_CHECKS_TO_WARN_SIMPLE) {
+                    console.log("InterviewPage: Face not detected by mock check (approx 5s), logging event for simple warning.");
                     logProctoringEvent('faceNotDetected'); 
                     return 0; 
                 }
@@ -551,7 +531,7 @@ export default function InterviewPage() {
                 setContinuousFaceNotDetectedStartTime(Date.now());
             }
         } else {
-            setConsecutiveNoFaceCountForWarning(0); 
+            setConsecutiveNoFaceCountForSimpleWarning(0); 
             if (continuousFaceNotDetectedStartTime !== null) {
                  console.log("InterviewPage: Continuous face not detected timer reset (face now visible).");
             }
@@ -604,7 +584,7 @@ export default function InterviewPage() {
         distractionInterval = setInterval(() => {
             if (isEndingInterviewRef.current) return;
             if (Math.random() < DISTRACTION_PROBABILITY) {
-                console.log("InterviewPage: Simulated distraction detected (approx 3s), logging event for simple warning.");
+                console.log("InterviewPage: Simulated distraction detected, logging event for simple warning.");
                 logProctoringEvent('distraction');
             }
         }, DISTRACTION_CHECK_INTERVAL_MS);
@@ -780,10 +760,10 @@ export default function InterviewPage() {
           <CardContent>
             <video ref={videoRef} autoPlay muted className="w-full aspect-video rounded-md bg-muted object-cover" data-ai-hint="video conference"></video>
              {!isFaceCurrentlyVisible && isInterviewEffectivelyActive() && (
-                <Alert variant="destructive" className="mt-2">
-                    <EyeOff className="h-4 w-4" />
-                    <AlertTitle>Face Not Visible</AlertTitle>
-                    <AlertDescription>Please ensure your face is clearly visible in the camera.</AlertDescription>
+                <Alert variant="default" className="mt-2 border-amber-500 text-amber-700 dark:text-amber-300">
+                    <EyeOff className="h-4 w-4 !text-amber-500 dark:!text-amber-400" />
+                    <AlertTitle className="text-amber-700 dark:text-amber-300">Face Not Visible?</AlertTitle>
+                    <AlertDescription className="text-amber-600 dark:text-amber-200">Please ensure your face is clearly visible in the camera.</AlertDescription>
                 </Alert>
             )}
           </CardContent>
@@ -859,3 +839,5 @@ export default function InterviewPage() {
   );
 }
 
+
+    
