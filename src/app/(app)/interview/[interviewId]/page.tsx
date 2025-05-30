@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useState, useRef, useCallback } from "react";
@@ -26,7 +25,7 @@ declare global {
   interface Window {
     SpeechRecognition: any;
     webkitSpeechRecognition: any;
-    speechSynthesis: SpeechSynthesis;
+    speechSynthesis: Synthesis;
   }
 }
 
@@ -100,6 +99,7 @@ export default function InterviewPage() {
   const stopSpeechRecognition = useCallback(() => {
     console.log("InterviewPage: stopSpeechRecognition called.");
     if (recognitionRef.current) {
+      recognitionRef.current.abort(); // Use abort for immediate stop
       recognitionRef.current.stop(); 
     }
     setIsListening(false); 
@@ -116,8 +116,8 @@ export default function InterviewPage() {
   }, []);
 
   const isInterviewEffectivelyActive = useCallback(() => {
-    return session && session.status !== "completed" && session.status !== "cancelled" && !isEndingInterview;
-  }, [session, isEndingInterview]);
+    return session && session.status !== "completed" && session.status !== "cancelled" && !isEndingInterviewRef.current;
+  }, [session]);
 
 
   useEffect(() => {
@@ -135,13 +135,18 @@ export default function InterviewPage() {
     }
   }, [toast]);
 
-  const handleEndInterview = useCallback(async (finalQuestionsData: AnsweredQuestion[], finalTranscriptString: string) => {
-    if (!user || !interviewId || !session || !userProfile || isEndingInterviewRef.current) { // Use ref here
+  const handleEndInterview = useCallback(async (finalQuestionsData: AnsweredQuestion[], finalTranscriptString: string, reason: string = "completed") => {
+    if (!user || !interviewId || !session || !userProfile ) { // Removed isEndingInterviewRef check here, will be handled by setIsEndingInterview
       if(!isEndingInterviewRef.current) toast({ title: "Error", description: "User or session data missing for ending interview.", variant: "destructive" });
-      // setIsEndingInterview(false); // Only set to true, not false here
       return;
     }
-    console.log("InterviewPage: handleEndInterview - Starting process.");
+
+    if (isEndingInterviewRef.current) {
+        console.log("InterviewPage: handleEndInterview - Already ending, skipping.");
+        return; // Prevent multiple executions
+    }
+    
+    console.log(`InterviewPage: handleEndInterview - Starting process. Reason: ${reason}`);
     setIsEndingInterview(true); 
     toast({ title: "Interview Complete", description: "Finalizing and analyzing your feedback..." });
 
@@ -176,7 +181,11 @@ export default function InterviewPage() {
         interviewsTaken: (userProfile.interviewsTaken || 0) + 1,
         updatedAt: new Date().toISOString(),
       });
-      await refreshUserProfile(); 
+      refreshUserProfile().then(() => {
+        console.log("AuthContext: User profile refreshed in context after ending interview.");
+      }).catch(err => {
+        console.error("AuthContext: Error refreshing user profile in context after ending interview:", err);
+      });
       
       const feedbackInput: AnalyzeInterviewFeedbackInput = {
         questions: questionsToStore,
@@ -195,6 +204,7 @@ export default function InterviewPage() {
     } catch (error: any) {
       console.error("InterviewPage: Error ending interview / getting feedback:", error);
       toast({ title: "Error Finalizing Interview", description: error.message || "Failed to finalize interview or get feedback.", variant: "destructive" });
+      //setIsEndingInterview(false); // Reset only if there was an error and we want to allow retry.
     }
   }, [user, interviewId, session, userProfile, router, toast, refreshUserProfile, cancelSpeechSynthesis, stopSpeechRecognition, stopMediaTracks]);
 
@@ -216,11 +226,11 @@ export default function InterviewPage() {
         console.log("InterviewPage: Firestore onSnapshot triggered. Document exists:", docSnap.exists());
         if (docSnap.exists()) {
           const data = docSnap.data() as InterviewSession;
-          setSession(data);
+          setSession(data); // This will trigger other effects depending on session
           setTranscriptLog(data.transcript ? data.transcript.split('\\n') : []);
 
-          if (data.status === "completed" || data.status === "cancelled") {
-            if (!isEndingInterviewRef.current) { // Prevent race condition if handleEndInterview already called
+          if ((data.status === "completed" || data.status === "cancelled") && !isEndingInterviewRef.current) {
+                console.log("InterviewPage: Session already completed/cancelled by another source. Cleaning up and redirecting.");
                 toast({ title: "Interview Ended", description: "This interview session is no longer active."});
                 cancelSpeechSynthesis();
                 stopSpeechRecognition();
@@ -230,7 +240,6 @@ export default function InterviewPage() {
                     timerIntervalRef.current = null;
                 }
                 router.push("/dashboard");
-            }
             return;
           }
           
@@ -249,34 +258,15 @@ export default function InterviewPage() {
             if (currentQuestionIndex !== newIndex) {
                 setCurrentQuestionIndex(newIndex);
             }
-            
-            if (timeLeftInSeconds === null && data.status !== 'completed' && data.status !== 'cancelled' && data.duration) {
-              setTimeLeftInSeconds(data.duration * 60);
-            }
-
           } else {
             toast({ title: "Error", description: "No questions found for this session. Please start a new interview.", variant: "destructive" });
             if (!isEndingInterviewRef.current) {
-                cancelSpeechSynthesis();
-                stopSpeechRecognition();
-                stopMediaTracks();
-                if (timerIntervalRef.current) {
-                    clearInterval(timerIntervalRef.current);
-                    timerIntervalRef.current = null;
-                }
                 router.push("/interview/start");
             }
           }
         } else {
           toast({ title: "Error", description: "Interview session not found.", variant: "destructive" });
           if (!isEndingInterviewRef.current) {
-              cancelSpeechSynthesis();
-              stopSpeechRecognition();
-              stopMediaTracks();
-              if (timerIntervalRef.current) {
-                  clearInterval(timerIntervalRef.current);
-                  timerIntervalRef.current = null;
-              }
               router.push("/dashboard");
           }
         }
@@ -315,28 +305,29 @@ export default function InterviewPage() {
       console.log("InterviewPage: All cleanup functions called from main useEffect.");
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, interviewId, router, toast]); // handleEndInterview removed to break cycle, cancel/stop/toast already memoized
+  }, [user, interviewId, router, toast, cancelSpeechSynthesis, stopSpeechRecognition, stopMediaTracks]);
 
   const currentQuestion = allQuestions[currentQuestionIndex];
 
   // AI Speech Synthesis Effect
   useEffect(() => {
+    // Reset spoken flag if question ID changes
     if (currentQuestion?.id !== previousQuestionIdRef.current) {
-        setHasSpokenCurrentQuestion(false); // Reset for new question
+        setHasSpokenCurrentQuestion(false);
         previousQuestionIdRef.current = currentQuestion?.id || null;
-        // If AI was speaking, cancel it for the new question
         if (typeof window !== 'undefined' && window.speechSynthesis?.speaking) {
             window.speechSynthesis.cancel();
             setIsAISpeaking(false);
         }
     }
 
+    // Speak the question if it's oral, not yet answered, active, not listening, and not already spoken/speaking
     if (currentQuestion && currentQuestion.stage === 'oral' && !currentQuestion.answer && isInterviewEffectivelyActive() && !isListening && !hasSpokenCurrentQuestion && !isAISpeaking) {
       if (typeof window !== 'undefined' && window.speechSynthesis) {
         console.log("InterviewPage: AI attempting to speak question:", currentQuestion.text);
         const utterance = new SpeechSynthesisUtterance(currentQuestion.text);
         utterance.lang = 'en-US';
-        utterance.rate = 0.9; // Slightly slower for clarity
+        utterance.rate = 0.9;
         utterance.onstart = () => {
             console.log("InterviewPage: AI speech started.");
             setIsAISpeaking(true);
@@ -344,7 +335,7 @@ export default function InterviewPage() {
         utterance.onend = () => {
           console.log("InterviewPage: AI speech ended.");
           setIsAISpeaking(false);
-          setHasSpokenCurrentQuestion(true); // Mark as spoken
+          setHasSpokenCurrentQuestion(true);
         };
         utterance.onerror = (event) => {
           console.error('InterviewPage: SpeechSynthesis Error:', event);
@@ -354,46 +345,59 @@ export default function InterviewPage() {
         };
         window.speechSynthesis.speak(utterance);
       } else {
-        // If speech synthesis isn't available, skip speaking
-        setIsAISpeaking(false); // Ensure it's false
-        setHasSpokenCurrentQuestion(true); // Mark as "spoken" to allow flow to continue
+        setIsAISpeaking(false);
+        setHasSpokenCurrentQuestion(true);
       }
     } else if (isAISpeaking && (!isInterviewEffectivelyActive() || currentQuestion?.stage !== 'oral' || currentQuestion?.answer || hasSpokenCurrentQuestion)) {
-        // Conditions to stop AI speaking prematurely if state changes
         if (typeof window !== 'undefined' && window.speechSynthesis?.speaking) {
             window.speechSynthesis.cancel();
         }
         setIsAISpeaking(false);
     }
-  }, [currentQuestion, isInterviewEffectivelyActive, toast, isListening, hasSpokenCurrentQuestion, isAISpeaking]);
+  }, [currentQuestion, isInterviewEffectivelyActive, toast, isListening, hasSpokenCurrentQuestion, isAISpeaking, cancelSpeechSynthesis]);
+
+
+  // Effect to initialize the timer based on session duration
+  useEffect(() => {
+    if (session && session.duration && isInterviewEffectivelyActive() && timeLeftInSeconds === null) {
+      console.log(`InterviewPage: Initializing timer with duration: ${session.duration} minutes.`);
+      setTimeLeftInSeconds(session.duration * 60);
+    }
+  }, [session, isInterviewEffectivelyActive, timeLeftInSeconds]);
+
 
   // Timer Countdown Effect
   useEffect(() => {
+    // Only run the interval if the interview is active and time has been initialized and is > 0
     if (isInterviewEffectivelyActive() && timeLeftInSeconds !== null && timeLeftInSeconds > 0) {
-      // Interval is only set if active, time exists, and time > 0
       timerIntervalRef.current = setInterval(() => {
         setTimeLeftInSeconds(prevTime => {
-          if (prevTime === null) return null; // Should not happen if initial check is good
+          if (prevTime === null) return null; // Should not happen if checks above are correct
           if (prevTime <= 1) {
             if (timerIntervalRef.current) {
                 clearInterval(timerIntervalRef.current);
                 timerIntervalRef.current = null;
             }
-            if (!isEndingInterviewRef.current) {
+            if (!isEndingInterviewRef.current) { // Check ref here
                 toast({ title: "Time's up!", description: "The interview has ended.", variant: "destructive" });
-                handleEndInterview(allQuestionsRef.current, transcriptLogRef.current.join('\\n'));
+                handleEndInterview(allQuestionsRef.current, transcriptLogRef.current.join('\\n'), "time_up");
             }
             return 0;
           }
           return prevTime - 1;
         });
       }, 1000);
+    } else if (timeLeftInSeconds === 0 && timerIntervalRef.current) {
+        // This handles the case where timer reaches 0 but interval might still be there
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
     }
-    // Cleanup function of the useEffect
+    
+    // Cleanup function of the useEffect for the interval
     return () => {
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current);
-        timerIntervalRef.current = null; // Important to nullify here as well
+        timerIntervalRef.current = null; 
       }
     };
   }, [isInterviewEffectivelyActive, timeLeftInSeconds, handleEndInterview, toast]);
@@ -401,17 +405,6 @@ export default function InterviewPage() {
 
   // Tab/Window Focus Change Listener Effect
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden && isInterviewEffectivelyActive()) {
-        handleFocusChange();
-      }
-    };
-    const handleWindowBlur = () => {
-        if (!document.hasFocus() && isInterviewEffectivelyActive()){
-             handleFocusChange();
-        }
-    };
-
     const handleFocusChange = () => {
       setVisibilityChangeCount(prevCount => {
         const newCount = prevCount + 1;
@@ -431,12 +424,24 @@ export default function InterviewPage() {
             duration: 7000,
           });
           if (!isEndingInterviewRef.current) {
-            handleEndInterview(allQuestionsRef.current, transcriptLogRef.current.join('\\n'));
+            handleEndInterview(allQuestionsRef.current, transcriptLogRef.current.join('\\n'), "tab_switch_limit");
           }
         }
         return newCount;
       });
     };
+    
+    const handleVisibilityChange = () => {
+      if (document.hidden && isInterviewEffectivelyActive()) {
+        handleFocusChange();
+      }
+    };
+    const handleWindowBlur = () => {
+        if (!document.hasFocus() && isInterviewEffectivelyActive()){
+             handleFocusChange();
+        }
+    };
+
 
     if (isInterviewEffectivelyActive()) {
       document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -459,9 +464,9 @@ export default function InterviewPage() {
 
     if (isListening) { 
       if (recognitionRef.current) {
-        recognitionRef.current.stop(); // This will trigger onend, which sets isListening(false)
+        recognitionRef.current.stop(); 
       }
-      setIsListening(false); // Also set immediately for UI responsiveness
+      setIsListening(false); 
     } else { 
       if (typeof window !== 'undefined' && window.speechSynthesis?.speaking) {
         window.speechSynthesis.cancel(); 
@@ -510,7 +515,7 @@ export default function InterviewPage() {
 
         recognitionRef.current.onend = () => {
           console.log("InterviewPage: Speech recognition ended.");
-          setIsListening(false); // Ensure isListening is false when recognition naturally ends
+          setIsListening(false); 
         };
       }
       recognitionRef.current.start();
@@ -520,6 +525,7 @@ export default function InterviewPage() {
 
   const handleNextQuestion = async () => {
     if (!user || !session || !allQuestions.length || currentQuestionIndex >= allQuestions.length || isEndingInterviewRef.current) {
+        console.warn("InterviewPage: handleNextQuestion - Preconditions not met or already ending.");
         return;
     }
     
@@ -562,7 +568,7 @@ export default function InterviewPage() {
     if (nextQuestionIndex < allQuestions.length) {
       setCurrentQuestionIndex(nextQuestionIndex);
     } else {
-      await handleEndInterview(updatedQuestions, updatedTranscriptLogArray.join('\\n'));
+      await handleEndInterview(updatedQuestions, updatedTranscriptLogArray.join('\\n'), "all_questions_answered");
     }
     setIsSubmittingAnswer(false);
   };
@@ -585,8 +591,8 @@ export default function InterviewPage() {
     return <div className="flex justify-center items-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   }
 
-  if (!session || !allQuestions.length || (currentQuestionIndex >= allQuestions.length && !isEndingInterview && session.status !== 'completed')) {
-    if (isEndingInterview) { 
+  if (!session || !allQuestions.length || (currentQuestionIndex >= allQuestions.length && !isEndingInterviewRef.current && session.status !== 'completed')) {
+    if (isEndingInterviewRef.current) { 
       return (
         <div className="flex flex-col justify-center items-center h-screen p-4">
           <Card className="max-w-lg text-center">
@@ -615,7 +621,7 @@ export default function InterviewPage() {
   const currentStage = currentQuestion?.stage;
   const currentQuestionType = currentQuestion?.type;
 
-  const isSubmitButtonDisabled = isSubmittingAnswer || isEndingInterview || isAISpeaking || isListening || (currentStage === 'technical_written' && !userAnswer.trim());
+  const isSubmitButtonDisabled = isSubmittingAnswer || isEndingInterviewRef.current || isAISpeaking || isListening || (currentStage === 'technical_written' && !userAnswer.trim());
 
   const formatTime = (totalSeconds: number | null) => {
     if (totalSeconds === null || totalSeconds < 0) return "00:00";
@@ -691,7 +697,7 @@ export default function InterviewPage() {
                     value={userAnswer}
                     readOnly // Always readOnly for oral, content driven by Speech-to-Text
                     className="text-base min-h-[100px] mb-4 bg-background/70 cursor-not-allowed"
-                    disabled={isSubmittingAnswer || isEndingInterview || isAISpeaking}
+                    disabled={isSubmittingAnswer || isEndingInterviewRef.current || isAISpeaking}
                   />
                   {speechError && <Alert variant="destructive" className="mb-2"><AlertTriangle className="h-4 w-4" /><AlertTitle>Speech Error</AlertTitle><AlertDescription>{speechError}</AlertDescription></Alert>}
                 </div>
@@ -699,7 +705,7 @@ export default function InterviewPage() {
                     <Button 
                         variant="outline" 
                         onClick={handleToggleListening} 
-                        disabled={isSubmittingAnswer || isEndingInterview || isAISpeaking || !speechRecognitionSupported}
+                        disabled={isSubmittingAnswer || isEndingInterviewRef.current || isAISpeaking || !speechRecognitionSupported}
                         className={isListening ? "border-red-500 text-red-500 hover:bg-red-500/10" : ""}
                     >
                       {isListening ? <MicOff className="mr-2 h-4 w-4" /> : <Mic className="mr-2 h-4 w-4" />}
@@ -720,7 +726,7 @@ export default function InterviewPage() {
                   value={userAnswer}
                   onChange={(e) => setUserAnswer(e.target.value)} 
                   onPaste={handlePaste}
-                  disabled={isSubmittingAnswer || isEndingInterview || isAISpeaking}
+                  disabled={isSubmittingAnswer || isEndingInterviewRef.current || isAISpeaking}
                 />
               </div>
             )}
@@ -741,11 +747,11 @@ export default function InterviewPage() {
          ) : ( 
           <Card className="flex-grow flex flex-col shadow-lg items-center justify-center">
             <CardHeader>
-              <CardTitle className="text-2xl">Interview Session {session?.status === 'completed' ? 'Completed' : (isEndingInterview ? 'Ending...' : 'Ended')}</CardTitle>
+              <CardTitle className="text-2xl">Interview Session {session?.status === 'completed' ? 'Completed' : (isEndingInterviewRef.current ? 'Ending...' : 'Ended')}</CardTitle>
             </CardHeader>
             <CardContent>
               <p>Your interview responses are being processed or the session has concluded.</p>
-              {isEndingInterview && <Loader2 className="h-8 w-8 animate-spin text-primary my-4" />}
+              {isEndingInterviewRef.current && <Loader2 className="h-8 w-8 animate-spin text-primary my-4" />}
             </CardContent>
             <CardFooter>
                 <Button onClick={() => router.push('/dashboard')} variant="outline">
@@ -759,4 +765,3 @@ export default function InterviewPage() {
   );
 }
 
-    
