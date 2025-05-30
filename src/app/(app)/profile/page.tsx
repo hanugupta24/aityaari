@@ -40,16 +40,15 @@ import {
 } from "@/components/ui/dialog";
 import { v4 as uuidv4 } from 'uuid';
 
+// Zod schema for the main form fields
 const profileFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }).max(50).optional().nullable(),
   email: z.string().email({ message: "Please enter a valid email." }).optional().nullable(),
-  profileField: z.string().min(2, { message: "Profile field is required." }).max(100).optional().nullable(),
-  role: z.string().min(2, { message: "Current role is required." }).max(100).optional().nullable(),
+  profileField: z.string().min(1, { message: "Profile field is required." }).max(100), // Mandatory
+  role: z.string().min(1, { message: "Target role is required." }).max(100), // Mandatory
   company: z.string().max(100).optional().nullable(),
   phoneNumber: z.string().max(20).optional().nullable(),
-  accomplishments: z.string().max(5000).optional().nullable(),
-  // Resume fields are handled separately and not part of this Zod schema for form values
-  // keySkills, experiences, projects, educationHistory are handled by local state
+  accomplishments: z.string().optional().nullable(),
 });
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
@@ -68,7 +67,7 @@ export default function ProfilePage() {
   // State for resume handling
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
-  const [clientSideResumeText, setClientSideResumeText] = useState<string | null>(null);
+  const [clientSideResumeText, setClientSideResumeText] = useState<string | null>(null); 
   const [isReadingFile, setIsReadingFile] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
@@ -77,9 +76,17 @@ export default function ProfilePage() {
   // State for array-based profile sections
   const [keySkills, setKeySkills] = useState<string[]>([]);
   const [currentSkill, setCurrentSkill] = useState("");
+
   const [experiences, setExperiences] = useState<ExperienceItem[]>([]);
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [educationHistory, setEducationHistory] = useState<EducationItem[]>([]);
+  
+  // State for managing modals and editing items
+  const [modalType, setModalType] = useState<"experience" | "project" | "education" | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<ExperienceItem | ProjectItem | EducationItem | null>(null);
+  const [currentItemData, setCurrentItemData] = useState<any>({}); 
+
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
@@ -108,15 +115,19 @@ export default function ProfilePage() {
         setProjects(userProfile.projects || []);
         setEducationHistory(userProfile.educationHistory || []);
         
-        if (userProfile.resumeFileName) {
-          setSelectedFileName(userProfile.resumeFileName);
-        }
-        if (userProfile.resumeProcessedText) {
-          setClientSideResumeText(userProfile.resumeProcessedText);
-        }
+        if (userProfile.resumeFileName) setSelectedFileName(userProfile.resumeFileName);
+        setClientSideResumeText(userProfile.resumeProcessedText || null); 
 
       } else {
-        form.reset({ name: user.displayName || "", email: initialEmail, phoneNumber: initialPhoneNumber, profileField: "", role: "", company: "", accomplishments:"" });
+        form.reset({ 
+            name: user.displayName || "", 
+            email: initialEmail, 
+            phoneNumber: initialPhoneNumber, 
+            profileField: "", // Ensure mandatory fields are at least empty strings
+            role: "", 
+            company: "", 
+            accomplishments:"" 
+        });
       }
       setIsFetchingProfile(false);
     } else if (!initialLoading && !authLoading && !user) {
@@ -136,56 +147,125 @@ export default function ProfilePage() {
     setKeySkills(keySkills.filter(skill => skill !== skillToRemove));
   };
 
+  const openModal = (type: "experience" | "project" | "education", itemToEdit?: ExperienceItem | ProjectItem | EducationItem) => {
+    setModalType(type);
+    if (itemToEdit) {
+      setEditingItem(itemToEdit);
+      setCurrentItemData(itemToEdit);
+    } else {
+      setEditingItem(null);
+      if (type === "experience") setCurrentItemData({ jobTitle: '', companyName: '', startDate: '', endDate: '', description: '' });
+      else if (type === "project") setCurrentItemData({ title: '', description: '', technologiesUsed: [], projectUrl: '' });
+      else if (type === "education") setCurrentItemData({ degree: '', institution: '', yearOfCompletion: '', details: '' });
+    }
+    setIsModalOpen(true);
+  };
+  
+  const handleModalFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setCurrentItemData((prev: any) => ({ ...prev, [name]: value }));
+  };
+  
+  const handleModalTechnologiesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+     setCurrentItemData((prev: any) => ({ ...prev, technologiesUsed: e.target.value.split(',').map(t => t.trim()).filter(Boolean) }));
+  };
+
+
+  const handleSaveItem = () => {
+    if (!modalType) return;
+
+    // Basic validation
+    if (modalType === 'experience' && (!currentItemData.jobTitle || !currentItemData.companyName || !currentItemData.startDate || !currentItemData.endDate)) {
+      toast({ title: "Missing Fields", description: "Please fill in job title, company, start date, and end date.", variant: "destructive" });
+      return;
+    }
+    if (modalType === 'project' && (!currentItemData.title || !currentItemData.description)) {
+      toast({ title: "Missing Fields", description: "Please fill in project title and description.", variant: "destructive" });
+      return;
+    }
+    if (modalType === 'education' && (!currentItemData.degree || !currentItemData.institution || !currentItemData.yearOfCompletion)) {
+      toast({ title: "Missing Fields", description: "Please fill in degree, institution, and year of completion.", variant: "destructive" });
+      return;
+    }
+
+
+    if (editingItem) { 
+      if (modalType === "experience") setExperiences(experiences.map(exp => exp.id === editingItem.id ? { ...currentItemData, id: editingItem.id } as ExperienceItem : exp));
+      else if (modalType === "project") setProjects(projects.map(proj => proj.id === editingItem.id ? { ...currentItemData, id: editingItem.id } as ProjectItem : proj));
+      else if (modalType === "education") setEducationHistory(educationHistory.map(edu => edu.id === editingItem.id ? { ...currentItemData, id: editingItem.id } as EducationItem : edu));
+    } else { 
+      const newItemId = uuidv4();
+      if (modalType === "experience") setExperiences([...experiences, { ...currentItemData, id: newItemId } as ExperienceItem]);
+      else if (modalType === "project") setProjects([...projects, { ...currentItemData, id: newItemId } as ProjectItem]);
+      else if (modalType === "education") setEducationHistory([...educationHistory, { ...currentItemData, id: newItemId } as EducationItem]);
+    }
+    setIsModalOpen(false);
+    setEditingItem(null);
+    setCurrentItemData({});
+  };
+
+  const handleDeleteItem = (type: "experience" | "project" | "education", itemId: string) => {
+    if (type === "experience") setExperiences(experiences.filter(exp => exp.id !== itemId));
+    else if (type === "project") setProjects(projects.filter(proj => proj.id !== itemId));
+    else if (type === "education") setEducationHistory(educationHistory.filter(edu => edu.id !== itemId));
+    toast({ title: "Item Removed", description: "Item removed. Save profile to make changes permanent." });
+  };
+
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    console.log("ProfilePage: handleFileChange initiated.");
     const file = event.target.files?.[0];
+    
+    // Always clear the visual input value so the same file can be re-selected if needed
     if (fileInputRef.current) fileInputRef.current.value = "";
 
     if (!file) {
-      console.log("ProfilePage: File selection cancelled.");
-      setSelectedFile(null);
-      // Do not clear existing selectedFileName or clientSideResumeText from profile here
+      console.log("ProfilePage: File selection cancelled by user.");
+      // If user cancels, don't change existing loaded/saved resume data in form or display
       return;
     }
 
     console.log("ProfilePage: New file selected:", file.name);
+    setSelectedFile(file); 
+    setSelectedFileName(file.name); 
+    setClientSideResumeText(null); 
     setIsReadingFile(true);
-    setSelectedFile(file);
-    setSelectedFileName(file.name); // Show new file name immediately
-    setClientSideResumeText(null); // Clear old processed text
 
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-      toast({ title: "File Too Large", description: `Max ${MAX_FILE_SIZE_MB}MB.`, variant: "destructive" });
-      setSelectedFile(null);
-      setSelectedFileName(userProfile?.resumeFileName || null); // Revert to saved file name
-      setClientSideResumeText(userProfile?.resumeProcessedText || null); // Revert to saved processed text
+      toast({ title: "File Too Large", description: `Maximum file size is ${MAX_FILE_SIZE_MB}MB.`, variant: "destructive" });
+      setSelectedFile(null); // Clear the invalid file
+      setSelectedFileName(userProfile?.resumeFileName || null); // Revert display to saved name
+      setClientSideResumeText(userProfile?.resumeProcessedText || null); // Revert processed text
       setIsReadingFile(false);
       return;
     }
+
     if (!ACCEPTED_MIME_TYPES.includes(file.type) && !ACCEPT_FILE_EXTENSIONS.split(',').some(ext => file.name.toLowerCase().endsWith(ext))) {
-      toast({ title: "Unsupported File Type", description: `Please use ${ACCEPT_FILE_EXTENSIONS}. Plain text (.txt, .md) is best for AI.`, variant: "destructive" });
+      toast({ title: "Unsupported File Type", description: `Please upload one of the following types: ${ACCEPT_FILE_EXTENSIONS}. Plain text (.txt, .md) is recommended.`, variant: "destructive" });
       setSelectedFile(null);
       setSelectedFileName(userProfile?.resumeFileName || null);
       setClientSideResumeText(userProfile?.resumeProcessedText || null);
       setIsReadingFile(false);
       return;
     }
-    if (['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.type)) {
-      toast({ title: "File Type Notice", description: `Attempting to extract text. For PDF/Word, text extraction might be incomplete. A plain text version is recommended.`, duration: 7000 });
-    }
 
+    if (['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.type)) {
+      toast({ title: "File Type Notice", description: `Attempting to extract text from ${file.name}. For PDF/Word, extraction might be incomplete. Plain text (.txt, .md) is best.`, duration: 7000, variant: "default" });
+    }
+    
     const reader = new FileReader();
     reader.onload = (e) => {
       const text = e.target?.result as string;
-      setClientSideResumeText(text); // For AI use, potentially to be saved
+      setClientSideResumeText(text);
+      console.log("ProfilePage: File read successfully, clientSideResumeText set.");
       toast({ title: "Resume Content Loaded", description: `Text extracted from ${file.name}. Save profile to update for AI use.` });
       setIsReadingFile(false);
     };
     reader.onerror = (errorEvent) => {
       console.error("ProfilePage: Error reading file:", errorEvent);
-      toast({ title: "File Read Error", description: "Could not read resume content.", variant: "destructive" });
-      setSelectedFile(null);
-      setSelectedFileName(userProfile?.resumeFileName || null);
-      setClientSideResumeText(userProfile?.resumeProcessedText || null);
+      toast({ title: "File Read Error", description: "Could not read resume content. Please try a different file or format.", variant: "destructive" });
+      setSelectedFile(null); // Clear invalid file
+      setSelectedFileName(userProfile?.resumeFileName || null); // Revert display
+      setClientSideResumeText(userProfile?.resumeProcessedText || null); // Revert text
       setIsReadingFile(false);
     };
     reader.readAsText(file);
@@ -193,20 +273,19 @@ export default function ProfilePage() {
 
   const clearResume = async () => {
     console.log("ProfilePage: clearResume initiated.");
-    if (user && userProfile?.resumeStoragePath) {
-      setIsSubmitting(true); // Indicate activity
-      try {
+    setIsSubmitting(true); 
+    try {
+      if (user && userProfile?.resumeStoragePath) {
         const fileToDeleteRef = storageRef(storage, userProfile.resumeStoragePath);
         await deleteObject(fileToDeleteRef);
         console.log("ProfilePage: Resume deleted from Firebase Storage:", userProfile.resumeStoragePath);
-        
-        // Optimistically update UI and local state
-        setSelectedFile(null);
-        setSelectedFileName(null);
-        setClientSideResumeText(null);
-        if (fileInputRef.current) fileInputRef.current.value = "";
-
-        // Update Firestore to remove resume fields
+      }
+      setSelectedFile(null);
+      setSelectedFileName(null);
+      setClientSideResumeText(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      
+      if (user) {
         const userDocRef = doc(db, "users", user.uid);
         await setDoc(userDocRef, {
           resumeFileName: null,
@@ -215,30 +294,32 @@ export default function ProfilePage() {
           resumeProcessedText: null,
           updatedAt: new Date().toISOString(),
         }, { merge: true });
-        
         toast({ title: "Resume Cleared", description: "Resume removed from profile and storage." });
-        refreshUserProfile();
-      } catch (error) {
-        console.error("ProfilePage: Error clearing resume from storage/Firestore:", error);
-        toast({ title: "Clear Resume Failed", description: "Could not remove resume. Please try again.", variant: "destructive" });
-      } finally {
-        setIsSubmitting(false);
+        refreshUserProfile(); 
+      } else {
+        toast({ title: "Resume Cleared", description: "Local resume selection cleared." });
       }
-    } else { // If no resume was in storage (e.g., only local changes)
-      setSelectedFile(null);
-      setSelectedFileName(null);
-      setClientSideResumeText(null);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      toast({ title: "Resume Cleared", description: "Local resume selection cleared." });
+    } catch (error) {
+      console.error("ProfilePage: Error clearing resume:", error);
+      toast({ title: "Clear Resume Failed", description: "Could not remove resume. Please try again.", variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const onSubmit = async (values: ProfileFormValues) => {
     if (!user) {
-      toast({ title: "Error", description: "You must be logged in.", variant: "destructive" });
+      toast({ title: "Error", description: "You must be logged in to update your profile.", variant: "destructive" });
       return;
     }
-    console.log("ProfilePage: onSubmit triggered. Form Values:", JSON.stringify(values, null, 2));
+    if (!values.profileField || !values.role) {
+        toast({ title: "Missing Required Fields", description: "Profile Field and Target Role are mandatory.", variant: "destructive" });
+        form.setError("profileField", { type: "manual", message: !values.profileField ? "Profile field is required." : "" });
+        form.setError("role", { type: "manual", message: !values.role ? "Target role is required." : "" });
+        return;
+    }
+
+    console.log("ProfilePage: onSubmit triggered.");
     setIsSubmitting(true);
     setIsUploading(false); 
     setUploadProgress(null);
@@ -252,27 +333,25 @@ export default function ProfilePage() {
       resumeFileName: userProfile?.resumeFileName || null,
       resumeFileUrl: userProfile?.resumeFileUrl || null,
       resumeStoragePath: userProfile?.resumeStoragePath || null,
-      resumeProcessedText: clientSideResumeText || userProfile?.resumeProcessedText || null, // Prioritize newly processed text
+      resumeProcessedText: clientSideResumeText || userProfile?.resumeProcessedText || null, 
     };
 
     try {
       if (selectedFile) {
-        console.log("ProfilePage: New resume file selected, starting upload...", selectedFile.name);
+        console.log("ProfilePage: New resume file selected, starting upload:", selectedFile.name);
         setIsUploading(true);
 
-        // Delete old resume if it exists
         if (userProfile?.resumeStoragePath) {
           try {
             const oldFileRef = storageRef(storage, userProfile.resumeStoragePath);
             await deleteObject(oldFileRef);
             console.log("ProfilePage: Old resume deleted from Firebase Storage:", userProfile.resumeStoragePath);
           } catch (deleteError: any) {
-            // Non-critical if old file deletion fails, proceed with new upload
-            console.warn("ProfilePage: Failed to delete old resume, continuing with new upload:", deleteError);
+            console.warn("ProfilePage: Failed to delete old resume, continuing with new upload:", deleteError.message);
           }
         }
         
-        const filePath = `users/${user.uid}/resumes/${selectedFile.name}`;
+        const filePath = `users/${user.uid}/resumes/${uuidv4()}-${selectedFile.name}`;
         const fileToUploadRef = storageRef(storage, filePath);
         const uploadTask = uploadBytesResumable(fileToUploadRef, selectedFile);
 
@@ -286,8 +365,6 @@ export default function ProfilePage() {
             (error) => {
               console.error("ProfilePage: File upload error:", error);
               toast({ title: "Resume Upload Failed", description: error.message, variant: "destructive" });
-              setIsUploading(false);
-              setUploadProgress(null);
               reject(error);
             },
             async () => {
@@ -298,7 +375,7 @@ export default function ProfilePage() {
                   resumeFileName: selectedFile.name,
                   resumeFileUrl: downloadURL,
                   resumeStoragePath: filePath,
-                  resumeProcessedText: clientSideResumeText, // Use the text extracted from the selected file
+                  resumeProcessedText: clientSideResumeText, 
                 };
                 console.log("ProfilePage: New resume data prepared:", newResumeData);
                 resolve();
@@ -310,33 +387,36 @@ export default function ProfilePage() {
             }
           );
         });
-        setIsUploading(false);
-        setUploadProgress(null);
       } else if (selectedFileName === null && userProfile?.resumeFileName !== null) {
-         // This case means the user cleared the resume (selectedFileName became null),
-         // but we handle actual deletion in clearResume. If onSubmit is hit and
-         // selectedFileName is null, it implies no new file was chosen,
-         // and clearResume should have handled Firestore deletion if intended.
-         // For safety, if we reach here and selectedFileName is null, it means
-         // no new upload, and whatever is in userProfile (or clientSideResumeText if it's from an un-cleared new selection) is used.
-         // If clearResume was used, userProfile fields would be nullified before this save.
+        newResumeData = {
+          resumeFileName: null,
+          resumeFileUrl: null,
+          resumeStoragePath: null,
+          resumeProcessedText: null,
+        };
+        console.log("ProfilePage: Resume was cleared (no new file selected, and selectedFileName is null). newResumeData reflects null values.");
+      } else if (clientSideResumeText !== userProfile?.resumeProcessedText) {
+          // If only text was changed without a new file upload (e.g. user cleared a file, then pasted text, though UI doesn't support this directly)
+          // This case primarily handles if `clientSideResumeText` was populated without a new `selectedFile`
+          newResumeData.resumeProcessedText = clientSideResumeText;
+          console.log("ProfilePage: clientSideResumeText changed without new file upload, updating resumeProcessedText.");
       }
 
 
       const profileDataToSave: UserProfile = {
         uid: user.uid,
         email: values.email || user.email || null,
-        name: values.name || "",
-        profileField: values.profileField || "",
-        role: values.role || "",
+        name: values.name || null,
+        profileField: values.profileField, 
+        role: values.role, 
         company: values.company || null,
         phoneNumber: values.phoneNumber || user.phoneNumber || null,
-        accomplishments: values.accomplishments || "",
+        accomplishments: values.accomplishments || null,
         keySkills: keySkills || [],
         experiences: experiences || [],
         projects: projects || [],
         educationHistory: educationHistory || [],
-        ...newResumeData, // This includes new or existing resume data
+        ...newResumeData,
         createdAt: userProfile?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         interviewsTaken: userProfile?.interviewsTaken || 0,
@@ -350,6 +430,7 @@ export default function ProfilePage() {
       await setDoc(userDocRef, profileDataToSave, { merge: true });
       console.log("ProfilePage: Profile data successfully saved to Firestore.");
       toast({ title: "Profile Updated", description: "Your profile has been successfully updated." });
+      
       refreshUserProfile().then(() => {
          console.log("ProfilePage: User profile refreshed in context after save.");
       }).catch(err => {
@@ -361,216 +442,201 @@ export default function ProfilePage() {
       const description = error.code ? `${error.message} (Code: ${error.code})` : error.message || "Could not update profile.";
       toast({ title: "Update Failed", description, variant: "destructive" });
     } finally {
-      console.log("ProfilePage: onSubmit - Reached finally block. Setting isSubmitting to false.");
+      console.log("ProfilePage: onSubmit - Reached finally block.");
       setIsSubmitting(false);
       setIsUploading(false);
       setUploadProgress(null);
-      // setSelectedFile(null); // Keep selectedFile if save failed due to other reasons, so user doesn't lose it
     }
   };
   
   const canSubmit = !isSubmitting && !authLoading && !isReadingFile && !isFetchingProfile && !isUploading;
-  const isEmailFromAuthProvider = !!user?.email;
-
-  const addListItem = <T extends { id: string }>(setter: React.Dispatch<React.SetStateAction<T[]>>, newItem: Omit<T, 'id'>) => {
-    setter(prev => [...prev, { ...newItem, id: uuidv4() } as T]);
-  };
-
-  const removeListItem = <T extends { id: string }>(setter: React.Dispatch<React.SetStateAction<T[]>>, itemId: string) => {
-    setter(prev => prev.filter(item => item.id !== itemId));
-  };
-
-  // Placeholder "Add" handlers
-  const handleAddExperience = () => console.log("Add Experience clicked - placeholder");
-  const handleAddProject = () => console.log("Add Project clicked - placeholder");
-  const handleAddEducation = () => console.log("Add Education clicked - placeholder");
-
-  // Placeholder "Edit/Delete" handlers
-  const handleEditItem = (section: string, itemId: string) => console.log(`Edit ${section} item ${itemId} - placeholder`);
-  const handleDeleteItem = (section: string, itemId: string) => {
-    console.log(`Delete ${section} item ${itemId} - placeholder`);
-    if (section === 'experience') setExperiences(prev => prev.filter(item => item.id !== itemId));
-    if (section === 'project') setProjects(prev => prev.filter(item => item.id !== itemId));
-    if (section === 'education') setEducationHistory(prev => prev.filter(item => item.id !== itemId));
-    toast({title: `${section.charAt(0).toUpperCase() + section.slice(1)} Item Removed`, description: "Save profile to make changes permanent."});
-  };
-
+  const isEmailFromAuthProvider = !!user?.email; 
 
   if (isFetchingProfile || initialLoading || (authLoading && !userProfile && !initialLoading)) {
     return <div className="flex justify-center items-center h-[calc(100vh-var(--header-height,4rem)-2rem)]"><Loader2 className="h-12 w-12 animate-spin text-primary" /> <p className="ml-3">Loading profile...</p></div>;
   }
+  
+  const renderModalContent = () => {
+    if (!modalType) return null;
+    switch (modalType) {
+      case "experience":
+        return (
+          <div className="space-y-3">
+            <div><FormLabel htmlFor="jobTitle">Job Title*</FormLabel><Input id="jobTitle" name="jobTitle" value={currentItemData.jobTitle || ''} onChange={handleModalFormChange} /></div>
+            <div><FormLabel htmlFor="companyName">Company Name*</FormLabel><Input id="companyName" name="companyName" value={currentItemData.companyName || ''} onChange={handleModalFormChange} /></div>
+            <div><FormLabel htmlFor="startDate">Start Date*</FormLabel><Input id="startDate" name="startDate" type="month" value={currentItemData.startDate || ''} onChange={handleModalFormChange} /></div>
+            <div><FormLabel htmlFor="endDate">End Date* (or select month for 'Present')</FormLabel><Input id="endDate" name="endDate" type="month" value={currentItemData.endDate || ''} onChange={handleModalFormChange} /></div>
+            <div><FormLabel htmlFor="description">Description (Responsibilities, Achievements)</FormLabel><Textarea id="description" name="description" value={currentItemData.description || ''} onChange={handleModalFormChange} rows={4}/></div>
+          </div>
+        );
+      case "project":
+        return (
+          <div className="space-y-3">
+            <div><FormLabel htmlFor="title">Project Title*</FormLabel><Input id="title" name="title" value={currentItemData.title || ''} onChange={handleModalFormChange} /></div>
+            <div><FormLabel htmlFor="description">Description*</FormLabel><Textarea id="description" name="description" value={currentItemData.description || ''} onChange={handleModalFormChange} rows={4}/></div>
+            <div><FormLabel htmlFor="technologiesUsed">Technologies Used (comma-separated)</FormLabel><Input id="technologiesUsed" name="technologiesUsed" value={Array.isArray(currentItemData.technologiesUsed) ? currentItemData.technologiesUsed.join(', ') : (currentItemData.technologiesUsed || '')} onChange={(e) => setCurrentItemData((prev: any) => ({ ...prev, technologiesUsed: e.target.value.split(',').map(t => t.trim()).filter(Boolean) }))} /></div>
+            <div><FormLabel htmlFor="projectUrl">Project URL (optional)</FormLabel><Input id="projectUrl" name="projectUrl" type="url" value={currentItemData.projectUrl || ''} onChange={handleModalFormChange} placeholder="https://example.com"/></div>
+          </div>
+        );
+      case "education":
+        return (
+          <div className="space-y-3">
+            <div><FormLabel htmlFor="degree">Degree/Certificate*</FormLabel><Input id="degree" name="degree" value={currentItemData.degree || ''} onChange={handleModalFormChange} /></div>
+            <div><FormLabel htmlFor="institution">Institution*</FormLabel><Input id="institution" name="institution" value={currentItemData.institution || ''} onChange={handleModalFormChange} /></div>
+            <div><FormLabel htmlFor="yearOfCompletion">Year of Completion (YYYY)*</FormLabel><Input id="yearOfCompletion" name="yearOfCompletion" type="text" maxLength={4} pattern="\d{4}" placeholder="YYYY" value={currentItemData.yearOfCompletion || ''} onChange={handleModalFormChange} /></div>
+            <div><FormLabel htmlFor="details">Additional Details (e.g., CGPA, Honors - optional)</FormLabel><Textarea id="details" name="details" value={currentItemData.details || ''} onChange={handleModalFormChange} rows={3}/></div>
+          </div>
+        );
+      default: return null;
+    }
+  };
+
 
   return (
-    <div className="max-w-3xl mx-auto space-y-8 py-8 px-4">
+    <div className="max-w-3xl mx-auto space-y-6 pb-16"> {/* Added pb-16 for bottom button spacing */}
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
 
-          <Card>
+          <Card className="shadow-md">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><UserCircle2 className="h-6 w-6 text-primary" /> Personal Details</CardTitle>
-              <CardDescription>Basic information about you.</CardDescription>
+              <CardTitle className="flex items-center gap-2 text-xl"><UserCircle2 className="h-6 w-6 text-primary" /> Personal Details</CardTitle>
+              <CardDescription>Basic information about you. Profile Field and Target Role are mandatory.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <FormField control={form.control} name="name" render={({ field }) => (<FormItem><FormLabel>Full Name</FormLabel><FormControl><Input placeholder="e.g., Ada Lovelace" {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>)} />
-              <FormField control={form.control} name="email" render={({ field }) => (<FormItem><FormLabel>{isEmailFromAuthProvider ? "Email (Login ID)" : "Email"}</FormLabel><FormControl><Input placeholder={isEmailFromAuthProvider ? "your-login-email@example.com" : "you@example.com"} {...field} value={field.value ?? ""} readOnly={isEmailFromAuthProvider} className={isEmailFromAuthProvider ? "bg-muted/50 cursor-not-allowed" : ""} /></FormControl><FormMessage /></FormItem>)} />
-              <FormField control={form.control} name="phoneNumber" render={({ field }) => (<FormItem><FormLabel>Phone Number {user?.phoneNumber ? "(Login ID)" : "(Optional)"}</FormLabel><FormControl><Input placeholder="e.g., +15551234567" {...field} value={field.value ?? ""} type="tel" readOnly={!!user?.phoneNumber} className={!!user?.phoneNumber ? "bg-muted/50 cursor-not-allowed" : ""} /></FormControl><FormMessage /></FormItem>)} />
-              <FormField control={form.control} name="profileField" render={({ field }) => (<FormItem><FormLabel>Profile Field / Industry</FormLabel><FormControl><Input placeholder="e.g., Software Engineering, Product Management" {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>)} />
-              <FormField control={form.control} name="role" render={({ field }) => (<FormItem><FormLabel>Current or Target Role</FormLabel><FormControl><Input placeholder="e.g., Senior Frontend Developer" {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>)} />
+              <FormField control={form.control} name="email" render={({ field }) => (<FormItem><FormLabel>{isEmailFromAuthProvider ? "Email (Primary Login ID)" : "Email"}</FormLabel><FormControl><Input placeholder={isEmailFromAuthProvider ? "your-login-email@example.com" : "you@example.com"} {...field} value={field.value ?? ""} readOnly={isEmailFromAuthProvider} className={isEmailFromAuthProvider ? "bg-muted/50 cursor-not-allowed" : ""} /></FormControl><FormMessage /></FormItem>)} />
+              <FormField control={form.control} name="phoneNumber" render={({ field }) => (<FormItem><FormLabel>Phone Number {user?.phoneNumber ? "(Primary Login ID)" : "(Optional)"}</FormLabel><FormControl><Input placeholder="e.g., +15551234567" {...field} value={field.value ?? ""} type="tel" readOnly={!!user?.phoneNumber} className={!!user?.phoneNumber ? "bg-muted/50 cursor-not-allowed" : ""} /></FormControl><FormMessage /></FormItem>)} />
+              <FormField control={form.control} name="profileField" render={({ field }) => (<FormItem><FormLabel>Profile Field / Industry*</FormLabel><FormControl><Input placeholder="e.g., Software Engineering, Data Science" {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>)} />
+              <FormField control={form.control} name="role" render={({ field }) => (<FormItem><FormLabel>Target Role*</FormLabel><FormControl><Input placeholder="e.g., Senior Frontend Developer, Product Manager" {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>)} />
               <FormField control={form.control} name="company" render={({ field }) => (<FormItem><FormLabel>Current or Target Company (Optional)</FormLabel><FormControl><Input placeholder="e.g., Google, Acme Corp" {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>)} />
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="shadow-md">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Lightbulb className="h-6 w-6 text-primary" /> Key Skills</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-xl"><Lightbulb className="h-6 w-6 text-primary" /> Key Skills</CardTitle>
               <CardDescription>Highlight your top professional skills.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex gap-2 items-center">
-                <Input placeholder="e.g., React, Python, Project Management" value={currentSkill} onChange={(e) => setCurrentSkill(e.target.value)} className="flex-grow" />
-                <Button type="button" onClick={handleAddSkill} variant="outline" size="icon"><PlusCircle className="h-5 w-5" /></Button>
+                <Input placeholder="e.g., React, Python, Project Management" value={currentSkill} onChange={(e) => setCurrentSkill(e.target.value)} className="flex-grow" onKeyDown={(e) => {if(e.key === 'Enter'){ e.preventDefault(); handleAddSkill();}}} />
+                <Button type="button" onClick={handleAddSkill} variant="outline" size="icon" aria-label="Add Skill"><PlusCircle className="h-5 w-5" /></Button>
               </div>
               {keySkills.length > 0 && (
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 pt-2">
                   {keySkills.map(skill => (
-                    <Badge key={skill} variant="secondary" className="text-sm py-1 px-3">
+                    <Badge key={skill} variant="secondary" className="text-sm py-1 px-3 rounded-md shadow-sm">
                       {skill}
-                      <button type="button" onClick={() => handleRemoveSkill(skill)} className="ml-2 text-muted-foreground hover:text-destructive">
+                      <button type="button" onClick={() => handleRemoveSkill(skill)} className="ml-2 text-muted-foreground hover:text-destructive" aria-label={`Remove skill ${skill}`}>
                         <XCircle className="h-4 w-4" />
                       </button>
                     </Badge>
                   ))}
                 </div>
               )}
+               {keySkills.length === 0 && <p className="text-sm text-muted-foreground">No skills added yet.</p>}
             </CardContent>
           </Card>
           
-          {/* Work Experience Section */}
-          <Card>
+          <Card className="shadow-md">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Briefcase className="h-6 w-6 text-primary" /> Work Experience</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-xl"><Briefcase className="h-6 w-6 text-primary" /> Work Experience</CardTitle>
               <CardDescription>Detail your professional journey.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {experiences.length === 0 && <p className="text-sm text-muted-foreground">No work experience added yet.</p>}
               {experiences.map((exp) => (
-                <Card key={exp.id} className="bg-muted/30 p-4">
-                  <CardHeader className="p-0 pb-2">
-                    <CardTitle className="text-lg">{exp.jobTitle} at {exp.companyName}</CardTitle>
-                    <CardDescription>{exp.startDate} - {exp.endDate}</CardDescription>
+                <Card key={exp.id} className="bg-muted/30 p-4 shadow-sm rounded-md">
+                  <CardHeader className="p-0 pb-2 flex flex-row justify-between items-start">
+                    <div>
+                        <CardTitle className="text-md font-semibold">{exp.jobTitle} at {exp.companyName}</CardTitle>
+                        <CardDescription className="text-xs">{exp.startDate} - {exp.endDate || 'Present'}</CardDescription>
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                        <Button type="button" variant="ghost" size="icon" onClick={() => openModal('experience', exp)} aria-label={`Edit experience ${exp.jobTitle}`}><Edit3 className="h-4 w-4 text-muted-foreground hover:text-primary" /></Button>
+                        <Button type="button" variant="ghost" size="icon" onClick={() => handleDeleteItem('experience', exp.id)} aria-label={`Delete experience ${exp.jobTitle}`}><Trash2 className="h-4 w-4 text-destructive hover:text-destructive/80" /></Button>
+                    </div>
                   </CardHeader>
-                  <CardContent className="p-0 text-sm">
+                  <CardContent className="p-0 text-sm text-muted-foreground">
                     <p className="whitespace-pre-wrap">{exp.description || "No description provided."}</p>
                   </CardContent>
-                  <CardFooter className="p-0 pt-2 flex gap-2">
-                     <DialogTrigger asChild>
-                        <Button type="button" variant="outline" size="sm" onClick={() => handleEditItem('experience', exp.id)}><Edit3 className="mr-1 h-4 w-4" /> Edit</Button>
-                     </DialogTrigger>
-                    <Button type="button" variant="destructive" size="sm" onClick={() => handleDeleteItem('experience', exp.id)}><Trash2 className="mr-1 h-4 w-4" /> Delete</Button>
-                  </CardFooter>
                 </Card>
               ))}
-              <Dialog>
-                <DialogTrigger asChild>
-                    <Button type="button" variant="outline" className="w-full"><PlusCircle className="mr-2 h-4 w-4" /> Add Experience</Button>
-                </DialogTrigger>
-                <DialogContent>
-                    <DialogHeader><DialogTitle>Add New Experience</DialogTitle><DialogDescription>Full form for adding experience will be implemented here.</DialogDescription></DialogHeader>
-                    <p className="py-4 text-center">Experience form fields go here...</p>
-                    <DialogFooter><DialogClose asChild><Button type="button" variant="secondary">Cancel</Button></DialogClose></DialogFooter>
-                </DialogContent>
-              </Dialog>
+              <Button type="button" variant="outline" className="w-full mt-2 border-dashed hover:border-primary hover:text-primary" onClick={() => openModal('experience')}><PlusCircle className="mr-2 h-4 w-4" /> Add Experience</Button>
             </CardContent>
           </Card>
 
-          {/* Projects Section */}
-          <Card>
+          <Card className="shadow-md">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Lightbulb className="h-6 w-6 text-primary" /> Projects</CardTitle> {/* Re-using Lightbulb, consider another icon if available */}
+              <CardTitle className="flex items-center gap-2 text-xl"><Lightbulb className="h-6 w-6 text-primary" /> Projects</CardTitle>
               <CardDescription>Showcase your personal or professional projects.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {projects.length === 0 && <p className="text-sm text-muted-foreground">No projects added yet.</p>}
               {projects.map((proj) => (
-                <Card key={proj.id} className="bg-muted/30 p-4">
-                  <CardHeader className="p-0 pb-2">
-                    <CardTitle className="text-lg">{proj.title}</CardTitle>
+                <Card key={proj.id} className="bg-muted/30 p-4 shadow-sm rounded-md">
+                  <CardHeader className="p-0 pb-2 flex flex-row justify-between items-start">
+                    <div>
+                        <CardTitle className="text-md font-semibold">{proj.title}</CardTitle>
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                        <Button type="button" variant="ghost" size="icon" onClick={() => openModal('project', proj)} aria-label={`Edit project ${proj.title}`}><Edit3 className="h-4 w-4 text-muted-foreground hover:text-primary" /></Button>
+                        <Button type="button" variant="ghost" size="icon" onClick={() => handleDeleteItem('project', proj.id)} aria-label={`Delete project ${proj.title}`}><Trash2 className="h-4 w-4 text-destructive hover:text-destructive/80" /></Button>
+                    </div>
                   </CardHeader>
-                  <CardContent className="p-0 text-sm">
+                  <CardContent className="p-0 text-sm text-muted-foreground">
                     <p className="whitespace-pre-wrap">{proj.description}</p>
                     {proj.technologiesUsed && proj.technologiesUsed.length > 0 && <p className="mt-1 text-xs">Tech: {proj.technologiesUsed.join(', ')}</p>}
-                    {proj.projectUrl && <a href={proj.projectUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs block mt-1">View Project</a>}
+                    {proj.projectUrl && <a href={proj.projectUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs block mt-1 break-all">View Project</a>}
                   </CardContent>
-                  <CardFooter className="p-0 pt-2 flex gap-2">
-                    <DialogTrigger asChild>
-                        <Button type="button" variant="outline" size="sm" onClick={() => handleEditItem('project', proj.id)}><Edit3 className="mr-1 h-4 w-4" /> Edit</Button>
-                    </DialogTrigger>
-                    <Button type="button" variant="destructive" size="sm" onClick={() => handleDeleteItem('project', proj.id)}><Trash2 className="mr-1 h-4 w-4" /> Delete</Button>
-                  </CardFooter>
                 </Card>
               ))}
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button type="button" variant="outline" className="w-full"><PlusCircle className="mr-2 h-4 w-4" /> Add Project</Button>
-                </DialogTrigger>
-                 <DialogContent>
-                    <DialogHeader><DialogTitle>Add New Project</DialogTitle><DialogDescription>Full form for adding a project will be implemented here.</DialogDescription></DialogHeader>
-                    <p className="py-4 text-center">Project form fields go here...</p>
-                    <DialogFooter><DialogClose asChild><Button type="button" variant="secondary">Cancel</Button></DialogClose></DialogFooter>
-                </DialogContent>
-              </Dialog>
+               <Button type="button" variant="outline" className="w-full mt-2 border-dashed hover:border-primary hover:text-primary" onClick={() => openModal('project')}><PlusCircle className="mr-2 h-4 w-4" /> Add Project</Button>
             </CardContent>
           </Card>
 
-          {/* Education History Section */}
-          <Card>
+          <Card className="shadow-md">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><GraduationCap className="h-6 w-6 text-primary" /> Education History</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-xl"><GraduationCap className="h-6 w-6 text-primary" /> Education History</CardTitle>
               <CardDescription>List your educational qualifications.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {educationHistory.length === 0 && <p className="text-sm text-muted-foreground">No education history added yet.</p>}
               {educationHistory.map((edu) => (
-                <Card key={edu.id} className="bg-muted/30 p-4">
-                  <CardHeader className="p-0 pb-2">
-                    <CardTitle className="text-lg">{edu.degree} from {edu.institution}</CardTitle>
-                    <CardDescription>Completed: {edu.yearOfCompletion}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="p-0 text-sm">
+                <Card key={edu.id} className="bg-muted/30 p-4 shadow-sm rounded-md">
+                    <CardHeader className="p-0 pb-2 flex flex-row justify-between items-start">
+                        <div>
+                            <CardTitle className="text-md font-semibold">{edu.degree} from {edu.institution}</CardTitle>
+                            <CardDescription className="text-xs">Completed: {edu.yearOfCompletion}</CardDescription>
+                        </div>
+                        <div className="flex gap-1 shrink-0">
+                            <Button type="button" variant="ghost" size="icon" onClick={() => openModal('education', edu)} aria-label={`Edit education ${edu.degree}`}><Edit3 className="h-4 w-4 text-muted-foreground hover:text-primary" /></Button>
+                            <Button type="button" variant="ghost" size="icon" onClick={() => handleDeleteItem('education', edu.id)} aria-label={`Delete education ${edu.degree}`}><Trash2 className="h-4 w-4 text-destructive hover:text-destructive/80" /></Button>
+                        </div>
+                    </CardHeader>
+                  <CardContent className="p-0 text-sm text-muted-foreground">
                     <p className="whitespace-pre-wrap">{edu.details || "No additional details."}</p>
                   </CardContent>
-                  <CardFooter className="p-0 pt-2 flex gap-2">
-                    <DialogTrigger asChild>
-                        <Button type="button" variant="outline" size="sm" onClick={() => handleEditItem('education', edu.id)}><Edit3 className="mr-1 h-4 w-4" /> Edit</Button>
-                    </DialogTrigger>
-                    <Button type="button" variant="destructive" size="sm" onClick={() => handleDeleteItem('education', edu.id)}><Trash2 className="mr-1 h-4 w-4" /> Delete</Button>
-                  </CardFooter>
                 </Card>
               ))}
-              <Dialog>
-                <DialogTrigger asChild>
-                    <Button type="button" variant="outline" className="w-full"><PlusCircle className="mr-2 h-4 w-4" /> Add Education</Button>
-                </DialogTrigger>
-                <DialogContent>
-                    <DialogHeader><DialogTitle>Add New Education</DialogTitle><DialogDescription>Full form for adding education will be implemented here.</DialogDescription></DialogHeader>
-                    <p className="py-4 text-center">Education form fields go here...</p>
-                    <DialogFooter><DialogClose asChild><Button type="button" variant="secondary">Cancel</Button></DialogClose></DialogFooter>
-                </DialogContent>
-              </Dialog>
+              <Button type="button" variant="outline" className="w-full mt-2 border-dashed hover:border-primary hover:text-primary" onClick={() => openModal('education')}><PlusCircle className="mr-2 h-4 w-4" /> Add Education</Button>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="shadow-md">
              <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Trophy className="h-6 w-6 text-primary" /> Accomplishments</CardTitle>
-                <CardDescription>Share your significant achievements, awards, or recognitions.</CardDescription>
+                <CardTitle className="flex items-center gap-2 text-xl"><Trophy className="h-6 w-6 text-primary" /> Accomplishments</CardTitle>
+                <CardDescription>Share your significant achievements, awards, or recognitions (optional).</CardDescription>
             </CardHeader>
             <CardContent>
-                <FormField control={form.control} name="accomplishments" render={({ field }) => (<FormItem><FormControl><Textarea placeholder="e.g., 'Led a team to successfully launch Product X, resulting in a 20% increase in user engagement.' or 'Published research paper Y at Conference Z.'" {...field} value={field.value ?? ""} rows={5} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField control={form.control} name="accomplishments" render={({ field }) => (<FormItem><FormControl><Textarea placeholder="e.g., 'Led a team to successfully launch Product X...' or 'Published research paper Y...'" {...field} value={field.value ?? ""} rows={5} /></FormControl><FormMessage /></FormItem>)} />
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="shadow-md">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><FileText className="h-6 w-6 text-primary" /> Resume</CardTitle>
-              <CardDescription>Upload your resume. Text will be extracted for AI question generation.</CardDescription>
+              <CardTitle className="flex items-center gap-2 text-xl"><FileText className="h-6 w-6 text-primary" /> Resume</CardTitle>
+              <CardDescription>Upload your resume. Text will be extracted for AI question generation (PDF, DOCX, TXT, MD accepted).</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center gap-2">
@@ -587,13 +653,13 @@ export default function ProfilePage() {
                 {(isReadingFile && !isUploading) && <Loader2 className="h-5 w-5 animate-spin" />}
               </div>
               <FormDescription>
-                Accepted: {ACCEPT_FILE_EXTENSIONS}, Max {MAX_FILE_SIZE_MB}MB. Plain text (.txt, .md) is best for AI.
+                Max {MAX_FILE_SIZE_MB}MB. Plain text (.txt, .md) is best for AI. For PDF/DOCX, text extraction may be limited.
               </FormDescription>
 
               {isUploading && uploadProgress !== null && (
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">
-                    {uploadProgress < 100 ? `Uploading: ${Math.round(uploadProgress)}%` : (uploadProgress === 0 ? "Starting upload..." : "Processing...")}
+                    {uploadProgress === 0 ? "Starting upload..." : (uploadProgress < 100 ? `Uploading: ${Math.round(uploadProgress)}%` :  "Processing...")}
                   </p>
                   <Progress value={uploadProgress} className="h-2" />
                 </div>
@@ -601,19 +667,39 @@ export default function ProfilePage() {
 
               {selectedFileName && !isUploading && (
                 <div className="mt-2 text-sm text-muted-foreground flex items-center justify-between p-2 border rounded-md bg-secondary/50">
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-primary" />
-                    <span>{selectedFileName}</span>
+                  <div className="flex items-center gap-2 overflow-hidden">
+                    <FileText className="h-4 w-4 text-primary shrink-0" />
+                    <span className="truncate" title={selectedFileName}>{selectedFileName}</span>
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 shrink-0">
                     {userProfile?.resumeFileUrl && selectedFileName === userProfile.resumeFileName && (
                       <a href={userProfile.resumeFileUrl} target="_blank" rel="noopener noreferrer">
-                        <Button type="button" variant="ghost" size="sm" title="Download saved resume">
+                        <Button type="button" variant="ghost" size="icon" title="Download saved resume" aria-label="Download saved resume">
                           <DownloadCloud className="h-4 w-4 text-primary" />
                         </Button>
                       </a>
                     )}
-                    <Button type="button" variant="ghost" size="sm" onClick={clearResume} title="Clear resume selection/upload" disabled={isSubmitting || isUploading || isReadingFile}>
+                    <Button type="button" variant="ghost" size="icon" onClick={clearResume} title="Clear resume selection/upload" aria-label="Clear resume" disabled={isSubmitting || isUploading || isReadingFile}>
+                      <XCircle className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+               {!selectedFileName && userProfile?.resumeFileName && !isUploading && (
+                <div className="mt-2 text-sm text-muted-foreground flex items-center justify-between p-2 border rounded-md bg-secondary/50">
+                   <div className="flex items-center gap-2 overflow-hidden">
+                    <FileText className="h-4 w-4 text-primary shrink-0" />
+                    <span className="truncate" title={userProfile.resumeFileName}>{userProfile.resumeFileName} (Saved)</span>
+                  </div>
+                   <div className="flex items-center gap-1 shrink-0">
+                    {userProfile?.resumeFileUrl && (
+                      <a href={userProfile.resumeFileUrl} target="_blank" rel="noopener noreferrer">
+                        <Button type="button" variant="ghost" size="icon" title="Download saved resume" aria-label="Download saved resume">
+                          <DownloadCloud className="h-4 w-4 text-primary" />
+                        </Button>
+                      </a>
+                    )}
+                    <Button type="button" variant="ghost" size="icon" onClick={clearResume} title="Remove saved resume" aria-label="Remove saved resume" disabled={isSubmitting || isUploading || isReadingFile}>
                       <XCircle className="h-4 w-4 text-destructive" />
                     </Button>
                   </div>
@@ -622,12 +708,36 @@ export default function ProfilePage() {
             </CardContent>
           </Card>
 
-          <Button type="submit" disabled={!canSubmit} className="w-full sm:w-auto text-lg py-3 px-6">
-            {(isSubmitting || isUploading || isReadingFile) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isUploading ? 'Uploading Resume...' : (isReadingFile ? 'Processing File...' : (isSubmitting ? 'Saving Profile...' : 'Save All Profile Changes'))}
-          </Button>
+          <div className="fixed bottom-0 left-0 right-0 md:relative bg-background/80 backdrop-blur-sm md:bg-transparent md:backdrop-blur-none p-4 border-t md:border-none md:p-0">
+             <Button type="submit" disabled={!canSubmit} className="w-full md:w-auto text-lg py-3 px-6 shadow-lg">
+                {(isSubmitting || isUploading || isReadingFile) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isUploading ? 'Uploading Resume...' : (isReadingFile ? 'Processing File...' : (isSubmitting ? 'Saving Profile...' : 'Save All Profile Changes'))}
+             </Button>
+          </div>
         </form>
       </Form>
+
+      <Dialog open={isModalOpen} onOpenChange={(open) => { setIsModalOpen(open); if (!open) { setEditingItem(null); setCurrentItemData({}); }}}>
+        <DialogContent className="sm:max-w-[525px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-lg">
+              {editingItem ? "Edit " : "Add New "} 
+              {modalType?.charAt(0).toUpperCase() + (modalType?.slice(1) || '')}
+            </DialogTitle>
+            <DialogDescription>
+              Please fill in the details for your {modalType}. Click save when you're done. Fields marked with * are required.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            {renderModalContent()}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => { setIsModalOpen(false); setEditingItem(null); setCurrentItemData({});}}>Cancel</Button>
+            <Button type="button" onClick={handleSaveItem}>Save {modalType?.charAt(0).toUpperCase() + (modalType?.slice(1) || '')}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }

@@ -1,6 +1,6 @@
 
 export interface EducationItem {
-  id: string;
+  id: string; // Unique ID for the item
   degree: string;
   institution: string;
   yearOfCompletion: string;
@@ -8,7 +8,7 @@ export interface EducationItem {
 }
 
 export interface ExperienceItem {
-  id: string;
+  id: string; // Unique ID for the item
   jobTitle: string;
   companyName: string;
   startDate: string;
@@ -17,7 +17,7 @@ export interface ExperienceItem {
 }
 
 export interface ProjectItem {
-  id: string;
+  id: string; // Unique ID for the item
   title: string;
   description: string;
   technologiesUsed?: string[];
@@ -27,9 +27,9 @@ export interface ProjectItem {
 export interface UserProfile {
   uid: string;
   email: string | null;
-  name?: string;
-  profileField?: string; 
-  role?: string; 
+  name?: string | null; // Made nullable for consistency
+  profileField: string; // Mandatory
+  role: string; // Mandatory
   company?: string | null;
   phoneNumber?: string | null;
   
@@ -37,12 +37,12 @@ export interface UserProfile {
   experiences?: ExperienceItem[];
   projects?: ProjectItem[];
   educationHistory?: EducationItem[];
-  accomplishments?: string;
+  accomplishments?: string | null;
 
   resumeFileName?: string | null; 
   resumeFileUrl?: string | null; 
   resumeStoragePath?: string | null; 
-  resumeProcessedText?: string | null; // Text extracted client-side for AI
+  resumeProcessedText?: string | null; 
 
   createdAt: string;
   interviewsTaken?: number;
@@ -55,7 +55,7 @@ export interface UserProfile {
 export interface InterviewSession {
   id: string;
   userId: string;
-  duration: 15 | 30 | 45; // minutes
+  duration: 15 | 30 | 45; 
   status: "pending" | "questions_generated" | "started" | "completed" | "cancelled";
   questions?: GeneratedQuestion[]; 
   transcript?: string; 
@@ -65,18 +65,21 @@ export interface InterviewSession {
   endedReason?: "completed_by_user" | "time_up" | "prolonged_face_absence" | "all_questions_answered" | "tab_switch_limit" | "face_not_detected_limit";
   proctoringIssues?: {
     tabSwitch: number;
-    faceNotDetected: number; // For short absences, leading to strict warning
-    task_inactivity: number; // Simple warning
-    distraction: number; // Simple warning
+    faceNotDetected_short: number; // For short absences, simple warning
+    task_inactivity: number; 
+    distraction: number; 
+    // faceNotDetected is now faceNotDetected_short for simple warnings
   };
 }
 
+// Schema for a single generated question, used as part of the input to this flow.
+// This needs to match the structure of questions stored in the InterviewSession document.
 export interface GeneratedQuestion {
   id: string;
   text: string;
   stage: "oral" | "technical_written";
   type: "behavioral" | "technical" | "coding" | "conversational" | "resume_based";
-  answer?: string; 
+  answer?: string;
 }
 
 export interface DetailedQuestionFeedbackItem {
