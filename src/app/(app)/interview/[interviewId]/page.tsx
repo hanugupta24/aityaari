@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useEffect, useState, useRef, useCallback } from "react";
@@ -8,7 +9,7 @@ import { doc, getDoc, updateDoc, onSnapshot, Unsubscribe } from "firebase/firest
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Mic, Send, Video, Terminal, AlertTriangle, Volume2, MicOff, TimerIcon } from "lucide-react";
+import { Loader2, Mic, Send, Video, Terminal, AlertTriangle, Volume2, MicOff, TimerIcon, EyeOff, Zap } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import type { InterviewSession, GeneratedQuestion } from "@/types";
@@ -25,11 +26,17 @@ declare global {
   interface Window {
     SpeechRecognition: any;
     webkitSpeechRecognition: any;
-    speechSynthesis: Synthesis;
+    speechSynthesis: SpeechSynthesis; // Corrected type
   }
 }
 
-const MAX_VISIBILITY_CHANGES = 2; // Allow 2 switches, end on 3rd
+const MAX_PROCTORING_WARNINGS = 2; // Ends on 3rd infraction of a specific type
+const INACTIVITY_TIMEOUT_ORAL_MS = 60 * 1000; // 1 minute
+const INACTIVITY_TIMEOUT_WRITTEN_MS = 2 * 60 * 1000; // 2 minutes
+const FACE_DETECTION_INTERVAL_MS = 15 * 1000; // Check every 15 seconds
+const CONSECUTIVE_NO_FACE_CHECKS_TO_WARN = 2; // Warn after 2 consecutive "no face" checks
+
+type ProctoringIssueType = 'tabSwitch' | 'faceNotDetected' | 'inactivity';
 
 export default function InterviewPage() {
   const params = useParams();
@@ -61,52 +68,57 @@ export default function InterviewPage() {
   const previousQuestionIdRef = useRef<string | null>(null);
 
   const [timeLeftInSeconds, setTimeLeftInSeconds] = useState<number | null>(null);
-  const [visibilityChangeCount, setVisibilityChangeCount] = useState(0);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Refs for latest state values to be used in callbacks like setInterval
+  // Proctoring states
+  const [proctoringIssues, setProctoringIssues] = useState<{
+    tabSwitch: number;
+    faceNotDetected: number;
+    inactivity: number;
+  }>({ tabSwitch: 0, faceNotDetected: 0, inactivity: 0 });
+  const [isFaceCurrentlyVisible, setIsFaceCurrentlyVisible] = useState(true); // Assume face is visible initially
+  const [consecutiveNoFaceCount, setConsecutiveNoFaceCount] = useState(0);
+  const [lastActivityTime, setLastActivityTime] = useState<number>(Date.now());
+
+  // Refs for latest state values to be used in callbacks
   const isEndingInterviewRef = useRef(isEndingInterview);
-  useEffect(() => {
-    isEndingInterviewRef.current = isEndingInterview;
-  }, [isEndingInterview]);
+  useEffect(() => { isEndingInterviewRef.current = isEndingInterview; }, [isEndingInterview]);
 
   const allQuestionsRef = useRef(allQuestions);
-  useEffect(() => {
-    allQuestionsRef.current = allQuestions;
-  }, [allQuestions]);
+  useEffect(() => { allQuestionsRef.current = allQuestions; }, [allQuestions]);
 
   const transcriptLogRef = useRef(transcriptLog);
-  useEffect(() => {
-    transcriptLogRef.current = transcriptLog;
-  }, [transcriptLog]);
+  useEffect(() => { transcriptLogRef.current = transcriptLog; }, [transcriptLog]);
 
+  const proctoringIssuesRef = useRef(proctoringIssues);
+  useEffect(() => { proctoringIssuesRef.current = proctoringIssues; }, [proctoringIssues]);
+
+  const isInterviewEffectivelyActive = useCallback(() => {
+    return session && session.status !== "completed" && session.status !== "cancelled" && !isEndingInterviewRef.current;
+  }, [session]);
 
   const stopMediaTracks = useCallback(() => {
     console.log("InterviewPage: stopMediaTracks called.");
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach(track => track.stop());
       mediaStreamRef.current = null; 
-      console.log("InterviewPage: mediaStreamRef.current tracks stopped and cleared.");
     }
     if (videoRef.current && videoRef.current.srcObject) {
       const videoStream = videoRef.current.srcObject as MediaStream;
       videoStream.getTracks().forEach(track => track.stop());
       videoRef.current.srcObject = null; 
-      console.log("InterviewPage: videoRef.current.srcObject tracks stopped and cleared.");
     }
   }, []);
   
   const stopSpeechRecognition = useCallback(() => {
-    console.log("InterviewPage: stopSpeechRecognition called.");
     if (recognitionRef.current) {
-      recognitionRef.current.abort(); // Use abort for immediate stop
+      recognitionRef.current.abort();
       recognitionRef.current.stop(); 
     }
     setIsListening(false); 
   }, []);
 
   const cancelSpeechSynthesis = useCallback(() => {
-    console.log("InterviewPage: cancelSpeechSynthesis called.");
     if (typeof window !== 'undefined' && window.speechSynthesis) {
       if(window.speechSynthesis.speaking || window.speechSynthesis.pending) {
         window.speechSynthesis.cancel();
@@ -115,40 +127,32 @@ export default function InterviewPage() {
     setIsAISpeaking(false); 
   }, []);
 
-  const isInterviewEffectivelyActive = useCallback(() => {
-    return session && session.status !== "completed" && session.status !== "cancelled" && !isEndingInterviewRef.current;
-  }, [session]);
+  const handleEndInterview = useCallback(async (
+    reason: "completed" | "time_up" | "tab_switch_limit" | "face_not_detected_limit" | "inactivity_limit" | "all_questions_answered",
+    questionsData?: AnsweredQuestion[],
+    transcriptString?: string
+  ) => {
+    const currentQuestions = questionsData || allQuestionsRef.current;
+    const currentTranscript = transcriptString || transcriptLogRef.current.join('\\n');
 
-
-  useEffect(() => {
-    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognitionAPI) {
-      setSpeechRecognitionSupported(true);
-    } else {
-      setSpeechRecognitionSupported(false);
-      toast({
-        title: "Speech Recognition Not Supported",
-        description: "Your browser does not support speech-to-text. For oral questions, please type your answers or use a supported browser (e.g., Chrome, Edge).",
-        variant: "default",
-        duration: 7000,
-      });
-    }
-  }, [toast]);
-
-  const handleEndInterview = useCallback(async (finalQuestionsData: AnsweredQuestion[], finalTranscriptString: string, reason: string = "completed") => {
-    if (!user || !interviewId || !session || !userProfile ) { // Removed isEndingInterviewRef check here, will be handled by setIsEndingInterview
-      if(!isEndingInterviewRef.current) toast({ title: "Error", description: "User or session data missing for ending interview.", variant: "destructive" });
+    if (!user || !interviewId || !session || !userProfile || isEndingInterviewRef.current) {
+      if(!isEndingInterviewRef.current && (user && session)) toast({ title: "Error", description: "User or session data missing for ending interview.", variant: "destructive" });
+      else if (isEndingInterviewRef.current) console.log("InterviewPage: handleEndInterview - Already ending, skipping.");
       return;
     }
-
-    if (isEndingInterviewRef.current) {
-        console.log("InterviewPage: handleEndInterview - Already ending, skipping.");
-        return; // Prevent multiple executions
-    }
     
-    console.log(`InterviewPage: handleEndInterview - Starting process. Reason: ${reason}`);
-    setIsEndingInterview(true); 
-    toast({ title: "Interview Complete", description: "Finalizing and analyzing your feedback..." });
+    setIsEndingInterview(true);
+    let toastMessage = "Finalizing and analyzing your feedback...";
+    let toastTitle = "Interview Ended";
+
+    switch(reason) {
+        case "time_up": toastTitle = "Time's Up!"; toastMessage = "The interview time has concluded."; break;
+        case "tab_switch_limit": toastMessage = "Interview terminated due to excessive tab/window switching."; break;
+        case "face_not_detected_limit": toastMessage = "Interview terminated due to face not being consistently visible."; break;
+        case "inactivity_limit": toastMessage = "Interview terminated due to prolonged inactivity."; break;
+        case "all_questions_answered": toastTitle = "Interview Complete"; break;
+    }
+    toast({ title: toastTitle, description: toastMessage });
 
     cancelSpeechSynthesis();
     stopSpeechRecognition();
@@ -161,18 +165,14 @@ export default function InterviewPage() {
     try {
       const sessionDocRef = doc(db, "users", user.uid, "interviews", interviewId);
       
-      const questionsToStore = finalQuestionsData.map(q => ({
-        id: q.id,
-        text: q.text,
-        stage: q.stage,
-        type: q.type,
-        answer: q.answer || "", 
+      const questionsToStore = currentQuestions.map(q => ({
+        id: q.id, text: q.text, stage: q.stage, type: q.type, answer: q.answer || "", 
       }));
 
       await updateDoc(sessionDocRef, {
-        status: "completed",
+        status: "completed", // Could also use the 'reason' here if schema allows
         questions: questionsToStore, 
-        transcript: finalTranscriptString,
+        transcript: currentTranscript,
         updatedAt: new Date().toISOString(),
       });
       
@@ -181,94 +181,96 @@ export default function InterviewPage() {
         interviewsTaken: (userProfile.interviewsTaken || 0) + 1,
         updatedAt: new Date().toISOString(),
       });
-      refreshUserProfile().then(() => {
-        console.log("AuthContext: User profile refreshed in context after ending interview.");
-      }).catch(err => {
-        console.error("AuthContext: Error refreshing user profile in context after ending interview:", err);
-      });
+      refreshUserProfile().catch(err => console.error("AuthContext: Error refreshing user profile:", err));
       
       const feedbackInput: AnalyzeInterviewFeedbackInput = {
         questions: questionsToStore,
         jobDescription: userProfile.role || "General Role", 
         candidateProfile: `Field: ${userProfile.profileField}, Role: ${userProfile.role}, Education: ${userProfile.education}`,
-        interviewTranscript: finalTranscriptString, 
+        interviewTranscript: currentTranscript, 
       };
       const feedbackResult = await analyzeInterviewFeedback(feedbackInput);
       
-      await updateDoc(sessionDocRef, {
-        feedback: feedbackResult,
-      });
-
+      await updateDoc(sessionDocRef, { feedback: feedbackResult });
       router.push(`/feedback/${interviewId}`);
 
     } catch (error: any) {
       console.error("InterviewPage: Error ending interview / getting feedback:", error);
-      toast({ title: "Error Finalizing Interview", description: error.message || "Failed to finalize interview or get feedback.", variant: "destructive" });
-      //setIsEndingInterview(false); // Reset only if there was an error and we want to allow retry.
+      toast({ title: "Error Finalizing Interview", description: error.message || "Failed to finalize.", variant: "destructive" });
     }
   }, [user, interviewId, session, userProfile, router, toast, refreshUserProfile, cancelSpeechSynthesis, stopSpeechRecognition, stopMediaTracks]);
 
+  const logProctoringEvent = useCallback((type: ProctoringIssueType) => {
+    if (!isInterviewEffectivelyActive()) return;
+
+    setProctoringIssues(prev => {
+        const newCount = (prev[type] || 0) + 1;
+        const updatedIssues = { ...prev, [type]: newCount };
+        proctoringIssuesRef.current = updatedIssues; // Update ref immediately
+
+        let warningMessage = "";
+        let terminationReason: "tab_switch_limit" | "face_not_detected_limit" | "inactivity_limit" | null = null;
+
+        switch (type) {
+            case 'tabSwitch':
+                warningMessage = `Switching away from the interview tab is not recommended. This is warning ${newCount} of ${MAX_PROCTORING_WARNINGS}.`;
+                if (newCount > MAX_PROCTORING_WARNINGS) terminationReason = 'tab_switch_limit';
+                break;
+            case 'faceNotDetected':
+                warningMessage = `Your face does not seem to be clearly visible. Please ensure you are in front of the camera. Warning ${newCount} of ${MAX_PROCTORING_WARNINGS}.`;
+                if (newCount > MAX_PROCTORING_WARNINGS) terminationReason = 'face_not_detected_limit';
+                break;
+            case 'inactivity':
+                warningMessage = `No activity detected for a while. Please continue with the interview. Warning ${newCount} of ${MAX_PROCTORING_WARNINGS}.`;
+                if (newCount > MAX_PROCTORING_WARNINGS) terminationReason = 'inactivity_limit';
+                break;
+        }
+
+        if (newCount <= MAX_PROCTORING_WARNINGS) {
+            toast({ title: "Proctoring Warning", description: warningMessage, variant: "default", duration: 7000 });
+        } else if (terminationReason && !isEndingInterviewRef.current) {
+            handleEndInterview(terminationReason, allQuestionsRef.current, transcriptLogRef.current.join('\\n'));
+        }
+        return updatedIssues;
+    });
+  }, [toast, handleEndInterview]);
 
   // Main useEffect for Firestore listener, media setup, and cleanup
   useEffect(() => {
-    console.log("InterviewPage: Main useEffect mounting/running. User:", user?.uid, "Interview ID:", interviewId);
-    if (!user || !interviewId) {
-      setIsLoading(false);
-      return;
-    }
-
+    if (!user || !interviewId) { setIsLoading(false); return; }
     setIsLoading(true);
     const sessionDocRef = doc(db, "users", user.uid, "interviews", interviewId);
     
     let unsubscribe: Unsubscribe | null = null;
     try {
       unsubscribe = onSnapshot(sessionDocRef, (docSnap) => {
-        console.log("InterviewPage: Firestore onSnapshot triggered. Document exists:", docSnap.exists());
         if (docSnap.exists()) {
           const data = docSnap.data() as InterviewSession;
-          setSession(data); // This will trigger other effects depending on session
+          setSession(data);
           setTranscriptLog(data.transcript ? data.transcript.split('\\n') : []);
 
           if ((data.status === "completed" || data.status === "cancelled") && !isEndingInterviewRef.current) {
-                console.log("InterviewPage: Session already completed/cancelled by another source. Cleaning up and redirecting.");
-                toast({ title: "Interview Ended", description: "This interview session is no longer active."});
-                cancelSpeechSynthesis();
-                stopSpeechRecognition();
-                stopMediaTracks();
-                if (timerIntervalRef.current) {
-                    clearInterval(timerIntervalRef.current);
-                    timerIntervalRef.current = null;
-                }
-                router.push("/dashboard");
-            return;
+            toast({ title: "Interview Ended", description: "This interview session is no longer active."});
+            router.push("/dashboard"); return;
           }
           
           if (data.questions && data.questions.length > 0) {
-            const sortedQuestions = data.questions
-              .map(q => ({...q, answer: q.answer || ""})) 
+            const sortedQuestions = data.questions.map(q => ({...q, answer: q.answer || ""})) 
               .sort((a, b) => { 
                   if (a.stage === 'oral' && b.stage === 'technical_written') return -1;
                   if (a.stage === 'technical_written' && b.stage === 'oral') return 1;
                   return (parseInt(a.id.substring(1)) || 0) - (parseInt(b.id.substring(1)) || 0);
               });
-            
             setAllQuestions(sortedQuestions);
             const firstUnansweredIndex = sortedQuestions.findIndex(q => !q.answer); 
-            const newIndex = firstUnansweredIndex > -1 ? firstUnansweredIndex : (data.questions.length > 0 ? data.questions.length -1 : 0);
-            if (currentQuestionIndex !== newIndex) {
-                setCurrentQuestionIndex(newIndex);
-            }
+            setCurrentQuestionIndex(firstUnansweredIndex > -1 ? firstUnansweredIndex : (data.questions.length > 0 ? data.questions.length -1 : 0));
           } else {
-            toast({ title: "Error", description: "No questions found for this session. Please start a new interview.", variant: "destructive" });
-            if (!isEndingInterviewRef.current) {
-                router.push("/interview/start");
-            }
+            toast({ title: "Error", description: "No questions found. Please start a new interview.", variant: "destructive" });
+            if (!isEndingInterviewRef.current) router.push("/interview/start");
           }
         } else {
           toast({ title: "Error", description: "Interview session not found.", variant: "destructive" });
-          if (!isEndingInterviewRef.current) {
-              router.push("/dashboard");
-          }
+          if (!isEndingInterviewRef.current) router.push("/dashboard");
         }
         setIsLoading(false);
       }, (error) => {
@@ -276,247 +278,192 @@ export default function InterviewPage() {
         toast({ title: "Firestore Error", description: "Could not listen to interview updates.", variant: "destructive" });
         setIsLoading(false);
       });
-    } catch (e) {
-        console.error("InterviewPage: Exception setting up Firestore listener:", e);
-        setIsLoading(false);
-    }
+    } catch (e) { console.error("InterviewPage: Exception setting up Firestore listener:", e); setIsLoading(false); }
 
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-      .then(stream => {
-        mediaStreamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-      })
-      .catch(err => {
-        toast({ title: "Media Error", description: "Could not access camera/microphone. Please check permissions.", variant: "destructive" });
-      });
+      .then(stream => { mediaStreamRef.current = stream; if (videoRef.current) videoRef.current.srcObject = stream; })
+      .catch(err => toast({ title: "Media Error", description: "Could not access camera/microphone.", variant: "destructive" }));
     
     return () => {
-      console.log("InterviewPage: Unmounting component. Running cleanup functions.");
       if (unsubscribe) unsubscribe();
-      cancelSpeechSynthesis();
-      stopSpeechRecognition();
-      stopMediaTracks();
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current);
-        timerIntervalRef.current = null;
-      }
-      console.log("InterviewPage: All cleanup functions called from main useEffect.");
+      cancelSpeechSynthesis(); stopSpeechRecognition(); stopMediaTracks();
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, interviewId, router, toast, cancelSpeechSynthesis, stopSpeechRecognition, stopMediaTracks]);
 
   const currentQuestion = allQuestions[currentQuestionIndex];
 
+  // Speech Recognition Setup
+  useEffect(() => {
+    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognitionAPI) setSpeechRecognitionSupported(true);
+    else {
+      setSpeechRecognitionSupported(false);
+      toast({ title: "Speech Not Supported", description: "Your browser doesn't support speech-to-text.", variant: "default", duration: 7000 });
+    }
+  }, [toast]);
+
   // AI Speech Synthesis Effect
   useEffect(() => {
-    // Reset spoken flag if question ID changes
     if (currentQuestion?.id !== previousQuestionIdRef.current) {
         setHasSpokenCurrentQuestion(false);
         previousQuestionIdRef.current = currentQuestion?.id || null;
-        if (typeof window !== 'undefined' && window.speechSynthesis?.speaking) {
-            window.speechSynthesis.cancel();
-            setIsAISpeaking(false);
-        }
+        if (typeof window !== 'undefined' && window.speechSynthesis?.speaking) { window.speechSynthesis.cancel(); setIsAISpeaking(false); }
     }
-
-    // Speak the question if it's oral, not yet answered, active, not listening, and not already spoken/speaking
     if (currentQuestion && currentQuestion.stage === 'oral' && !currentQuestion.answer && isInterviewEffectivelyActive() && !isListening && !hasSpokenCurrentQuestion && !isAISpeaking) {
       if (typeof window !== 'undefined' && window.speechSynthesis) {
-        console.log("InterviewPage: AI attempting to speak question:", currentQuestion.text);
         const utterance = new SpeechSynthesisUtterance(currentQuestion.text);
-        utterance.lang = 'en-US';
-        utterance.rate = 0.9;
-        utterance.onstart = () => {
-            console.log("InterviewPage: AI speech started.");
-            setIsAISpeaking(true);
-        };
-        utterance.onend = () => {
-          console.log("InterviewPage: AI speech ended.");
-          setIsAISpeaking(false);
-          setHasSpokenCurrentQuestion(true);
-        };
+        utterance.lang = 'en-US'; utterance.rate = 0.9;
+        utterance.onstart = () => setIsAISpeaking(true);
+        utterance.onend = () => { setIsAISpeaking(false); setHasSpokenCurrentQuestion(true); setLastActivityTime(Date.now()); };
         utterance.onerror = (event) => {
-          console.error('InterviewPage: SpeechSynthesis Error:', event);
-          setIsAISpeaking(false);
-          setHasSpokenCurrentQuestion(true); // Allow user to proceed even if AI voice fails
+          console.error('SpeechSynthesis Error:', event); setIsAISpeaking(false); setHasSpokenCurrentQuestion(true);
           toast({ title: "AI Voice Error", description: "Could not play AI voice.", variant: "destructive" });
         };
         window.speechSynthesis.speak(utterance);
-      } else {
-        setIsAISpeaking(false);
-        setHasSpokenCurrentQuestion(true);
-      }
+      } else { setIsAISpeaking(false); setHasSpokenCurrentQuestion(true); }
     } else if (isAISpeaking && (!isInterviewEffectivelyActive() || currentQuestion?.stage !== 'oral' || currentQuestion?.answer || hasSpokenCurrentQuestion)) {
-        if (typeof window !== 'undefined' && window.speechSynthesis?.speaking) {
-            window.speechSynthesis.cancel();
-        }
+        if (typeof window !== 'undefined' && window.speechSynthesis?.speaking) window.speechSynthesis.cancel();
         setIsAISpeaking(false);
     }
-  }, [currentQuestion, isInterviewEffectivelyActive, toast, isListening, hasSpokenCurrentQuestion, isAISpeaking, cancelSpeechSynthesis]);
+  }, [currentQuestion, isInterviewEffectivelyActive, toast, isListening, hasSpokenCurrentQuestion, isAISpeaking]);
 
-
-  // Effect to initialize the timer based on session duration
+  // Timer Initialization Effect
   useEffect(() => {
     if (session && session.duration && isInterviewEffectivelyActive() && timeLeftInSeconds === null) {
-      console.log(`InterviewPage: Initializing timer with duration: ${session.duration} minutes.`);
       setTimeLeftInSeconds(session.duration * 60);
+      setLastActivityTime(Date.now()); // Initialize activity time when timer starts
     }
   }, [session, isInterviewEffectivelyActive, timeLeftInSeconds]);
 
-
   // Timer Countdown Effect
   useEffect(() => {
-    // Only run the interval if the interview is active and time has been initialized and is > 0
     if (isInterviewEffectivelyActive() && timeLeftInSeconds !== null && timeLeftInSeconds > 0) {
       timerIntervalRef.current = setInterval(() => {
         setTimeLeftInSeconds(prevTime => {
-          if (prevTime === null) return null; // Should not happen if checks above are correct
+          if (prevTime === null) return null;
           if (prevTime <= 1) {
-            if (timerIntervalRef.current) {
-                clearInterval(timerIntervalRef.current);
-                timerIntervalRef.current = null;
-            }
-            if (!isEndingInterviewRef.current) { // Check ref here
-                toast({ title: "Time's up!", description: "The interview has ended.", variant: "destructive" });
-                handleEndInterview(allQuestionsRef.current, transcriptLogRef.current.join('\\n'), "time_up");
+            if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+            if (!isEndingInterviewRef.current) {
+                handleEndInterview("time_up", allQuestionsRef.current, transcriptLogRef.current.join('\\n'));
             }
             return 0;
           }
           return prevTime - 1;
         });
       }, 1000);
-    } else if (timeLeftInSeconds === 0 && timerIntervalRef.current) {
-        // This handles the case where timer reaches 0 but interval might still be there
-        clearInterval(timerIntervalRef.current);
-        timerIntervalRef.current = null;
     }
-    
-    // Cleanup function of the useEffect for the interval
-    return () => {
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current);
-        timerIntervalRef.current = null; 
-      }
-    };
+    return () => { if (timerIntervalRef.current) clearInterval(timerIntervalRef.current); };
   }, [isInterviewEffectivelyActive, timeLeftInSeconds, handleEndInterview, toast]);
 
-
-  // Tab/Window Focus Change Listener Effect
+  // Proctoring - Tab/Window Focus Change Listener Effect
   useEffect(() => {
     const handleFocusChange = () => {
-      setVisibilityChangeCount(prevCount => {
-        const newCount = prevCount + 1;
-        console.log(`InterviewPage: Visibility/Focus lost. Count: ${newCount}`);
-        if (newCount <= MAX_VISIBILITY_CHANGES) {
-          toast({
-            title: "Interview Warning",
-            description: `Switching away from the interview is not recommended. This is warning ${newCount} of ${MAX_VISIBILITY_CHANGES}.`,
-            variant: "default",
-            duration: 5000,
-          });
-        } else {
-          toast({
-            title: "Interview Ended",
-            description: "Interview terminated due to excessive tab/window switching.",
-            variant: "destructive",
-            duration: 7000,
-          });
-          if (!isEndingInterviewRef.current) {
-            handleEndInterview(allQuestionsRef.current, transcriptLogRef.current.join('\\n'), "tab_switch_limit");
-          }
-        }
-        return newCount;
-      });
-    };
-    
-    const handleVisibilityChange = () => {
-      if (document.hidden && isInterviewEffectivelyActive()) {
-        handleFocusChange();
+      if (!isEndingInterviewRef.current) { // Check ref here
+        logProctoringEvent('tabSwitch');
       }
     };
-    const handleWindowBlur = () => {
-        if (!document.hasFocus() && isInterviewEffectivelyActive()){
-             handleFocusChange();
-        }
-    };
-
+    const handleVisibilityChange = () => { if (document.hidden && isInterviewEffectivelyActive()) handleFocusChange(); };
+    const handleWindowBlur = () => { if (!document.hasFocus() && isInterviewEffectivelyActive()) handleFocusChange(); };
 
     if (isInterviewEffectivelyActive()) {
       document.addEventListener("visibilitychange", handleVisibilityChange);
       window.addEventListener("blur", handleWindowBlur);
-      console.log("InterviewPage: Focus listeners added.");
     }
-
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("blur", handleWindowBlur);
-      console.log("InterviewPage: Focus listeners removed.");
     };
-  }, [isInterviewEffectivelyActive, handleEndInterview, toast]);
+  }, [isInterviewEffectivelyActive, logProctoringEvent]);
+
+  // Proctoring - Simulated Face Presence Detection Effect
+  useEffect(() => {
+    let faceDetectionInterval: NodeJS.Timeout | null = null;
+
+    const mockCheckFacePresence = (): boolean => {
+        // Simulate: ~90% chance face is present, 10% chance it's not
+        // In a real app, this would involve CV logic on the videoRef
+        const isPresent = Math.random() > 0.1; 
+        setIsFaceCurrentlyVisible(isPresent); // For UI feedback if needed
+        return isPresent;
+    };
+
+    if (isInterviewEffectivelyActive()) {
+      faceDetectionInterval = setInterval(() => {
+        if (isEndingInterviewRef.current) return;
+        
+        const facePresent = mockCheckFacePresence();
+        if (!facePresent) {
+            setConsecutiveNoFaceCount(prev => {
+                const newCount = prev + 1;
+                if (newCount >= CONSECUTIVE_NO_FACE_CHECKS_TO_WARN) {
+                    logProctoringEvent('faceNotDetected');
+                    return 0; // Reset after warning
+                }
+                return newCount;
+            });
+        } else {
+            setConsecutiveNoFaceCount(0); // Reset if face is detected
+        }
+      }, FACE_DETECTION_INTERVAL_MS);
+    }
+    return () => { if (faceDetectionInterval) clearInterval(faceDetectionInterval); };
+  }, [isInterviewEffectivelyActive, logProctoringEvent]);
+
+
+  // Proctoring - Inactivity Detection Effect
+  useEffect(() => {
+    let inactivityInterval: NodeJS.Timeout | null = null;
+    if (isInterviewEffectivelyActive() && currentQuestion) {
+      const timeoutDuration = currentQuestion.stage === 'oral' ? INACTIVITY_TIMEOUT_ORAL_MS : INACTIVITY_TIMEOUT_WRITTEN_MS;
+      inactivityInterval = setInterval(() => {
+        if (isEndingInterviewRef.current) return;
+        if (Date.now() - lastActivityTime > timeoutDuration) {
+          logProctoringEvent('inactivity');
+          setLastActivityTime(Date.now()); // Reset after warning to give another chance
+        }
+      }, 30000); // Check every 30s
+    }
+    return () => { if (inactivityInterval) clearInterval(inactivityInterval); };
+  }, [isInterviewEffectivelyActive, currentQuestion, lastActivityTime, logProctoringEvent]);
+
 
   const handleToggleListening = useCallback(() => {
     if (!speechRecognitionSupported) {
-      toast({ title: "Speech Recognition Not Supported", description: "Cannot start voice input.", variant: "destructive"});
+      toast({ title: "Speech Not Supported", description: "Cannot start voice input.", variant: "destructive"});
       return;
     }
-
     if (isListening) { 
-      if (recognitionRef.current) {
-        recognitionRef.current.stop(); 
-      }
+      if (recognitionRef.current) recognitionRef.current.stop(); 
       setIsListening(false); 
     } else { 
       if (typeof window !== 'undefined' && window.speechSynthesis?.speaking) {
-        window.speechSynthesis.cancel(); 
-        setIsAISpeaking(false);
-        setHasSpokenCurrentQuestion(true); 
+        window.speechSynthesis.cancel(); setIsAISpeaking(false); setHasSpokenCurrentQuestion(true); 
       }
-
-      setUserAnswer(''); 
-      setSpeechError(null);
-
+      setUserAnswer(''); setSpeechError(null);
       const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!recognitionRef.current) { 
         recognitionRef.current = new SpeechRecognitionAPI();
-        recognitionRef.current.continuous = true; 
-        recognitionRef.current.interimResults = true; 
-        recognitionRef.current.lang = 'en-US';
-
-        recognitionRef.current.onstart = () => {
-          console.log("InterviewPage: Speech recognition started.");
-          setIsListening(true);
-          setSpeechError(null);
-        };
-        
+        recognitionRef.current.continuous = true; recognitionRef.current.interimResults = true; recognitionRef.current.lang = 'en-US';
+        recognitionRef.current.onstart = () => { setIsListening(true); setSpeechError(null); };
         recognitionRef.current.onresult = (event: any) => {
-          let finalTranscript = '';
-          let interimTranscript = '';
+          let finalTranscript = ''; let interimTranscript = '';
           for (let i = 0; i < event.results.length; ++i) {
-            if (event.results[i].isFinal) {
-              finalTranscript += event.results[i][0].transcript + ' ';
-            } else {
-              interimTranscript = event.results[i][0].transcript;
-            }
+            if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript + ' ';
+            else interimTranscript = event.results[i][0].transcript;
           }
-          setUserAnswer(finalTranscript.trim() + (interimTranscript ? (finalTranscript.trim() ? ' ' : '') + interimTranscript : ''));
+          const currentAnswer = (finalTranscript.trim() + (interimTranscript ? (finalTranscript.trim() ? ' ' : '') + interimTranscript : '')).trim();
+          setUserAnswer(currentAnswer);
+          if (finalTranscript.trim()) setLastActivityTime(Date.now()); // Update activity on final speech
         };
-
         recognitionRef.current.onerror = (event: any) => {
-          let errorMsg = "Speech recognition error: " + event.error;
-          if (event.error === 'no-speech') errorMsg = "No speech detected. Please try again.";
-          if (event.error === 'audio-capture') errorMsg = "Audio capture failed. Check microphone permissions.";
-          if (event.error === 'not-allowed') errorMsg = "Microphone access denied. Please grant permission.";
-          console.error("InterviewPage: Speech recognition error -", errorMsg);
-          setSpeechError(errorMsg);
-          setIsListening(false); 
+          let errorMsg = "Speech error: " + event.error;
+          if (event.error === 'no-speech') errorMsg = "No speech. Try again.";
+          if (event.error === 'audio-capture') errorMsg = "Audio capture failed.";
+          if (event.error === 'not-allowed') errorMsg = "Mic access denied.";
+          setSpeechError(errorMsg); setIsListening(false); 
         };
-
-        recognitionRef.current.onend = () => {
-          console.log("InterviewPage: Speech recognition ended.");
-          setIsListening(false); 
-        };
+        recognitionRef.current.onend = () => setIsListening(false); 
       }
       recognitionRef.current.start();
     }
@@ -524,18 +471,13 @@ export default function InterviewPage() {
 
 
   const handleNextQuestion = async () => {
-    if (!user || !session || !allQuestions.length || currentQuestionIndex >= allQuestions.length || isEndingInterviewRef.current) {
-        console.warn("InterviewPage: handleNextQuestion - Preconditions not met or already ending.");
-        return;
-    }
+    if (!user || !session || !allQuestions.length || currentQuestionIndex >= allQuestions.length || isEndingInterviewRef.current) return;
     
     if (isListening) stopSpeechRecognition();
-    if (isAISpeaking) {
-       cancelSpeechSynthesis();
-       setHasSpokenCurrentQuestion(true); 
-    }
+    if (isAISpeaking) { cancelSpeechSynthesis(); setHasSpokenCurrentQuestion(true); }
 
     setIsSubmittingAnswer(true);
+    setLastActivityTime(Date.now()); // Mark activity
 
     const updatedQuestions = [...allQuestions];
     const currentQ = updatedQuestions[currentQuestionIndex];
@@ -556,64 +498,33 @@ export default function InterviewPage() {
             transcript: updatedTranscriptLogArray.join('\\n'),
             updatedAt: new Date().toISOString(),
         });
-    } catch (error) {
-        toast({title: "Save Error", description: "Could not save current answer.", variant: "destructive"})
-    }
+    } catch (error) { toast({title: "Save Error", description: "Could not save answer.", variant: "destructive"}) }
 
-    setUserAnswer(""); 
-    setSpeechError(null);
-    setHasSpokenCurrentQuestion(false); 
+    setUserAnswer(""); setSpeechError(null); setHasSpokenCurrentQuestion(false); 
     const nextQuestionIndex = currentQuestionIndex + 1;
 
     if (nextQuestionIndex < allQuestions.length) {
       setCurrentQuestionIndex(nextQuestionIndex);
     } else {
-      await handleEndInterview(updatedQuestions, updatedTranscriptLogArray.join('\\n'), "all_questions_answered");
+      await handleEndInterview("all_questions_answered", updatedQuestions, updatedTranscriptLogArray.join('\\n'));
     }
     setIsSubmittingAnswer(false);
   };
 
-
   const handlePaste = (e: React.ClipboardEvent) => {
     if (currentQuestion?.stage === 'technical_written') {
         e.preventDefault();
-        toast({
-            title: "Pasting Disabled",
-            description: "Please type your answer directly for technical questions.",
-            variant: "default", 
-            duration: 3000,
-        });
+        toast({ title: "Pasting Disabled", description: "Please type your answer directly.", variant: "default", duration: 3000 });
     }
   };
 
-
-  if (isLoading) {
-    return <div className="flex justify-center items-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
-  }
+  if (isLoading) return <div className="flex justify-center items-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
 
   if (!session || !allQuestions.length || (currentQuestionIndex >= allQuestions.length && !isEndingInterviewRef.current && session.status !== 'completed')) {
     if (isEndingInterviewRef.current) { 
-      return (
-        <div className="flex flex-col justify-center items-center h-screen p-4">
-          <Card className="max-w-lg text-center">
-              <CardHeader><CardTitle>Processing Results...</CardTitle></CardHeader>
-              <CardContent><Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" /></CardContent>
-          </Card>
-        </div>
-      );
+      return (<div className="flex flex-col justify-center items-center h-screen p-4"><Card className="max-w-lg text-center"><CardHeader><CardTitle>Processing Results...</CardTitle></CardHeader><CardContent><Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" /></CardContent></Card></div >);
     }
-    return (
-      <div className="flex flex-col justify-center items-center h-screen p-4">
-        <Alert variant="destructive" className="max-w-lg">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Interview Data Issue</AlertTitle>
-          <AlertDescription>
-            There was a problem loading the interview questions or the session has ended. Please try returning to the dashboard.
-          </AlertDescription>
-        </Alert>
-        <Button onClick={() => router.push('/dashboard')} className="mt-4">Go to Dashboard</Button>
-      </div>
-    );
+    return (<div className="flex flex-col justify-center items-center h-screen p-4"><Alert variant="destructive" className="max-w-lg"><AlertTriangle className="h-4 w-4" /><AlertTitle>Interview Data Issue</AlertTitle><AlertDescription>Problem loading questions or session ended.</AlertDescription></Alert><Button onClick={() => router.push('/dashboard')} className="mt-4">Go to Dashboard</Button></div >);
   }
   
   const totalQuestions = allQuestions.length;
@@ -630,7 +541,6 @@ export default function InterviewPage() {
     return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
   };
 
-
   return (
     <div className="flex flex-col lg:flex-row h-[calc(100vh-var(--header-height,4rem)-2rem)] gap-4 p-4">
       <div className="lg:w-1/3 flex flex-col gap-4">
@@ -640,6 +550,13 @@ export default function InterviewPage() {
           </CardHeader>
           <CardContent>
             <video ref={videoRef} autoPlay muted className="w-full aspect-video rounded-md bg-muted object-cover" data-ai-hint="video conference"></video>
+             {!isFaceCurrentlyVisible && isInterviewEffectivelyActive() && (
+                <Alert variant="destructive" className="mt-2">
+                    <EyeOff className="h-4 w-4" />
+                    <AlertTitle>Face Not Visible</AlertTitle>
+                    <AlertDescription>Please ensure your face is clearly visible in the camera.</AlertDescription>
+                </Alert>
+            )}
           </CardContent>
         </Card>
         <Card className="flex-grow flex flex-col shadow-lg">
@@ -647,12 +564,8 @@ export default function InterviewPage() {
             <CardTitle className="text-xl">Transcript Log</CardTitle>
           </CardHeader>
           <CardContent className="flex-grow overflow-y-auto space-y-2 p-2 bg-muted/50 rounded-b-md">
-            {transcriptLog.map((line, index) => (
-              <p key={index} className={`text-sm p-2 rounded-md ${line.startsWith("AI") ? "bg-secondary text-secondary-foreground self-start mr-auto max-w-[90%]" : "bg-primary text-primary-foreground self-end ml-auto max-w-[90%]"}`}>
-                {line}
-              </p>
-            ))}
-             {isSubmittingAnswer && <div className="flex justify-center"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>}
+            {transcriptLog.map((line, index) => (<p key={index} className={`text-sm p-2 rounded-md ${line.startsWith("AI") ? "bg-secondary text-secondary-foreground self-start mr-auto max-w-[90%]" : "bg-primary text-primary-foreground self-end ml-auto max-w-[90%]"}`}>{line}</p>))}
+            {isSubmittingAnswer && <div className="flex justify-center"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>}
           </CardContent>
         </Card>
       </div>
@@ -662,106 +575,46 @@ export default function InterviewPage() {
         <Card className="flex-grow flex flex-col shadow-lg">
           <CardHeader>
             <div className="flex justify-between items-center mb-2">
-                <CardTitle className="text-2xl">
-                  Question {currentQuestionIndex + 1} of {totalQuestions}
-                </CardTitle>
-                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                   <TimerIcon className="h-5 w-5" />
-                   <span>Time Left: {formatTime(timeLeftInSeconds)}</span>
-                 </div>
+                <CardTitle className="text-2xl">Question {currentQuestionIndex + 1} of {totalQuestions}</CardTitle>
+                 <div className="flex items-center gap-2 text-sm text-muted-foreground"><TimerIcon className="h-5 w-5" /><span>Time Left: {formatTime(timeLeftInSeconds)}</span></div>
             </div>
             <Progress value={progress} className="w-full h-2" />
-            
-            {currentQuestion && (
-                <CardDescription className={`text-lg pt-2 whitespace-pre-wrap ${isAISpeaking && currentStage === 'oral' ? 'pb-1' : 'pb-0'}`}>
-                    {currentQuestion.text}
-                </CardDescription>
-            )}
-             {isAISpeaking && currentStage === 'oral' && (
-                <div className="flex items-center text-primary pt-1">
-                    <Volume2 className="h-5 w-5 mr-2 animate-pulse" />
-                    <p className="text-md font-medium">AI is asking the question...</p>
-                </div>
-            )}
+            {currentQuestion && (<CardDescription className={`text-lg pt-2 whitespace-pre-wrap ${isAISpeaking && currentStage === 'oral' ? 'pb-1' : 'pb-0'}`}>{currentQuestion.text}</CardDescription>)}
+            {isAISpeaking && currentStage === 'oral' && (<div className="flex items-center text-primary pt-1"><Volume2 className="h-5 w-5 mr-2 animate-pulse" /><p className="text-md font-medium">AI is asking the question...</p></div>)}
             <p className="text-xs text-muted-foreground capitalize mt-1">Stage: {currentStage?.replace('_', ' ')} ({currentQuestionType})</p>
           </CardHeader>
           <CardContent className="flex-grow flex flex-col">
             {currentStage === "oral" ? (
               <div className="flex-grow flex flex-col justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground mb-2">
-                    {isListening ? "Speak now. Your transcribed answer will appear below." : (userAnswer ? "Review your transcribed answer or listen again." : "Click the mic to speak your answer.")}
-                  </p>
-                  <Textarea
-                    placeholder={isListening ? "Listening... Speak now." : (userAnswer ? userAnswer : "Your transcribed answer will appear here...")}
-                    value={userAnswer}
-                    readOnly // Always readOnly for oral, content driven by Speech-to-Text
-                    className="text-base min-h-[100px] mb-4 bg-background/70 cursor-not-allowed"
-                    disabled={isSubmittingAnswer || isEndingInterviewRef.current || isAISpeaking}
-                  />
+                  <p className="text-sm text-muted-foreground mb-2">{isListening ? "Speak now. Your transcribed answer will appear below." : (userAnswer ? "Review your transcribed answer or listen again." : "Click the mic to speak your answer.")}</p>
+                  <Textarea placeholder={isListening ? "Listening... Speak now." : (userAnswer ? userAnswer : "Your transcribed answer will appear here...")} value={userAnswer} readOnly className="text-base min-h-[100px] mb-4 bg-background/70 cursor-not-allowed" disabled={isSubmittingAnswer || isEndingInterviewRef.current || isAISpeaking} />
                   {speechError && <Alert variant="destructive" className="mb-2"><AlertTriangle className="h-4 w-4" /><AlertTitle>Speech Error</AlertTitle><AlertDescription>{speechError}</AlertDescription></Alert>}
                 </div>
                  <div className="flex gap-2 items-center">
-                    <Button 
-                        variant="outline" 
-                        onClick={handleToggleListening} 
-                        disabled={isSubmittingAnswer || isEndingInterviewRef.current || isAISpeaking || !speechRecognitionSupported}
-                        className={isListening ? "border-red-500 text-red-500 hover:bg-red-500/10" : ""}
-                    >
+                    <Button variant="outline" onClick={handleToggleListening} disabled={isSubmittingAnswer || isEndingInterviewRef.current || isAISpeaking || !speechRecognitionSupported} className={isListening ? "border-red-500 text-red-500 hover:bg-red-500/10" : ""}>
                       {isListening ? <MicOff className="mr-2 h-4 w-4" /> : <Mic className="mr-2 h-4 w-4" />}
                       {isListening ? "Stop Listening" : (userAnswer ? "Listen Again (clears previous)" : "Start Listening")}
                     </Button>
-                    {!speechRecognitionSupported && <p className="text-xs text-destructive">Voice input not supported by your browser.</p>}
+                    {!speechRecognitionSupported && <p className="text-xs text-destructive">Voice input not supported.</p>}
                  </div>
               </div>
             ) : ( // technical_written stage
                <div className="flex-grow flex flex-col">
-                <div className="flex items-center text-sm text-muted-foreground mb-2 gap-1">
-                  <Terminal className="h-4 w-4" />
-                  <span>{currentQuestion?.type === 'coding' ? "Use the editor below to write your code. Explain your approach if prompted. Pasting is disabled." : "Provide your detailed answer below. Pasting is disabled."}</span>
-                </div>
-                <Textarea 
-                  placeholder={currentQuestion?.type === 'coding' ? "// Your code here...\nfunction solution() {\n  \n}" : "Your detailed answer..."}
-                  className="flex-grow font-mono text-sm min-h-[200px] bg-background/70"
-                  value={userAnswer}
-                  onChange={(e) => setUserAnswer(e.target.value)} 
-                  onPaste={handlePaste}
-                  disabled={isSubmittingAnswer || isEndingInterviewRef.current || isAISpeaking}
-                />
+                <div className="flex items-center text-sm text-muted-foreground mb-2 gap-1"><Terminal className="h-4 w-4" /><span>{currentQuestion?.type === 'coding' ? "Write your code below. Pasting is disabled." : "Provide your detailed answer below. Pasting is disabled."}</span></div>
+                <Textarea placeholder={currentQuestion?.type === 'coding' ? "// Your code here..." : "Your detailed answer..."} className="flex-grow font-mono text-sm min-h-[200px] bg-background/70" value={userAnswer} onChange={(e) => { setUserAnswer(e.target.value); setLastActivityTime(Date.now()); }} onPaste={handlePaste} disabled={isSubmittingAnswer || isEndingInterviewRef.current || isAISpeaking} />
               </div>
             )}
           </CardContent>
           <CardFooter className="border-t pt-4 flex justify-between items-center">
-             <p className="text-sm text-muted-foreground">Interview Duration: {session.duration} mins</p>
-            <div>
-              <Button 
-                  onClick={handleNextQuestion} 
-                  disabled={isSubmitButtonDisabled}
-              >
-                {isSubmittingAnswer ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4"/>}
-                {currentQuestionIndex < totalQuestions - 1 ? "Next Question" : "End Interview & Get Feedback"}
-              </Button>
-            </div>
+             <p className="text-sm text-muted-foreground">Duration: {session.duration} mins</p>
+            <div><Button onClick={handleNextQuestion} disabled={isSubmitButtonDisabled}>{isSubmittingAnswer ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4"/>}{currentQuestionIndex < totalQuestions - 1 ? "Next Question" : "End Interview & Get Feedback"}</Button></div>
           </CardFooter>
         </Card>
          ) : ( 
-          <Card className="flex-grow flex flex-col shadow-lg items-center justify-center">
-            <CardHeader>
-              <CardTitle className="text-2xl">Interview Session {session?.status === 'completed' ? 'Completed' : (isEndingInterviewRef.current ? 'Ending...' : 'Ended')}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p>Your interview responses are being processed or the session has concluded.</p>
-              {isEndingInterviewRef.current && <Loader2 className="h-8 w-8 animate-spin text-primary my-4" />}
-            </CardContent>
-            <CardFooter>
-                <Button onClick={() => router.push('/dashboard')} variant="outline">
-                    Return to Dashboard
-                </Button>
-            </CardFooter>
-          </Card>
+          <Card className="flex-grow flex flex-col shadow-lg items-center justify-center"><CardHeader><CardTitle className="text-2xl">Interview Session {session?.status === 'completed' ? 'Completed' : (isEndingInterviewRef.current ? 'Ending...' : 'Ended')}</CardTitle></CardHeader><CardContent><p>Your responses are being processed or session has concluded.</p>{isEndingInterviewRef.current && <Loader2 className="h-8 w-8 animate-spin text-primary my-4" />}</CardContent><CardFooter><Button onClick={() => router.push('/dashboard')} variant="outline">Return to Dashboard</Button></CardFooter></Card>
          )}
       </div>
     </div>
   );
 }
-
