@@ -56,7 +56,6 @@ export default function StartInterviewPage() {
       // Retrieve resume text from localStorage
       const resumeProcessedTextFromLocalStorage = typeof window !== "undefined" ? localStorage.getItem(LOCAL_STORAGE_RESUME_TEXT_KEY) : null;
 
-      // 1. Generate Questions
       const questionGenInput: GenerateInterviewQuestionsInput = {
         profileField: userProfile.profileField,
         role: userProfile.role,
@@ -71,7 +70,6 @@ export default function StartInterviewPage() {
         return;
       }
 
-      // 2. Create Interview Session Document
       const newInterviewRef = doc(collection(db, "users", user.uid, "interviews"));
       const interviewId = newInterviewRef.id;
 
@@ -81,8 +79,7 @@ export default function StartInterviewPage() {
         duration: parseInt(duration) as 15 | 30 | 45,
         status: "questions_generated", 
         createdAt: new Date().toISOString(),
-        questions: questionGenOutput.questions as GeneratedQuestion[], 
-        // No transcript or feedback initially
+        questions: questionGenOutput.questions as GeneratedQuestion[],
       };
       await setDoc(newInterviewRef, initialSessionData);
       
@@ -91,7 +88,11 @@ export default function StartInterviewPage() {
 
     } catch (error: any) {
       console.error("Error starting interview:", error);
-      toast({ title: "Failed to Start Interview", description: error.message || "An unexpected error occurred.", variant: "destructive" });
+      let description = error.message || "An unexpected error occurred while starting the interview.";
+      if (error.message && (error.message.includes("503") || error.message.toLowerCase().includes("overloaded") || error.message.toLowerCase().includes("service unavailable"))) {
+        description = "The AI service is currently busy or unavailable. Please try again in a few moments.";
+      }
+      toast({ title: "Failed to Start Interview", description, variant: "destructive" });
       setIsStartingSession(false);
     }
   };
@@ -120,7 +121,6 @@ export default function StartInterviewPage() {
   const isProfileEssentialDataMissing = userProfile && (!userProfile.role || !userProfile.profileField);
   const isProfileNotLoadedAndAuthChecked = !authInitialLoading && user && !userProfile && !authLoading;
   
-  // Interview limit check
   const interviewLimitReached = userProfile && !userProfile.isPlusSubscriber && (userProfile.interviewsTaken || 0) >= FREE_INTERVIEW_LIMIT;
 
   const isButtonDisabled = 
@@ -129,8 +129,8 @@ export default function StartInterviewPage() {
     isStartingSession || 
     !permissionsGranted || 
     !agreedToMonitoring ||
-    !userProfile || // Ensure profile is loaded
-    isProfileNotLoadedAndAuthChecked || // Explicitly handle this edge case
+    !userProfile || 
+    isProfileNotLoadedAndAuthChecked || 
     isProfileEssentialDataMissing || 
     interviewLimitReached;
   
@@ -175,13 +175,27 @@ export default function StartInterviewPage() {
               </AlertDescription>
             </Alert>
           )}
+
+          {!isLoadingState && !userProfile && !isProfileNotLoadedAndAuthChecked && (
+            <Alert variant="default" className="border-blue-500 text-blue-700 dark:border-blue-400 dark:text-blue-300">
+                <UserX className="h-4 w-4 !text-blue-500 dark:!text-blue-400" />
+                <AlertTitle className="text-blue-700 dark:text-blue-300">Profile Not Found</AlertTitle>
+                <AlertDescription className="text-blue-600 dark:text-blue-200">
+                It seems you haven't created a profile yet, or we couldn't load it. Please 
+                <Link href="/profile" className="font-semibold underline hover:text-blue-800 dark:hover:text-blue-100 ml-1">
+                    go to your profile
+                </Link>
+                to create or complete it. Key details like your 'Role' and 'Profile Field' are needed for tailored interview questions.
+                </AlertDescription>
+            </Alert>
+          )}
           
           <Alert>
             <FileText className="h-4 w-4" />
             <AlertTitle>Personalized Questions</AlertTitle>
             <AlertDescription>
               Interview questions will be based on your targeted role and profile field. Uploading your resume in the 
-              <Link href="/profile" className="font-semibold underline hover:text-foreground/80"> profile section</Link> (it will be stored in your browser) can further tailor the questions to your experience, making your practice more fruitful!
+              <Link href="/profile" className="font-semibold underline hover:text-foreground/80"> profile section</Link> (text from it will be stored in your browser) can further tailor the questions to your experience, making your practice more fruitful!
             </AlertDescription>
           </Alert>
 
@@ -207,6 +221,7 @@ export default function StartInterviewPage() {
                 <li>The interview will be recorded for feedback purposes (video & audio for oral part).</li>
                 <li>For technical roles, be prepared for an initial oral section followed by written technical/coding questions.</li>
                 <li>Speak clearly. Your answers will be transcribed.</li>
+                 <li>Proctoring is active: Avoid switching tabs, ensure your face is visible, and stay engaged to prevent interview termination.</li>
               </ul>
             </AlertDescription>
           </Alert>
@@ -233,7 +248,7 @@ export default function StartInterviewPage() {
                   I agree to the interview monitoring terms and conditions.
                 </Label>
                 <p className="text-sm text-muted-foreground">
-                  This includes recording for quality and feedback. Your data is handled as per our privacy policy.
+                  This includes recording for quality, feedback, and proctoring. Your data is handled as per our privacy policy.
                 </p>
               </div>
             </div>
