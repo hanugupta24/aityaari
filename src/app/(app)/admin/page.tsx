@@ -7,14 +7,19 @@ import { useEffect, useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Users, DollarSign, TrendingUp, CreditCard, Loader2, AlertTriangle, CalendarDays, CalendarRange, CalendarCheck2, CalendarClock, BarChart3, Calendar } from "lucide-react";
+import { Users, DollarSign, TrendingUp, CreditCard, Loader2, AlertTriangle, CalendarDays, CalendarRange, CalendarCheck2, CalendarClock, BarChart3, Calendar as CalendarIcon, FilterX, Filter } from "lucide-react"; // Added CalendarIcon, FilterX
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar, Legend } from "recharts";
 import { db } from "@/lib/firebase";
 import { collection, getDocs } from "firebase/firestore";
 import type { UserProfile } from "@/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { format, subDays, startOfDay, subMonths, startOfMonth, endOfMonth, getMonth, getYear } from 'date-fns';
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format, subDays, startOfDay, subMonths, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
 
 // Plan prices
 const PLAN_PRICES = {
@@ -46,6 +51,13 @@ export default function AdminPage() {
   const [plusSignupsToday, setPlusSignupsToday] = useState(0);
   const [plusSignupsCurrentMonth, setPlusSignupsCurrentMonth] = useState(0);
   const [plusSignupsLastMonth, setPlusSignupsLastMonth] = useState(0);
+
+  // Filter states
+  const [nameFilter, setNameFilter] = useState("");
+  const [emailFilter, setEmailFilter] = useState("");
+  const [planFilter, setPlanFilter] = useState<"all" | "free" | "monthly" | "quarterly" | "yearly" | "plus_unknown">("all");
+  const [adminFilter, setAdminFilter] = useState<"all" | "yes" | "no">("all");
+  const [dateRangeFilter, setDateRangeFilter] = useState<{ from: Date | undefined; to: Date | undefined }>({ from: undefined, to: undefined });
 
 
   useEffect(() => {
@@ -102,26 +114,22 @@ export default function AdminPage() {
     users.forEach(u => {
       if (u.isPlusSubscriber && u.updatedAt) {
         try {
-          const updatedAtDate = new Date(u.updatedAt); // Keep time for 24h check
-          const updatedAtDayStart = startOfDay(updatedAtDate); // For daily/monthly aggregation
+          const updatedAtDate = new Date(u.updatedAt); 
+          const updatedAtDayStart = startOfDay(updatedAtDate); 
 
-          // Daily chart data (last 7 days)
           const formattedUpdatedAtDay = format(updatedAtDayStart, "yyyy-MM-dd");
           if (dailyCounts.hasOwnProperty(formattedUpdatedAtDay)) {
             dailyCounts[formattedUpdatedAtDay]++;
           }
 
-          // Signups Today (last 24 hours)
           if (updatedAtDate >= subDays(new Date(), 1)) {
             signupsTodayCount++;
           }
 
-          // Signups Current Month
           if (updatedAtDayStart >= currentMonthStart) {
             signupsCurrentMonthCount++;
           }
           
-          // Signups Last Month
           if (updatedAtDayStart >= lastMonthStart && updatedAtDayStart <= lastMonthEnd) {
             signupsLastMonthCount++;
           }
@@ -147,10 +155,9 @@ export default function AdminPage() {
   };
   
   const processMonthlyChartData = (users: UserProfile[]) => {
-    const monthlyCounts: Record<string, number> = {}; // Key: "YYYY-MM"
+    const monthlyCounts: Record<string, number> = {}; 
     const today = new Date();
 
-    // Initialize counts for the last 6 months
     for (let i = 5; i >= 0; i--) {
         const monthDate = subMonths(today, i);
         const monthKey = format(monthDate, "yyyy-MM");
@@ -173,10 +180,10 @@ export default function AdminPage() {
 
     const chartData = Object.entries(monthlyCounts)
         .map(([monthKey, count]) => ({
-            month: format(new Date(monthKey + '-01'), "MMM yyyy"), // Display format like "Jan 2024"
+            month: format(new Date(monthKey + '-01'), "MMM yyyy"), 
             subscriptions: count,
         }))
-        .sort((a, b) => new Date(a.month).getTime() - new Date(b.month).getTime()); // Sort by month
+        .sort((a, b) => new Date(a.month).getTime() - new Date(b.month).getTime()); 
 
     setMonthlySubscriptionData(chartData);
   };
@@ -214,9 +221,7 @@ export default function AdminPage() {
       } else if (u.subscriptionPlan === 'yearly') {
         estimatedMonthlyRevenue += PLAN_PRICES.yearly / 12;
       } else {
-        // Fallback for users who are Plus but have no plan specified (e.g., older data)
-        // You might want to adjust this logic or log these cases
-        estimatedMonthlyRevenue += PLAN_PRICES.monthly; // Default to monthly for estimation
+        estimatedMonthlyRevenue += PLAN_PRICES.monthly; 
       }
     });
 
@@ -234,13 +239,44 @@ export default function AdminPage() {
     };
   }, [allUsersData, isLoadingData, fetchError]);
 
+  const filteredUsers = useMemo(() => {
+    return allUsersData.filter(u => {
+      const nameMatch = u.name?.toLowerCase().includes(nameFilter.toLowerCase()) ?? true;
+      const emailMatch = u.email?.toLowerCase().includes(emailFilter.toLowerCase()) ?? true;
+      
+      let planMatch = true;
+      if (planFilter !== "all") {
+        if (planFilter === "free") planMatch = !u.isPlusSubscriber;
+        else if (planFilter === "plus_unknown") planMatch = u.isPlusSubscriber && !u.subscriptionPlan;
+        else planMatch = u.isPlusSubscriber && u.subscriptionPlan === planFilter;
+      }
+
+      const adminMatch = adminFilter === "all" || (adminFilter === "yes" && u.isAdmin) || (adminFilter === "no" && !u.isAdmin);
+      
+      let dateMatch = true;
+      if (u.createdAt && (dateRangeFilter.from || dateRangeFilter.to)) {
+        const userJoinedDate = startOfDay(parseISO(u.createdAt));
+        const from = dateRangeFilter.from ? startOfDay(dateRangeFilter.from) : new Date(0); // Beginning of time
+        const to = dateRangeFilter.to ? startOfDay(dateRangeFilter.to) : new Date(); // Today
+        dateMatch = isWithinInterval(userJoinedDate, { start: from, end: to });
+      }
+      return nameMatch && emailMatch && planMatch && adminMatch && dateMatch;
+    });
+  }, [allUsersData, nameFilter, emailFilter, planFilter, adminFilter, dateRangeFilter]);
+
+  const clearFilters = () => {
+    setNameFilter("");
+    setEmailFilter("");
+    setPlanFilter("all");
+    setAdminFilter("all");
+    setDateRangeFilter({ from: undefined, to: undefined });
+  };
 
   if (authInitialLoading || (!isAdmin && !authInitialLoading)) {
     return <div className="flex justify-center items-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   }
   
   if (!isAdmin) { 
-     // This should ideally not be reached due to the useEffect redirect, but as a fallback
      return <div className="flex justify-center items-center h-screen"><p>Access Denied</p></div>;
   }
 
@@ -265,8 +301,8 @@ export default function AdminPage() {
 
       {!isLoadingData && !fetchError && (
         <>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"> {/* Adjusted grid for more cards */}
-            <Card>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <Card className="shadow-md hover:shadow-lg transition-shadow duration-300">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Users</CardTitle>
                 <Users className="h-4 w-4 text-muted-foreground" />
@@ -275,7 +311,7 @@ export default function AdminPage() {
                 <div className="text-2xl font-bold">{memoizedStats.totalUsers}</div>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="shadow-md hover:shadow-lg transition-shadow duration-300">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Plus Subscriptions</CardTitle>
                 <CreditCard className="h-4 w-4 text-muted-foreground" />
@@ -285,7 +321,7 @@ export default function AdminPage() {
                  {memoizedStats.unknownPlanSubscribers > 0 && <p className="text-xs text-muted-foreground">{memoizedStats.unknownPlanSubscribers} with unspecified plan</p>}
               </CardContent>
             </Card>
-            <Card>
+            <Card className="shadow-md hover:shadow-lg transition-shadow duration-300">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Est. Monthly Revenue</CardTitle>
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
@@ -294,7 +330,7 @@ export default function AdminPage() {
                 <div className="text-2xl font-bold">${memoizedStats.estimatedMonthlyRevenue.toFixed(2)}</div>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="shadow-md hover:shadow-lg transition-shadow duration-300">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Interviews Taken</CardTitle>
                 <BarChart3 className="h-4 w-4 text-muted-foreground" />
@@ -306,7 +342,7 @@ export default function AdminPage() {
           </div>
 
           <div className="grid gap-4 md:grid-cols-3">
-             <Card>
+             <Card className="shadow-md hover:shadow-lg transition-shadow duration-300">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Plus Signups (Last 24h)</CardTitle>
                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
@@ -316,7 +352,7 @@ export default function AdminPage() {
                 <p className="text-xs text-muted-foreground">(Based on profile update)</p>
               </CardContent>
             </Card>
-             <Card>
+             <Card className="shadow-md hover:shadow-lg transition-shadow duration-300">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Plus Signups (This Month)</CardTitle>
                 <CalendarCheck2 className="h-4 w-4 text-muted-foreground" />
@@ -326,7 +362,7 @@ export default function AdminPage() {
                  <p className="text-xs text-muted-foreground">Month: {format(new Date(), "MMMM yyyy")}</p>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="shadow-md hover:shadow-lg transition-shadow duration-300">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Plus Signups (Last Month)</CardTitle>
                 <CalendarClock className="h-4 w-4 text-muted-foreground" />
@@ -338,14 +374,13 @@ export default function AdminPage() {
             </Card>
           </div>
 
-
-          <Card>
+          <Card className="shadow-md hover:shadow-lg transition-shadow duration-300">
             <CardHeader>
                 <CardTitle>Subscription Plan Breakdown</CardTitle>
                 <CardDescription>Current number of active Plus subscribers by plan type.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-3">
-                <Card className="bg-secondary/30">
+                <Card className="bg-secondary/30 shadow-sm hover:shadow-md transition-shadow duration-300">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Monthly Subscribers</CardTitle>
                         <CalendarDays className="h-4 w-4 text-muted-foreground" />
@@ -355,7 +390,7 @@ export default function AdminPage() {
                         <p className="text-xs text-muted-foreground">@ ${PLAN_PRICES.monthly.toFixed(2)}/mo</p>
                     </CardContent>
                 </Card>
-                <Card className="bg-secondary/30">
+                <Card className="bg-secondary/30 shadow-sm hover:shadow-md transition-shadow duration-300">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Quarterly Subscribers</CardTitle>
                         <CalendarRange className="h-4 w-4 text-muted-foreground" />
@@ -365,10 +400,10 @@ export default function AdminPage() {
                         <p className="text-xs text-muted-foreground">@ ${PLAN_PRICES.quarterly.toFixed(2)}/qtr</p>
                     </CardContent>
                 </Card>
-                <Card className="bg-secondary/30">
+                <Card className="bg-secondary/30 shadow-sm hover:shadow-md transition-shadow duration-300">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Yearly Subscribers</CardTitle>
-                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <CalendarIcon className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{memoizedStats.yearlySubscribers}</div>
@@ -378,7 +413,7 @@ export default function AdminPage() {
             </CardContent>
           </Card>
           
-          <Card>
+          <Card className="shadow-md hover:shadow-lg transition-shadow duration-300">
             <CardHeader>
               <CardTitle>New Plus Subscriptions (Last 6 Months)</CardTitle>
               <CardDescription>
@@ -416,7 +451,7 @@ export default function AdminPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="shadow-md hover:shadow-lg transition-shadow duration-300">
             <CardHeader>
               <CardTitle>Daily New Plus Subscriptions (Last 7 Days)</CardTitle>
               <CardDescription>
@@ -433,7 +468,7 @@ export default function AdminPage() {
                       tickLine={false} 
                       axisLine={false} 
                       tickMargin={8} 
-                      tickFormatter={(value) => format(new Date(value + 'T00:00:00'), 'MMM d')} // Ensure date is parsed correctly
+                      tickFormatter={(value) => format(new Date(value + 'T00:00:00'), 'MMM d')} 
                     />
                     <YAxis tickLine={false} axisLine={false} tickMargin={8} allowDecimals={false} />
                     <ChartTooltip 
@@ -463,48 +498,111 @@ export default function AdminPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="shadow-md hover:shadow-lg transition-shadow duration-300">
             <CardHeader>
-              <CardTitle>User Management</CardTitle>
-              <CardDescription>View and manage user accounts.</CardDescription>
+              <CardTitle className="flex items-center gap-2">
+                <Filter className="h-5 w-5" /> User Management
+              </CardTitle>
+              <CardDescription>View and manage user accounts. Use filters below to refine the list.</CardDescription>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Plan Tier</TableHead>
-                    <TableHead>Joined</TableHead>
-                    <TableHead className="text-right">Interviews</TableHead>
-                    <TableHead>Is Admin?</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {allUsersData.map((u) => (
-                    <TableRow key={u.uid}>
-                      <TableCell className="font-medium">{u.name || "N/A"}</TableCell>
-                      <TableCell>{u.email}</TableCell>
-                      <TableCell>
-                        <Badge variant={u.isPlusSubscriber ? "default" : "secondary"}>
-                          {u.isPlusSubscriber 
-                            ? (u.subscriptionPlan ? u.subscriptionPlan.charAt(0).toUpperCase() + u.subscriptionPlan.slice(1) : "Plus") 
-                            : "Free"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{u.createdAt ? format(new Date(u.createdAt), "P") : "N/A"}</TableCell>
-                      <TableCell className="text-right">{u.interviewsTaken || 0}</TableCell>
-                      <TableCell>
-                        <Badge variant={u.isAdmin ? "destructive" : "outline"}>
-                          {u.isAdmin ? "Yes" : "No"}
-                        </Badge>
-                      </TableCell>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6 p-4 border rounded-lg bg-muted/30">
+                <Input placeholder="Filter by Name..." value={nameFilter} onChange={(e) => setNameFilter(e.target.value)} />
+                <Input placeholder="Filter by Email..." value={emailFilter} onChange={(e) => setEmailFilter(e.target.value)} />
+                <Select value={planFilter} onValueChange={(value: any) => setPlanFilter(value)}>
+                  <SelectTrigger><SelectValue placeholder="Filter by Plan" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Plans</SelectItem>
+                    <SelectItem value="free">Free</SelectItem>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                    <SelectItem value="quarterly">Quarterly</SelectItem>
+                    <SelectItem value="yearly">Yearly</SelectItem>
+                    <SelectItem value="plus_unknown">Plus (Unspecified Plan)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={adminFilter} onValueChange={(value: any) => setAdminFilter(value)}>
+                  <SelectTrigger><SelectValue placeholder="Filter by Admin Status" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Users</SelectItem>
+                    <SelectItem value="yes">Admin Only</SelectItem>
+                    <SelectItem value="no">Non-Admins Only</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant={"outline"}
+                      className={cn("justify-start text-left font-normal", !dateRangeFilter.from && !dateRangeFilter.to && "text-muted-foreground")}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {dateRangeFilter.from ? (
+                        dateRangeFilter.to ? (
+                          `${format(dateRangeFilter.from, "LLL dd, y")} - ${format(dateRangeFilter.to, "LLL dd, y")}`
+                        ) : (
+                          format(dateRangeFilter.from, "LLL dd, y")
+                        )
+                      ) : (
+                        <span>Filter by Joined Date</span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      initialFocus
+                      mode="range"
+                      defaultMonth={dateRangeFilter.from}
+                      selected={{ from: dateRangeFilter.from, to: dateRangeFilter.to }}
+                      onSelect={(range) => setDateRangeFilter({ from: range?.from, to: range?.to })}
+                      numberOfMonths={2}
+                    />
+                  </PopoverContent>
+                </Popover>
+                <Button onClick={clearFilters} variant="outline" className="lg:col-span-1 flex items-center gap-2">
+                  <FilterX className="h-4 w-4" /> Clear Filters
+                </Button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Plan Tier</TableHead>
+                      <TableHead>Joined</TableHead>
+                      <TableHead className="text-right">Interviews</TableHead>
+                      <TableHead>Is Admin?</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-               {allUsersData.length === 0 && !isLoadingData && (
-                <p className="py-4 text-center text-muted-foreground">No users found.</p>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredUsers.map((u) => (
+                      <TableRow key={u.uid}>
+                        <TableCell className="font-medium">{u.name || "N/A"}</TableCell>
+                        <TableCell>{u.email}</TableCell>
+                        <TableCell>
+                          <Badge variant={u.isPlusSubscriber ? "default" : "secondary"}>
+                            {u.isPlusSubscriber 
+                              ? (u.subscriptionPlan ? u.subscriptionPlan.charAt(0).toUpperCase() + u.subscriptionPlan.slice(1) : "Plus") 
+                              : "Free"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{u.createdAt ? format(parseISO(u.createdAt), "P") : "N/A"}</TableCell>
+                        <TableCell className="text-right">{u.interviewsTaken || 0}</TableCell>
+                        <TableCell>
+                          <Badge variant={u.isAdmin ? "destructive" : "outline"}>
+                            {u.isAdmin ? "Yes" : "No"}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              {filteredUsers.length === 0 && !isLoadingData && (
+                  <p className="py-4 text-center text-muted-foreground">No users match the current filters.</p>
+              )}
+              {allUsersData.length === 0 && !isLoadingData && (
+                <p className="py-4 text-center text-muted-foreground">No users found in the system.</p>
               )}
             </CardContent>
           </Card>
@@ -513,6 +611,5 @@ export default function AdminPage() {
     </div>
   );
 }
-
 
     
