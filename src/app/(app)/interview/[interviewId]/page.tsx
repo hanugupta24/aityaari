@@ -33,15 +33,15 @@ declare global {
 const MAX_TAB_SWITCH_WARNINGS = 2; // Ends on 3rd infraction
 const MAX_FACE_NOT_DETECTED_WARNINGS = 2; // Ends on 3rd infraction (for short absences)
 
-const FACE_DETECTION_INTERVAL_MS = 7 * 1000; // Check face presence every 7s (for >5s rule)
+const FACE_DETECTION_INTERVAL_MS = 4 * 1000; // Check face presence every ~4s (for >3s rule)
 const CONSECUTIVE_NO_FACE_CHECKS_TO_WARN_FACE_AWAY = 1; // Issue a "faceNotDetected" warning on the 1st failed check
 const PROLONGED_FACE_ABSENCE_TIMEOUT_MS = 60 * 1000; // 1 minute of continuous absence terminates
 
 const INACTIVITY_TIMEOUT_ORAL_MS = 60 * 1000; 
 const INACTIVITY_TIMEOUT_WRITTEN_MS = 2 * 60 * 1000; 
 
-const DISTRACTION_CHECK_INTERVAL_MS = 20 * 1000; // Check for simulated distraction every 20 seconds
-const DISTRACTION_PROBABILITY = 0.25; // 25% chance of simulated distraction per interval
+const DISTRACTION_CHECK_INTERVAL_MS = 5 * 1000; // Check for simulated distraction every 5 seconds
+const DISTRACTION_PROBABILITY = 0.30; // 30% chance of simulated distraction per interval (~3s average feel)
 
 type ProctoringIssueType = 'tabSwitch' | 'faceNotDetected' | 'task_inactivity' | 'distraction';
 
@@ -141,8 +141,8 @@ export default function InterviewPage() {
 
   const handleEndInterview = useCallback(async (
     reason: "completed_by_user" | "time_up" | "face_not_detected_limit" | "prolonged_face_absence" | "all_questions_answered" | "tab_switch_limit",
-    questionsDataParam?: AnsweredQuestion[],
-    transcriptStringParam?: string
+    questionsDataParam?: AnsweredQuestion[], // Use current state if not provided
+    transcriptStringParam?: string // Use current state if not provided
   ) => {
     const currentQuestions = questionsDataParam || allQuestionsRef.current;
     const currentTranscript = transcriptStringParam || transcriptLogRef.current.join('\\n');
@@ -269,7 +269,7 @@ export default function InterviewPage() {
 
     if (currentFaceWarnings > previousFaceWarnings) { 
         if (currentFaceWarnings <= MAX_FACE_NOT_DETECTED_WARNINGS) {
-            let warningMessage = `Your face does not seem to be clearly visible (or you might be away for >5s). Please ensure you are in front of the camera. Warning ${currentFaceWarnings} of ${MAX_FACE_NOT_DETECTED_WARNINGS}.`;
+            let warningMessage = `Your face does not seem to be clearly visible (or you might be away for >3s). Please ensure you are in front of the camera. Warning ${currentFaceWarnings} of ${MAX_FACE_NOT_DETECTED_WARNINGS}.`;
              if (currentFaceWarnings === MAX_FACE_NOT_DETECTED_WARNINGS) {
                 warningMessage = `LAST WARNING: Your face is not consistently visible. Further instances will terminate the interview.`;
             }
@@ -303,14 +303,14 @@ export default function InterviewPage() {
     prevTaskInactivityCountRef.current = proctoringIssues.task_inactivity;
   }, [proctoringIssues.task_inactivity, toast, isInterviewEffectivelyActive]);
   
-  // useEffect for Simple Warnings (Distraction - simulated for moving a lot, looking away, phone use)
+  // useEffect for Simple Warnings (Distraction - simulated for moving a lot, looking away, phone use, or few secs of inattention)
   const prevDistractionCountRef = useRef(proctoringIssues.distraction);
   useEffect(() => {
     if (!isInterviewEffectivelyActive() || isEndingInterviewRef.current) return;
     if (proctoringIssues.distraction > prevDistractionCountRef.current) {
       toast({
         title: "Proctoring: Attention Reminder",
-        description: `Please try to maintain focus on the screen and avoid excessive movement or looking away (e.g. phone use). (This is a simple reminder and does not count towards termination).`,
+        description: `Please try to maintain focus on the screen and avoid excessive movement or looking away (e.g. phone use or brief inattention). (This is a simple reminder and does not count towards termination).`,
         variant: "default", 
         duration: 5000,
       });
@@ -337,6 +337,7 @@ export default function InterviewPage() {
 
           if ((data.status === "completed" || data.status === "cancelled")) {
              if (!isEndingInterviewRef.current) {
+                console.log("InterviewPage: Firestore listener - Session already completed/cancelled. Redirecting.");
                 toast({ title: "Interview Ended", description: "This interview session is no longer active."});
                 router.push("/dashboard"); 
              }
@@ -532,6 +533,7 @@ export default function InterviewPage() {
     // This is a simulation for face presence.
     // In a real app, you'd use a CV library here.
     const mockCheckFacePresence = (): boolean => {
+        // Simulate face being present most of the time, occasionally not.
         const isPresent = Math.random() > 0.1; // ~90% chance face is "present"
         setIsFaceCurrentlyVisible(isPresent); // Update UI feedback state
         return isPresent;
@@ -547,16 +549,21 @@ export default function InterviewPage() {
             setConsecutiveNoFaceCountForWarning(prev => {
                 const newCount = prev + 1;
                 if (newCount >= CONSECUTIVE_NO_FACE_CHECKS_TO_WARN_FACE_AWAY) {
+                    console.log("InterviewPage: Face not detected by mock check, logging event for strict warning.");
                     logProctoringEvent('faceNotDetected'); 
                     return 0; 
                 }
                 return newCount;
             });
             if (continuousFaceNotDetectedStartTime === null) {
+                console.log("InterviewPage: Continuous face not detected timer started.");
                 setContinuousFaceNotDetectedStartTime(Date.now());
             }
         } else {
             setConsecutiveNoFaceCountForWarning(0); 
+            if (continuousFaceNotDetectedStartTime !== null) {
+                 console.log("InterviewPage: Continuous face not detected timer reset (face now visible).");
+            }
             setContinuousFaceNotDetectedStartTime(null); 
         }
       }, FACE_DETECTION_INTERVAL_MS);
@@ -590,6 +597,7 @@ export default function InterviewPage() {
             return;
         }
         if (Date.now() - lastActivityTime > timeoutDuration) {
+          console.log("InterviewPage: Task inactivity detected, logging event for simple warning.");
           logProctoringEvent('task_inactivity');
           setLastActivityTime(Date.now()); 
         }
@@ -598,13 +606,14 @@ export default function InterviewPage() {
     return () => { if (inactivityInterval) clearInterval(inactivityInterval); };
   }, [isInterviewEffectivelyActive, currentQuestion, lastActivityTime, logProctoringEvent, isListening, isAISpeaking]);
 
-  // Proctoring: Distraction Detection (Simulated - for moving around, looking away, phone use - simple warning)
+  // Proctoring: Distraction Detection (Simulated - for moving around, looking away, phone use, or brief inattention - simple warning)
   useEffect(() => {
     let distractionInterval: NodeJS.Timeout | null = null;
     if (isInterviewEffectivelyActive()) {
         distractionInterval = setInterval(() => {
             if (isEndingInterviewRef.current) return;
             if (Math.random() < DISTRACTION_PROBABILITY) {
+                console.log("InterviewPage: Simulated distraction detected, logging event for simple warning.");
                 logProctoringEvent('distraction');
             }
         }, DISTRACTION_CHECK_INTERVAL_MS);
@@ -809,7 +818,12 @@ export default function InterviewPage() {
             </div>
             <Progress value={progress} className="w-full h-2" />
             {currentQuestion && (<CardDescription className="text-lg pt-4 whitespace-pre-wrap pb-0">{currentQuestion.text}</CardDescription>)}
-            {isAISpeaking && currentStage === 'oral' && (<div className="flex items-center text-primary pt-1"><Volume2 className="h-5 w-5 mr-2 animate-pulse" /><p className="text-md font-medium">AI is asking the question...</p></div>)}
+             {isAISpeaking && currentStage === 'oral' && (
+                <div className="flex items-center text-primary pt-1 pl-1">
+                    <Volume2 className="h-5 w-5 mr-2 animate-pulse" />
+                    <p className="text-md font-medium">AI is asking the question...</p>
+                </div>
+            )}
             <p className="text-xs text-muted-foreground capitalize mt-1">Stage: {currentStage?.replace('_', ' ')} ({currentQuestionType})</p>
           </CardHeader>
           <CardContent className="flex-grow flex flex-col">
