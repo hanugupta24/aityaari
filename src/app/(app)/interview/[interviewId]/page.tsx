@@ -30,16 +30,17 @@ declare global {
 }
 
 // Proctoring Constants
-const FACE_DETECTION_INTERVAL_MS = 5 * 1000; 
-const CONSECUTIVE_NO_FACE_CHECKS_TO_WARN_FACE_AWAY = 1; 
+const MAX_TAB_SWITCH_WARNINGS = 2; // Interview ends on the 3rd infraction
+const FACE_DETECTION_INTERVAL_MS = 5 * 1000; // Check every 5 seconds for face
+const CONSECUTIVE_NO_FACE_CHECKS_TO_WARN_FACE_AWAY = 1; // 1 failed check (~5s) triggers strict warning
 
 const PROLONGED_FACE_ABSENCE_TIMEOUT_MS = 60 * 1000; // 1 minute of continuous absence terminates
 const INACTIVITY_TIMEOUT_ORAL_MS = 60 * 1000; // 1 minute
 const INACTIVITY_TIMEOUT_WRITTEN_MS = 2 * 60 * 1000; // 2 minutes
 const ON_SCREEN_WARNING_DURATION_MS = 7000; // How long simple warnings stay on screen
 
-const DISTRACTION_CHECK_INTERVAL_MS = 3 * 1000; 
-const DISTRACTION_PROBABILITY = 0.50; 
+const DISTRACTION_CHECK_INTERVAL_MS = 3 * 1000; // Check every 3 seconds for simulated distraction
+const DISTRACTION_PROBABILITY = 0.50; // 50% chance
 
 
 type ProctoringIssueType = 'tabSwitch' | 'faceNotDetected_short' | 'task_inactivity' | 'distraction';
@@ -81,10 +82,10 @@ export default function InterviewPage() {
   // Proctoring States
   const [proctoringIssues, setProctoringIssues] = useState<{
     tabSwitch: number;
-    faceNotDetected: number; 
+    faceNotDetected_short: number; // For short absences, simple warning
     task_inactivity: number; 
     distraction: number; 
-  }>({ tabSwitch: 0, faceNotDetected: 0, task_inactivity: 0, distraction: 0 });
+  }>({ tabSwitch: 0, faceNotDetected_short: 0, task_inactivity: 0, distraction: 0 });
   
   const [isFaceCurrentlyVisible, setIsFaceCurrentlyVisible] = useState(true); 
   const [continuousFaceNotDetectedStartTime, setContinuousFaceNotDetectedStartTime] = useState<number | null>(null);
@@ -164,18 +165,18 @@ export default function InterviewPage() {
 
     let toastMessage = "Finalizing and analyzing your feedback...";
     let toastTitle = "Interview Ended";
+    let toastVariant: "default" | "destructive" = "default";
 
     switch(reason) {
-        case "time_up": toastTitle = "Time's Up!"; toastMessage = "The interview time has concluded."; break;
-        case "prolonged_face_absence": toastTitle = "Proctoring Alert"; toastMessage = "Interview terminated due to prolonged absence from screen."; break;
+        case "time_up": toastTitle = "Time's Up!"; toastMessage = "The interview time has concluded."; toastVariant="destructive"; break;
+        case "prolonged_face_absence": toastTitle = "Proctoring Alert"; toastMessage = "Interview terminated due to prolonged absence from screen."; toastVariant="destructive"; break;
         case "all_questions_answered": toastTitle = "Interview Complete"; break;
         case "completed_by_user": toastTitle = "Interview Submitted"; break;
-        case "tab_switch_limit": toastTitle = "Proctoring Alert"; toastMessage = "Interview terminated due to excessive tab switching."; break;
-        case "face_not_detected_limit": toastTitle = "Proctoring Alert"; toastMessage = "Interview terminated due to face not being consistently visible."; break;
-
+        case "tab_switch_limit": toastTitle = "Proctoring Alert"; toastMessage = "Interview terminated due to excessive tab switching."; toastVariant="destructive"; break;
+        case "face_not_detected_limit": toastTitle = "Proctoring Alert"; toastMessage = "Interview terminated due to face not being consistently visible."; toastVariant="destructive"; break;
     }
    
-    toast({ title: toastTitle, description: toastMessage, variant: "destructive", duration: 7000 });
+    toast({ title: toastTitle, description: toastMessage, variant: toastVariant, duration: 7000 });
 
     cancelSpeechSynthesis();
     stopSpeechRecognition();
@@ -377,7 +378,7 @@ export default function InterviewPage() {
         utterance.onstart = () => { setIsAISpeaking(true); console.log("InterviewPage: AI speech started for question:", currentQuestion.id);};
         utterance.onend = () => { setIsAISpeaking(false); setHasSpokenCurrentQuestion(true); setLastActivityTime(Date.now()); console.log("InterviewPage: AI speech ended for question:", currentQuestion.id);};
         utterance.onerror = (event) => {
-          console.error('InterviewPage: SpeechSynthesis Error. Utterance text was:', `"${utterance.text}"`, 'Error event:', event, `If error event is empty, this may indicate a browser/OS level issue with speech synthesis, or no available voices. User has been notified via toast.`);
+          // console.error('InterviewPage: SpeechSynthesis Error. Utterance text was:', `"${utterance.text}"`, 'Error event:', event, `If error event is empty, this may indicate a browser/OS level issue with speech synthesis, or no available voices. User has been notified via toast.`);
           setIsAISpeaking(false); 
           setHasSpokenCurrentQuestion(true); 
           toast({ title: "AI Voice Error", description: "Could not play AI voice. Please read the question.", variant: "destructive" });
@@ -462,7 +463,7 @@ export default function InterviewPage() {
   }, [isInterviewEffectivelyActive]);
 
   const prevTabSwitchCountRef = useRef(proctoringIssues.tabSwitch);
-  const prevFaceNotDetectedShortCountRef = useRef(proctoringIssues.faceNotDetected);
+  const prevFaceNotDetectedShortCountRef = useRef(proctoringIssues.faceNotDetected_short);
   const prevTaskInactivityCountRef = useRef(proctoringIssues.task_inactivity);
   const prevDistractionCountRef = useRef(proctoringIssues.distraction);
   
@@ -480,13 +481,13 @@ export default function InterviewPage() {
   // Simple Warning: Face Not Detected (Short Absence ~5s - No termination)
   useEffect(() => {
     if (!isInterviewEffectivelyActive() || isEndingInterviewRef.current) return;
-    const currentCount = proctoringIssues.faceNotDetected;
+    const currentCount = proctoringIssues.faceNotDetected_short;
     if (currentCount > prevFaceNotDetectedShortCountRef.current) {
         console.log(`InterviewPage: Short face absence warning (simple warning). Count: ${currentCount}`);
         showOnScreenWarning('faceNotDetected_short', "Reminder: Please ensure your face is visible to the camera.");
     }
     prevFaceNotDetectedShortCountRef.current = currentCount;
-  }, [proctoringIssues.faceNotDetected, isInterviewEffectivelyActive, showOnScreenWarning]);
+  }, [proctoringIssues.faceNotDetected_short, isInterviewEffectivelyActive, showOnScreenWarning]);
 
   // Simple Warning: Task Inactivity (No termination)
   useEffect(() => {
@@ -538,7 +539,7 @@ export default function InterviewPage() {
   useEffect(() => {
     let faceDetectionInterval: NodeJS.Timeout | null = null;
     const mockCheckFacePresence = (): boolean => {
-        const isPresent = Math.random() > 0.1; // Simulates face presence ~90% of the time
+        const isPresent = Math.random() > 0.1; 
         setIsFaceCurrentlyVisible(isPresent);
         return isPresent;
     };
@@ -552,7 +553,7 @@ export default function InterviewPage() {
         if (!facePresent) {
             consecutiveNoFaceChecksRef.current += 1;
             if (consecutiveNoFaceChecksRef.current >= CONSECUTIVE_NO_FACE_CHECKS_TO_WARN_FACE_AWAY) {
-                logProctoringEvent('faceNotDetected'); 
+                logProctoringEvent('faceNotDetected_short'); 
                 consecutiveNoFaceChecksRef.current = 0; 
             }
             if (continuousFaceNotDetectedStartTime === null) {
@@ -876,5 +877,3 @@ export default function InterviewPage() {
   );
 }
 
-
-    
