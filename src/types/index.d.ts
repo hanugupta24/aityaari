@@ -11,8 +11,8 @@ export interface ExperienceItem {
   id: string; 
   jobTitle: string;
   companyName: string;
-  startDate: string; 
-  endDate: string; 
+  startDate: string; // YYYY-MM
+  endDate?: string; // YYYY-MM, optional for current job
   description?: string;
 }
 
@@ -28,8 +28,8 @@ export interface UserProfile {
   uid: string;
   email: string | null;
   name?: string | null; 
-  profileField: string; 
-  role: string; 
+  profileField: string; // Mandatory
+  role: string; // Mandatory
   company?: string | null;
   phoneNumber?: string | null;
   
@@ -39,13 +39,9 @@ export interface UserProfile {
   educationHistory?: EducationItem[];
   accomplishments?: string | null;
 
-  targetJobDescription?: string | null; // General target JD in profile
-
-  // Resume fields are for Firebase Storage if used, or just processed text
-  resumeFileName?: string | null; 
-  resumeFileUrl?: string | null; 
-  resumeStoragePath?: string | null; 
-  resumeProcessedText?: string | null; // Client-side extracted text for AI
+  // resumeFileName, resumeFileUrl, resumeStoragePath, resumeProcessedText are NOT part of the UserProfile document in Firestore
+  // resumeProcessedText is handled by localStorage for AI use during interview start
+  // resumeFileName is only for display purposes locally on the profile page
 
   createdAt: string;
   interviewsTaken?: number;
@@ -68,18 +64,18 @@ export interface InterviewSession {
   endedReason?: "completed_by_user" | "time_up" | "prolonged_face_absence" | "all_questions_answered" | "tab_switch_limit" | "face_not_detected_limit";
   proctoringIssues?: {
     tabSwitch: number;
-    faceNotDetected: number; 
+    faceNotDetected_short: number; // Renamed from faceNotDetected to be more specific
     task_inactivity: number; 
     distraction: number; 
   };
-  jobDescriptionUsed?: string; // Store the JD used for this specific session
+  jobDescriptionUsed?: string; 
 }
 
 export interface GeneratedQuestion {
   id: string;
   text: string;
   stage: "oral" | "technical_written";
-  type: "behavioral" | "technical" | "coding" | "conversational" | "resume_based" | "jd_based";
+  type: "behavioral" | "technical" | "coding" | "conversational" | "resume_based" | "jd_based" | "profile_based";
   answer?: string;
 }
 
