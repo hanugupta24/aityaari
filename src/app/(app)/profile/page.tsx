@@ -39,7 +39,7 @@ import {
 } from "@/components/ui/dialog";
 import { v4 as uuidv4 } from 'uuid';
 import mammoth from 'mammoth';
-import pdfParse from 'pdf-parse';
+import * as pdfjsLib from 'pdfjs-dist';
 
 
 // Zod schema for the main form fields
@@ -55,7 +55,7 @@ const profileFormSchema = z.object({
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
-const ACCEPT_FILE_EXTENSIONS = ".txt,.md,.pdf,.doc,.docx"; 
+const ACCEPT_FILE_EXTENSIONS = ".txt,.md,.pdf,.docx"; 
 const MAX_FILE_SIZE_MB = 5;
 const LOCAL_STORAGE_RESUME_TEXT_KEY = 'tyaariResumeProcessedText';
 const LOCAL_STORAGE_RESUME_FILENAME_KEY = 'tyaariResumeFileName';
@@ -93,6 +93,19 @@ export default function ProfilePage() {
       name: "", email: "", profileField: "", role: "", company: "", phoneNumber: "", accomplishments: ""
     },
   });
+
+  useEffect(() => {
+    console.log("ProfilePage: Setting pdf.js worker source path.");
+    if (typeof window !== 'undefined' && pdfjsLib && pdfjsLib.GlobalWorkerOptions) {
+        // IMPORTANT: Ensure 'public/pdf.worker.mjs' exists.
+        // You MUST copy 'node_modules/pdfjs-dist/build/pdf.worker.mjs' to 'public/pdf.worker.mjs'
+        const workerSrc = '/pdf.worker.mjs';
+        pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
+        console.log(`ProfilePage: pdf.js workerSrc set to: ${workerSrc}. Ensure this file is in your public directory.`);
+    } else {
+        console.warn("ProfilePage: pdfjsLib or GlobalWorkerOptions not available. PDF.js worker source NOT set. Client-side PDF parsing might fail.");
+    }
+  }, []);
   
 
   useEffect(() => {
@@ -115,21 +128,17 @@ export default function ProfilePage() {
         setProjects(userProfile.projects || []);
         setEducationHistory(userProfile.educationHistory || []);
         
-        // Load resume text from Firestore first, then localStorage as fallback
         const resumeTextFromDb = userProfile.resumeRawText;
         setClientSideResumeText(resumeTextFromDb || null);
         
         if (resumeTextFromDb && typeof window !== "undefined") {
           const storedFileName = localStorage.getItem(LOCAL_STORAGE_RESUME_FILENAME_KEY);
-           // Only use localStorage filename if it corresponds to the DB text, otherwise clear it.
-           // This is a heuristic; ideally, filename would also be in DB.
           if (storedFileName) {
             setSelectedFileName(storedFileName);
           } else {
-             setSelectedFileName("resume_from_profile.txt"); // Generic name if only DB text exists
+             setSelectedFileName("resume_from_profile.txt"); 
           }
         } else if (typeof window !== "undefined") {
-            // If no resume text in DB, try loading from localStorage (e.g., from a previous session before saving)
             const lsText = localStorage.getItem(LOCAL_STORAGE_RESUME_TEXT_KEY);
             const lsFileName = localStorage.getItem(LOCAL_STORAGE_RESUME_FILENAME_KEY);
             if (lsText && lsFileName) {
@@ -148,7 +157,6 @@ export default function ProfilePage() {
             company: "", 
             accomplishments:"" 
         });
-         // If no userProfile, check localStorage for any lingering resume data from a previous unsaved session
         if (typeof window !== "undefined") {
             const lsText = localStorage.getItem(LOCAL_STORAGE_RESUME_TEXT_KEY);
             const lsFileName = localStorage.getItem(LOCAL_STORAGE_RESUME_FILENAME_KEY);
@@ -249,14 +257,13 @@ export default function ProfilePage() {
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (fileInputRef.current) fileInputRef.current.value = ""; // Clear file input to allow re-upload of same file
+    if (fileInputRef.current) fileInputRef.current.value = ""; 
 
     if (!file) {
       setSelectedFile(null);
       return;
     }
 
-    // Store previously valid resume text and filename to restore if current processing fails due to setup/infra issues
     const prevSelectedFile = selectedFile;
     const prevFileName = selectedFileName;
     const prevResumeText = clientSideResumeText;
@@ -264,24 +271,33 @@ export default function ProfilePage() {
     setIsProcessingFile(true);
     setSelectedFile(file);
     setSelectedFileName(file.name);
-    setClientSideResumeText(""); // Tentatively clear for new file
+    setClientSideResumeText(""); 
 
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
       toast({ title: "File Too Large", description: `Maximum file size is ${MAX_FILE_SIZE_MB}MB.`, variant: "destructive" });
-      clearResume(false); // No toast for this specific clear, main toast is enough
+      clearResume(false); 
       setIsProcessingFile(false);
       return;
     }
     
     let extractedText: string | null = null;
-    const currentSelectedFileName = file.name; // Capture for use in toasts
+    const currentSelectedFileName = file.name;
 
     try {
       console.log(`ProfilePage: Processing file: ${file.name}, type: ${file.type}`);
       if (file.type === 'application/pdf') {
+        if (!pdfjsLib || !pdfjsLib.getDocument) {
+            throw new Error("PDF.js library (pdfjsLib) is not loaded correctly. Check console for worker setup messages.");
+        }
         const arrayBuffer = await file.arrayBuffer();
-        const data = await pdfParse(arrayBuffer);
-        extractedText = data.text;
+        const pdfDoc = await pdfjsLib.getDocument({data: new Uint8Array(arrayBuffer)}).promise;
+        let textContent = "";
+        for (let i = 1; i <= pdfDoc.numPages; i++) {
+            const page = await pdfDoc.getPage(i);
+            const text = await page.getTextContent();
+            textContent += text.items.map((item: any) => item.str).join(" ") + "\\n";
+        }
+        extractedText = textContent;
       } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || file.name.toLowerCase().endsWith('.docx')) {
         const arrayBuffer = await file.arrayBuffer();
         const result = await mammoth.extractRawText({ arrayBuffer });
@@ -302,7 +318,7 @@ export default function ProfilePage() {
 
       if (extractedText && extractedText.trim().length > 0) {
         setClientSideResumeText(extractedText);
-        setSelectedFileName(currentSelectedFileName); // Confirm filename for the successfully processed file
+        setSelectedFileName(currentSelectedFileName);
         if (typeof window !== "undefined") {
           localStorage.setItem(LOCAL_STORAGE_RESUME_TEXT_KEY, extractedText);
           localStorage.setItem(LOCAL_STORAGE_RESUME_FILENAME_KEY, currentSelectedFileName);
@@ -316,27 +332,22 @@ export default function ProfilePage() {
       console.error("Error processing resume client-side:", error);
       const errorMessage = error.message || "Could not extract text from the uploaded file.";
       
-      // Check if this error is related to PDF processing infra/setup
-      const isPdfInfraError = errorMessage.toLowerCase().includes("worker") || 
+      const isPdfSetupError = errorMessage.toLowerCase().includes("worker") || 
                               errorMessage.toLowerCase().includes("fetch dynamically imported module") ||
-                              errorMessage.toLowerCase().includes("pdf.js worker") ||
-                              errorMessage.toLowerCase().includes("pdf-parse"); // Add pdf-parse specific errors if any known
+                              errorMessage.toLowerCase().includes("pdf.js");
 
-      if (isPdfInfraError) {
+      if (isPdfSetupError) {
           toast({
-            title: "Resume Processing Initialization Error",
-            description: `Failed to set up processing for '${currentSelectedFileName}': ${errorMessage}. Please ensure all dependencies are correct. Your previous resume (if any) is preserved.`,
+            title: "PDF Processing Initialization Error",
+            description: `Failed to process PDF '${currentSelectedFileName}': ${errorMessage}. Please ensure pdf.worker.mjs is in your public folder and reload the page. Your previous resume data (if any) is preserved.`,
             variant: "destructive",
             duration: 10000,
           });
-          // Restore previous valid states as this error is likely not due to the file itself.
           setSelectedFile(prevSelectedFile);
           setSelectedFileName(prevFileName);
           setClientSideResumeText(prevResumeText);
       } else {
-          // This means the file itself is likely bad or unparsable by the chosen library
           toast({ title: "Resume Processing Error", description: `Could not extract text from the uploaded file '${currentSelectedFileName}': ${errorMessage}`, variant: "destructive" });
-          // Clear everything for this problematic file
           clearResume(true, `Error processing '${currentSelectedFileName}'. Previous resume data (if any) cleared.`);
       }
     } finally {
@@ -520,6 +531,7 @@ export default function ProfilePage() {
                 <AlertDescription className="text-blue-600 dark:text-blue-200">
                   Supported formats: <strong>.txt, .md, .pdf, .docx</strong>.
                   Text extraction quality can vary. Max file size: {MAX_FILE_SIZE_MB}MB.
+                  <br/><strong>Important for PDF:</strong> Ensure you have copied <code>pdf.worker.mjs</code> from <code>node_modules/pdfjs-dist/build/</code> to your <code>public/</code> directory.
                 </AlertDescription>
               </Alert>
               {selectedFileName && (<div className="mt-2 text-sm text-muted-foreground flex items-center justify-between p-2 border rounded-md bg-secondary/50"><div className="flex items-center gap-2 overflow-hidden"><FileText className="h-4 w-4 text-primary shrink-0" /><span className="truncate" title={selectedFileName}>{selectedFileName}</span></div><div className="flex items-center gap-1 shrink-0"><Button type="button" variant="ghost" size="icon" onClick={() => clearResume(true, "Resume selection removed locally. Save profile to update in database.")} title="Clear resume selection" aria-label="Clear resume" disabled={isSubmitting || isProcessingFile}><XCircle className="h-4 w-4 text-destructive" /></Button></div></div>)}
