@@ -53,8 +53,10 @@ const profileFormSchema = z.object({
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
 const CLIENT_SIDE_PROCESSING_MIME_TYPES = ['text/plain', 'text/markdown'];
-const SERVER_SIDE_PROCESSING_MIME_TYPES = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-// Broaden accepted extensions for the input element, actual processing is determined by MIME type or API logic
+// For server-side, we are more specific.
+const SERVER_SIDE_PDF_MIME_TYPE = 'application/pdf';
+const SERVER_SIDE_DOCX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
 const ACCEPT_FILE_EXTENSIONS = ".txt,.md,.pdf,.doc,.docx"; 
 const MAX_FILE_SIZE_MB = 5;
 const LOCAL_STORAGE_RESUME_TEXT_KEY = 'tyaariResumeProcessedText';
@@ -213,6 +215,8 @@ export default function ProfilePage() {
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
+    
+    // Store current state in case of error, to revert
     const prevSelectedFile = selectedFile;
     const prevFileName = selectedFileName; 
     const prevResumeText = clientSideResumeText;
@@ -236,7 +240,9 @@ export default function ProfilePage() {
     }
     
     const isClientProcessable = CLIENT_SIDE_PROCESSING_MIME_TYPES.includes(file.type) || file.name.toLowerCase().endsWith('.txt') || file.name.toLowerCase().endsWith('.md');
-    const isServerProcessable = SERVER_SIDE_PROCESSING_MIME_TYPES.includes(file.type) || file.name.toLowerCase().endsWith('.pdf') || file.name.toLowerCase().endsWith('.docx');
+    const isServerProcessableMimeType = file.type === SERVER_SIDE_PDF_MIME_TYPE || file.type === SERVER_SIDE_DOCX_MIME_TYPE;
+    const isServerProcessableExtension = file.name.toLowerCase().endsWith('.pdf') || file.name.toLowerCase().endsWith('.docx');
+
 
     if (isClientProcessable) {
       const reader = new FileReader();
@@ -256,23 +262,50 @@ export default function ProfilePage() {
         setIsProcessingFile(false);
       };
       reader.readAsText(file);
-    } else if (isServerProcessable) {
+    } else if (isServerProcessableMimeType || isServerProcessableExtension) {
       const formData = new FormData();
       formData.append("file", file);
       try {
         const response = await fetch("/api/extract-resume-text", { method: "POST", body: formData });
+
         if (!response.ok) {
-          let errorData;
+          let errorMessage = `Server error (${response.status}): ${response.statusText || 'Failed to process file.'}`; // Default/fallback
           try {
-            errorData = await response.json();
-          } catch (jsonError) {
-             const rawText = await response.text().catch(() => "Server returned non-JSON error and text could not be read.");
-             throw new Error(rawText.substring(0, 200) || `Server responded with ${response.status}: ${response.statusText}. Failed to parse JSON error response.`);
+            const responseBodyText = await response.text();
+            if (responseBodyText) {
+              try {
+                const jsonData = JSON.parse(responseBodyText);
+                if (jsonData && jsonData.message) {
+                  errorMessage = jsonData.message;
+                } else {
+                  // If JSON is valid but has no message, or not JSON, use a snippet of the text
+                  errorMessage = responseBodyText.substring(0, 200) + (responseBodyText.length > 200 ? "..." : "");
+                  console.warn("Client: Server error response was valid JSON but lacked a 'message' field, or was not JSON. Raw/Truncated text:", errorMessage);
+                }
+              } catch (jsonParseError) {
+                // If parsing as JSON fails, use a snippet of the raw text
+                errorMessage = responseBodyText.substring(0, 200) + (responseBodyText.length > 200 ? "..." : "");
+                console.warn("Client: Server error response was not valid JSON. Raw/Truncated text:", errorMessage);
+              }
+            } else {
+               // Response body was empty
+               errorMessage = `Server error (${response.status}): ${response.statusText || 'Failed to process file.'} (Received empty response body).`;
+            }
+          } catch (readTextError) {
+            // This means response.text() itself failed, e.g. network issue or connection reset
+            errorMessage = `Failed to read server error response. Status: ${response.status}. Check network and server logs.`;
+            console.error("Client: Critical error reading server response body:", readTextError);
           }
-          throw new Error(errorData.message || `Server responded with ${response.status}: ${response.statusText}`);
+          // Revert to previous file state on error
+          setSelectedFile(prevSelectedFile);
+          setSelectedFileName(prevFileName);
+          setClientSideResumeText(prevResumeText);
+          throw new Error(errorMessage); // This will be caught by the outer catch block for toasting
         }
+
         const data = await response.json();
         if (data.text === undefined) { 
+            setSelectedFile(prevSelectedFile); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText);
             throw new Error("Server did not return extracted text.");
         }
         setClientSideResumeText(data.text);
@@ -284,7 +317,10 @@ export default function ProfilePage() {
       } catch (error: any) {
         console.error("Error processing resume on server:", error);
         toast({ title: "Resume Processing Error", description: error.message || "Could not extract text from file via server.", variant: "destructive" });
-        setSelectedFile(prevSelectedFile); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText); 
+        // Revert to previous file state on any error in the try block
+        setSelectedFile(prevSelectedFile);
+        setSelectedFileName(prevFileName);
+        setClientSideResumeText(prevResumeText);
       } finally {
         setIsProcessingFile(false);
       }
@@ -473,9 +509,9 @@ export default function ProfilePage() {
                 <Info className="h-4 w-4 !text-blue-500 dark:!text-blue-400" />
                 <AlertTitle className="text-blue-700 dark:text-blue-300">File Format Information</AlertTitle>
                 <AlertDescription className="text-blue-600 dark:text-blue-200">
-                  For best AI results, <strong>.txt or .md</strong> files are preferred for client-side processing.
-                  <strong>.pdf and .docx</strong> files are also supported and will be processed on our server for text extraction.
-                  Other formats may have limited support.
+                  For best AI results, <strong>.txt or .md</strong> files are preferred for instant client-side processing.
+                  <strong>.pdf and .docx</strong> files are also supported and will be processed on our server.
+                  Other formats may have limited support. Text extraction quality can vary.
                 </AlertDescription>
               </Alert>
               {selectedFileName && (<div className="mt-2 text-sm text-muted-foreground flex items-center justify-between p-2 border rounded-md bg-secondary/50"><div className="flex items-center gap-2 overflow-hidden"><FileText className="h-4 w-4 text-primary shrink-0" /><span className="truncate" title={selectedFileName}>{selectedFileName}</span></div><div className="flex items-center gap-1 shrink-0"><Button type="button" variant="ghost" size="icon" onClick={clearResume} title="Clear resume selection" aria-label="Clear resume" disabled={isSubmitting || isProcessingFile}><XCircle className="h-4 w-4 text-destructive" /></Button></div></div>)}
@@ -495,7 +531,9 @@ export default function ProfilePage() {
         <DialogContent className="sm:max-w-[525px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-lg">{editingItem ? "Edit " : "Add New "} {modalType?.charAt(0).toUpperCase() + (modalType?.slice(1) || '')}</DialogTitle>
-            <ShadcnDialogDescription>Please fill in the details for your {modalType}. Click save when you're done. Fields marked with * are required.</ShadcnDialogDescription>
+            <ShadcnDialogDescription>
+              Please fill in the details for your {modalType}. Click save when you&apos;re done. Fields marked with * are required.
+            </ShadcnDialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">{renderModalContent()}</div>
           <DialogFooter>
@@ -507,3 +545,4 @@ export default function ProfilePage() {
     </div>
   );
 }
+
