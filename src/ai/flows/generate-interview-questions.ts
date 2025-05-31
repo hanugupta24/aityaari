@@ -85,138 +85,124 @@ const prompt = ai.definePrompt({
   input: {schema: GenerateInterviewQuestionsInputSchema},
   output: {schema: GenerateInterviewQuestionsOutputSchema},
   prompt: `You are an expert AI Interview Question Generator. Your primary task is to create a set of the best, most relevant, and frequently asked interview questions.
-Questions MUST be tailored based on the following information, in a strict order of priority:
+The interview duration is {{{interviewDuration}}} minutes.
 
-1.  **Targeted Job Description (if a specific {{{jobDescription}}} is provided for THIS interview session):**
-    *   This is the MOST IMPORTANT source if available.
-    *   Generate questions that directly assess skills, experience, and qualifications mentioned in this job description.
-    *   Mark relevant questions with type: 'jd_based'.
+**Strict Order of Priority for Question Generation:**
 
-2.  **If NO Targeted Job Description (point 1) is provided for THIS session, use the Candidate's Detailed Profile Information:**
-    *   **Candidate's Resume Content ({{{resumeProcessedText}}}):**
-        *   Treat this as a comprehensive summary. Generate specific 'resume_based' questions about projects, experiences, skills, and technologies listed.
-        *   If the resume's content (skills, experiences) points to a different field or domain than the general {{{profileField}}} and {{{role}}}, your questions MUST predominantly reflect the resume's content.
-    *   **Structured Profile Data ({{{experiences}}}, {{{projects}}}, {{{keySkills}}}, {{{educationHistory}}}):**
-        *   Supplement resume-based questions or use these if resume is not detailed.
-        *   From {{{experiences}}}: Ask about specific roles, responsibilities, challenges, and achievements mentioned in their work history.
-        *   From {{{projects}}}: Inquire about project details, technologies used, problems solved, and outcomes.
-        *   From {{{keySkills}}}: Formulate questions to test the depth and practical application of these skills.
-        *   From {{{educationHistory}}}: Use for context or to ask about relevant academic projects or research if applicable.
-        *   Mark questions derived primarily from these structured sections as 'profile_based'.
-    *   **Blending with Target Role:** After drawing from the detailed profile (resume, experiences, projects, skills, education), ask a few questions related to the {{{profileField}}} and {{{role}}}. These should assess the candidate's interest, transferable skills, and how their past experiences align with their target role.
-    *   **The goal is a blend:** The candidate's demonstrated experience (from resume and structured profile) should be the main driver for questions, complemented by questions about their target role.
-
-3.  **Candidate's Profile Field ({{{profileField}}}) and Role ({{{role}}}):**
-    *   Use these as a **fallback if no Job Description (point 1), detailed Resume Content (point 2a), or structured profile data (point 2b) is available or sufficiently detailed.**
-    *   Or, use them to add general relevant questions that supplement the JD/Resume/Profile-based questions, especially if the profile aligns with the target role/field.
-    *   **If the resume/structured profile was the primary source and indicated a different focus, these fields should primarily be used for a small number of bridging or context-setting questions, not as the main driver for question generation.**
-
-Candidate Information:
-- Profile Field: {{{profileField}}}
-- Candidate Role: {{{role}}}
-- Interview Duration: {{{interviewDuration}}} minutes
 {{#if jobDescription}}
-- Targeted Job Description (Specific to this session):
----
-{{{jobDescription}}}
----
+  **PRIORITY 1: BASED ON PROVIDED TARGETED JOB DESCRIPTION (FOR THIS SESSION)**
+  *   The following Job Description is the **SOLE SOURCE** for generating questions for this interview.
+  *   All questions MUST directly assess skills, experience, and qualifications mentioned in this job description.
+  *   Mark all questions with type: 'jd_based'.
+  *   Question Distribution for Job Description:
+      *   Identify if the role described in the JD is technical (keywords: ${technicalRolesKeywords.join(', ')}).
+      *   **If Technical Role (from JD):**
+          *   Approximately 45% of questions: Deep domain-specific ORAL questions (conceptual, tool-specific, algorithmic, methodology-based, directly from JD requirements). Stage: 'oral', Type: 'jd_based' (can also be considered 'technical' in essence).
+          *   Approximately 30% of questions: Deep technical WRITTEN questions (coding tasks, system design scenarios, detailed explanations of complex topics, directly from JD requirements). Stage: 'technical_written', Type: 'jd_based' (can also be considered 'technical' or 'coding' in essence).
+          *   Approximately 25% of questions: Domain-specific ORAL questions related to management, behavioral aspects, problem-solving, or collaboration, as implied or required by the JD. Stage: 'oral', Type: 'jd_based' (can also be considered 'behavioral' in essence).
+      *   **If Non-Technical Role (from JD):**
+          *   All questions are ORAL. Stage: 'oral'.
+          *   Mix of 'jd_based' questions covering behavioral, situational, role-specific knowledge, and strategic thinking as required by the JD. Type: 'jd_based' (can also be 'behavioral' or 'conversational').
+  *   Number of questions (ensure 'oral' questions come before 'technical_written'):
+      *   15 mins: 6-7 questions
+      *   30 mins: 10-12 questions
+      *   45 mins: 15-16 questions
+      (Distribute these counts according to the technical/non-technical JD role breakdown above, respecting stage order).
+
+  Targeted Job Description:
+  ---
+  {{{jobDescription}}}
+  ---
+
+  (Ignore all other profile information below if this Job Description is provided, except for basic context like candidate's target role/field if needed to interpret the JD fully for nuance, but JD is primary):
+  Candidate's General Profile (for context with JD, if absolutely needed for nuance, but JD is primary):
+  - General Profile Field: {{{profileField}}}
+  - General Candidate Role: {{{role}}}
+
+{{else}}
+  **PRIORITY 2: BASED ON CANDIDATE'S DETAILED PROFILE (NO SPECIFIC JOB DESCRIPTION PROVIDED FOR THIS SESSION)**
+  *   Use the following candidate profile information. The order of importance within this profile is:
+      1.  **Resume Content:** If available, this is the most comprehensive summary.
+      2.  **Structured Experiences, Projects, Skills, Education:** Use to supplement resume or if resume is sparse.
+      3.  **General Profile Field & Role:** For bridging questions or as a fallback.
+
+  Candidate's General Profile:
+  - Profile Field: {{{profileField}}}
+  - Candidate Role: {{{role}}}
+
+  {{#if resumeProcessedText}}
+  - Resume Content (Processed Text from client-side - Primary source within profile):
+  ---
+  {{{resumeProcessedText}}}
+  ---
+  *   Generate specific 'resume_based' questions.
+  *   If this resume content points to a different field/domain than the general {{{profileField}}} and {{{role}}}, questions MUST predominantly reflect this resume's content.
+  {{else}}
+  - No resume text provided. Rely on structured profile data and general role/field.
+  {{/if}}
+
+  {{#if experiences.length}}
+  - Work Experiences from Profile:
+    {{#each experiences}}
+    - Title: {{this.jobTitle}} at {{this.companyName}} ({{this.startDate}} to {{this.endDate}})
+      Description: {{this.description}}
+    {{/each}}
+  *   Ask about specific roles, responsibilities, challenges, achievements. Mark as 'profile_based'.
+  {{/if}}
+
+  {{#if projects.length}}
+  - Projects from Profile:
+    {{#each projects}}
+    - Title: {{this.title}}
+      Description: {{this.description}}
+      Tech: {{#if this.technologiesUsed}}{{#each this.technologiesUsed}}{{{this}}}{{#unless @last}}, {{/unless}}{{/each}}{{else}}N/A{{/if}}
+      {{#if this.projectUrl}}URL: {{this.projectUrl}}{{/if}}
+    {{/each}}
+  *   Inquire about project details, tech used, problems solved. Mark as 'profile_based'.
+  {{/if}}
+
+  {{#if keySkills.length}}
+  - Key Skills from Profile: {{#each keySkills}}{{#each this}}{{{this}}}{{#unless @last}}, {{/unless}}{{/each}}{{/each}}
+  *   Formulate questions to test depth and application. Mark as 'profile_based'.
+  {{/if}}
+
+  {{#if educationHistory.length}}
+  - Education History from Profile:
+    {{#each educationHistory}}
+    - Degree: {{this.degree}} from {{this.institution}} ({{this.yearOfCompletion}})
+      Details: {{this.details}}
+    {{/each}}
+  *   Use for context or relevant academic projects. Mark as 'profile_based'.
+  {{/if}}
+
+  *   **Question Focus when No JD:**
+      *   The candidate's demonstrated experience (from resume and structured profile data like experiences, projects, skills) should be the **main driver** for questions.
+      *   Supplement these with a few questions related to their target {{{profileField}}} and {{{role}}} to assess interest, transferable skills, and how their past experiences align (these can be 'profile_based' or 'conversational'/'behavioral').
+      *   If resume/structured profile data is sparse or unavailable, generate more questions based on {{{profileField}}} and {{{role}}} (type: 'behavioral', 'technical', 'conversational' as appropriate).
+
+  *   **Question Stages & Types (when No JD):**
+      *   Determine if the role (primarily indicated by Resume > Structured Profile > General Profile Field/Role) is technical. Technical role keywords: ${technicalRolesKeywords.join(', ')}.
+      *   **For Non-Technical Roles (if no JD):**
+          *   All questions 'oral'. Mix of 'conversational', 'behavioral', and 'resume_based'/'profile_based' (from profile data), or general questions based on profile/role.
+          *   Number of questions: 15 mins (6-7 oral), 30 mins (10-12 oral), 45 mins (15-16 oral).
+      *   **For Technical Roles (if no JD):**
+          *   Prioritize questions based on Resume/Profile Data. 'technical' questions must be specific and in-depth, relevant to this data.
+          *   Technical Oral (approx. 45% of total): stage 'oral', type 'technical' (deep conceptual from resume/profile), 'resume_based', 'profile_based'.
+          *   Technical Written (approx. 30% of total): stage 'technical_written', type 'technical' (explanations, system design from resume/profile), 'coding' (tasks related to resume/profile).
+          *   Non-Technical Oral (approx. 25% of total): stage 'oral', type 'conversational', 'behavioral', 'resume_based', 'profile_based' (soft skills from resume/profile).
+          *   Specific counts for Technical Roles (if no JD), ensuring 'oral' questions come before 'technical_written':
+              *   15 mins (Total 6-7): Tech Oral: 2-3, Tech Written: 2, Non-Tech Oral: 2
+              *   30 mins (Total 10-12): Tech Oral: 4-5, Tech Written: 3-4, Non-Tech Oral: 2-3
+              *   45 mins (Total 15-16): Tech Oral: 6-7, Tech Written: 4-5, Non-Tech Oral: 4-5
 {{/if}}
-{{#if resumeProcessedText}}
-- Resume Content (Processed Text from client-side):
----
-{{{resumeProcessedText}}}
----
-{{/if}}
-{{#if keySkills.length}}
-- Key Skills from Profile: {{#each keySkills}}{{{this}}}{{#unless @last}}, {{/unless}}{{/each}}
-{{/if}}
-{{#if experiences.length}}
-- Work Experiences from Profile:
-  {{#each experiences}}
-  - Title: {{this.jobTitle}} at {{this.companyName}} ({{this.startDate}} to {{this.endDate}})
-    Description: {{this.description}}
-  {{/each}}
-{{/if}}
-{{#if projects.length}}
-- Projects from Profile:
-  {{#each projects}}
-  - Title: {{this.title}}
-    Description: {{this.description}}
-    Tech: {{#if this.technologiesUsed}}{{#each this.technologiesUsed}}{{{this}}}{{#unless @last}}, {{/unless}}{{/each}}{{else}}N/A{{/if}}
-    {{#if this.projectUrl}}URL: {{this.projectUrl}}{{/if}}
-  {{/each}}
-{{/if}}
-{{#if educationHistory.length}}
-- Education History from Profile:
-  {{#each educationHistory}}
-  - Degree: {{this.degree}} from {{this.institution}} ({{this.yearOfCompletion}})
-    Details: {{this.details}}
-  {{/each}}
-{{/if}}
 
-Determine if the role (primarily indicated by the highest priority source: JD > Resume/Profile Data > Profile Role/Field) is technical. Roles are considered technical if they include keywords such as: ${technicalRolesKeywords.join(', ')}. Examples: "Software Developer", "Data Scientist", "AI Engineer". Roles like "Product Manager", "Marketing Manager" are non-technical.
-
-Question Stages & Types:
-Questions are categorized by 'stage' ('oral' or 'technical_written') and 'type' ('conversational', 'behavioral', 'technical', 'coding', 'resume_based', 'jd_based', 'profile_based').
-- 'oral' stage: For questions answered verbally.
-    - **For Technical Roles:** 'technical' type questions in this stage MUST be specific and in-depth, focusing on core concepts, tools, libraries, algorithms, and methodologies relevant to the highest priority source (JD > Resume/Profile Data > Profile/Role). Avoid overly generic technical questions.
-        - Example for Web Dev (if JD/Resume/Profile mentions React): "Explain the concept of reconciliation in React. How does the virtual DOM contribute to this process?"
-        - Example for Data Science (if JD/Resume/Profile mentions PyTorch/dimensionality reduction): "What are Tensors in PyTorch and how are they different from NumPy arrays? How does PyTorch's Autograd feature work?" or "Describe Principal Component Analysis (PCA). What are its main assumptions and when might it not be the best technique for dimensionality reduction?"
-        - Example for Backend (if JD/Resume/Profile mentions microservices): "Discuss the trade-offs of synchronous versus asynchronous communication between microservices. When would you choose one over the other, referencing specific scenarios if possible from the JD/resume/profile?"
-    - For Non-Technical Roles: Questions are primarily 'conversational', 'behavioral', and 'jd_based', 'resume_based' or 'profile_based' (if applicable based on priority), or general questions based on profile/role.
-
-- 'technical_written' stage: For questions requiring typed answers (e.g., code, detailed technical explanations, system design). This stage is primarily for technical roles.
-    - Examples for Technical Roles (tailor to JD/Resume/Profile if available):
-        - Coding: "Write a Python function that takes [specific input, e.g., a list of user activity data from resume/JD/profile] and returns [specific output, e.g., a summary of active users per day]."
-        - Technical Explanation: "If the JD/Resume/Profile indicates experience with [e.g., NoSQL databases like MongoDB], explain the data modeling considerations you would make for a [e.g., social media feed application], contrasting it with a relational approach."
-        - System Design (if relevant to JD/role/resume/profile): "Outline the architecture for a [e.g., real-time notification system] as might be needed for a feature described in the JD/resume/profile. What are the key components and technologies you'd consider?"
-
-Question Distribution and Types based on Duration:
-The 'id' for each question MUST be unique (q1, q2, q3, etc.).
-Sequence: All 'oral' stage questions must come before all 'technical_written' stage questions.
-
-*   **For Non-Technical Roles (e.g., Product Management, Marketing, Sales):**
-    *   All questions generated MUST be of the 'oral' stage. No 'technical_written' questions should be generated.
-    *   The questions should be a diverse mix of 'conversational', 'behavioral', and primarily 'jd_based', 'resume_based', or 'profile_based' based on data priority, or general questions based on profile/role.
-    *   Number of questions: **15 mins (6-7 oral)**, **30 mins (10-12 oral)**, **45 mins (15-16 oral)**.
-
-*   **For Technical Roles (Identified by keywords like ${technicalRolesKeywords.join(', ')}):**
-    Prioritize questions based on the hierarchy (JD > Resume/Profile Data > Profile/Role). Ensure 'technical' questions are specific and in-depth.
-    *   **Technical Oral Questions (approx. 45% of total):**
-        *   stage: 'oral'
-        *   type: 'technical' (deep conceptual, tool-specific, algorithm-specific), 'jd_based', 'resume_based', 'profile_based'.
-    *   **Technical Written Questions (approx. 30% of total):**
-        *   stage: 'technical_written'
-        *   type: 'technical' (detailed explanations, system design), 'coding', 'jd_based', 'resume_based', 'profile_based'.
-    *   **Non-Technical Oral Questions (approx. 25% of total):**
-        *   stage: 'oral'
-        *   type: 'conversational', 'behavioral', 'jd_based', 'resume_based', 'profile_based' (soft skills, teamwork, communication).
-
-    *Specific counts for Technical Roles based on duration and above percentages:*
-    *   **15 minutes (Total 6-7 questions):**
-        *   Technical Oral: 2-3 questions (ensure these are deeply technical and relevant)
-        *   Technical Written: 2 questions
-        *   Non-Technical Oral: 2 questions
-
-    *   **30 minutes (Total 10-12 questions):**
-        *   Technical Oral: 4-5 questions (ensure these are deeply technical and relevant)
-        *   Technical Written: 3-4 questions
-        *   Non-Technical Oral: 2-3 questions
-
-    *   **45 minutes (Total 15-16 questions):**
-        *   Technical Oral: 6-7 questions (ensure these are deeply technical and relevant)
-        *   Technical Written: 4-5 questions
-        *   Non-Technical Oral: 4-5 questions
-
-General Guidelines for All Roles:
-- Follow the strict priority: Targeted Job Description (if provided for this session) > Candidate's Resume & Detailed Profile (Experiences, Projects, Skills, Education) > Profile Field/Role.
-- All questions MUST be directly relevant to the information from the highest priority source available.
-- For 'technical_written' questions of type 'coding', provide a clear, concise problem statement, ideally related to the highest priority source.
+**General Guidelines for All Scenarios:**
+- The 'id' for each question MUST be unique (q1, q2, q3, etc.).
+- Sequence: All 'oral' stage questions must come before all 'technical_written' stage questions.
+- For 'technical_written' questions of type 'coding', provide a clear, concise problem statement, ideally related to the primary source (JD or Resume/Profile).
 - Each question MUST have a unique 'id', its 'text', its designated 'stage', and its 'type'. The 'answer' field should NOT be part of this generation output.
-
-Generate the questions array according to these guidelines. Ensure questions are challenging yet appropriate for the experience level implied by the role, field, job description, resume, and other profile details.
-If no specific information (JD, resume, detailed profile) is provided, generate questions based on role and field only, following the same distribution principles, ensuring technical questions are appropriately deep for the role.
-Ensure your entire output is a single JSON object that strictly adheres to the defined output schema.
+- Generate the questions array according to these guidelines. Ensure questions are challenging yet appropriate for the experience level implied by the primary data source.
+- Ensure your entire output is a single JSON object that strictly adheres to the defined output schema.
 `,
 });
 
@@ -227,7 +213,7 @@ const generateInterviewQuestionsFlow = ai.defineFlow(
     outputSchema: GenerateInterviewQuestionsOutputSchema,
   },
   async (input) => {
-    const isLikelyTechnicalRole = technicalRolesKeywords.some(keyword =>
+    const isLikelyTechnicalRoleBasedOnProfile = technicalRolesKeywords.some(keyword =>
       input.role.toLowerCase().includes(keyword) || input.profileField.toLowerCase().includes(keyword)
     );
 
@@ -236,8 +222,9 @@ const generateInterviewQuestionsFlow = ai.defineFlow(
         role: input.role,
         interviewDuration: input.interviewDuration,
         jobDescriptionProvided: !!input.jobDescription,
+        jobDescriptionSnippet: input.jobDescription ? input.jobDescription.substring(0,100) + "..." : "N/A",
         resumeProcessedTextProvided: !!input.resumeProcessedText,
-        resumeProcessedTextSnippet: input.resumeProcessedText ? input.resumeProcessedText.substring(0, 200) + (input.resumeProcessedText.length > 200 ? "..." : "") : "N/A",
+        resumeProcessedTextSnippet: input.resumeProcessedText ? input.resumeProcessedText.substring(0, 100) + "..." : "N/A",
         keySkillsProvided: !!(input.keySkills && input.keySkills.length > 0),
         keySkillsCount: input.keySkills?.length || 0,
         experiencesProvided: !!(input.experiences && input.experiences.length > 0),
@@ -246,7 +233,7 @@ const generateInterviewQuestionsFlow = ai.defineFlow(
         projectsCount: input.projects?.length || 0,
         educationHistoryProvided: !!(input.educationHistory && input.educationHistory.length > 0),
         educationHistoryCount: input.educationHistory?.length || 0,
-        isLikelyTechnicalRole,
+        isLikelyTechnicalRoleBasedOnProfile, // Note: LLM will determine technicality based on JD if provided
     });
 
     const {output} = await prompt(input);
@@ -274,7 +261,6 @@ const generateInterviewQuestionsFlow = ai.defineFlow(
         if (a.stage === 'technical_written' && b.stage === 'oral') return 1;
         
         // If stages are the same, maintain original order or sort by ID if numeric
-        // (Assuming IDs like q1, q2... are somewhat ordered by AI)
         const idANum = parseInt((a.id || 'q0').replace( /^\D+/g, ''), 10) || 0;
         const idBNum = parseInt((b.id || 'q0').replace( /^\D+/g, ''), 10) || 0;
         return idANum - idBNum;
@@ -285,3 +271,4 @@ const generateInterviewQuestionsFlow = ai.defineFlow(
     };
   }
 );
+
