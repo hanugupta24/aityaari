@@ -26,10 +26,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, FileText, UploadCloud, XCircle, DownloadCloud, PlusCircle, Edit3, Trash2, Briefcase, Lightbulb, GraduationCap, Trophy, UserCircle2 } from "lucide-react";
+import { Loader2, FileText, UploadCloud, XCircle, DownloadCloud, PlusCircle, Edit3, Trash2, Briefcase, Lightbulb, GraduationCap, Trophy, UserCircle2, Info } from "lucide-react";
 import type { UserProfile, ExperienceItem, ProjectItem, EducationItem } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Dialog,
   DialogContent,
@@ -117,10 +118,7 @@ export default function ProfilePage() {
         setEducationHistory(userProfile.educationHistory || []);
         
         setSelectedFileName(userProfile.resumeFileName || null);
-        // Note: clientSideResumeText is not directly reset here from userProfile.resumeProcessedText
-        // because it's often derived from file input or kept in localStorage.
-        // If you want it pre-filled from DB on load, you'd set it here.
-        // For now, it relies on user action (file upload) or localStorage persistence.
+        // clientSideResumeText is loaded from localStorage separately
       } else {
         form.reset({ 
             name: user.displayName || "", 
@@ -232,25 +230,24 @@ export default function ProfilePage() {
     console.log("ProfilePage: handleFileChange initiated.");
     const file = event.target.files?.[0];
     
-    // Store previous state in case of error or cancellation
     const prevFileName = selectedFileName;
     const prevResumeText = clientSideResumeText;
 
     if (fileInputRef.current) {
-      // Don't clear the value immediately, only after successful processing or explicit clear
+      // fileInputRef.current.value = ""; // Don't clear until success or explicit clear action
     }
 
     if (!file) {
       console.log("ProfilePage: File selection cancelled by user. No changes made to current resume state.");
-      if (fileInputRef.current) fileInputRef.current.value = ""; // Clear input visually
+      if (fileInputRef.current) fileInputRef.current.value = ""; 
       return;
     }
 
     console.log("ProfilePage: New file selected:", file.name);
     setIsReadingFile(true);
-    setSelectedFile(file); // Keep track of the file object
-    setSelectedFileName(file.name); // Optimistically update for UI
-    setClientSideResumeText(""); // Clear previous text while reading new
+    setSelectedFile(file); 
+    setSelectedFileName(file.name); 
+    setClientSideResumeText(""); 
 
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
       toast({ title: "File Too Large", description: `Maximum file size is ${MAX_FILE_SIZE_MB}MB.`, variant: "destructive" });
@@ -263,7 +260,7 @@ export default function ProfilePage() {
     }
 
     if (!ACCEPTED_MIME_TYPES.includes(file.type) && !ACCEPT_FILE_EXTENSIONS.split(',').some(ext => file.name.toLowerCase().endsWith(ext))) {
-      toast({ title: "Unsupported File Type", description: `Please upload one of: ${ACCEPT_FILE_EXTENSIONS}. Plain text (.txt, .md) recommended for best AI results.`, variant: "destructive" });
+      toast({ title: "Unsupported File Type", description: `Please upload one of: ${ACCEPT_FILE_EXTENSIONS}. Plain text (.txt, .md) recommended.`, variant: "destructive" });
       setSelectedFile(null);
       setSelectedFileName(prevFileName);
       setClientSideResumeText(prevResumeText);
@@ -273,7 +270,7 @@ export default function ProfilePage() {
     }
     
     if (['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.type)) {
-      toast({ title: "File Type Notice", description: `Attempting to extract text from ${file.name}. For PDF/Word, extraction might be incomplete. Plain text (.txt, .md) is best for AI.`, duration: 7000, variant: "default" });
+      toast({ title: "File Type Notice", description: `Attempting to extract text from ${file.name}. For PDF/Word, extraction accuracy is limited and may not capture all content. Plain text (.txt, .md) is strongly recommended for best AI results.`, duration: 10000, variant: "default" });
     }
     
     const reader = new FileReader();
@@ -285,20 +282,20 @@ export default function ProfilePage() {
         localStorage.setItem('tyaariResumeFileName', file.name);
       }
       console.log("ProfilePage: File read successfully, clientSideResumeText and localStorage set for AI.");
-      toast({ title: "Resume Content Loaded", description: `Text extracted from ${file.name}. This will be used for AI question generation. Click 'Save All Profile Changes' if you want to save this change to your main profile.` });
+      toast({ title: "Resume Content Loaded", description: `Text extracted from ${file.name}. This will be used for AI question generation. Click 'Save All Profile Changes' to make this the default resume associated with your profile (if resume file storage is implemented).` });
       setIsReadingFile(false);
-      if (fileInputRef.current) fileInputRef.current.value = ""; // Clear input after successful processing
+      if (fileInputRef.current) fileInputRef.current.value = ""; 
     };
     reader.onerror = (errorEvent) => {
       console.error("ProfilePage: Error reading file:", errorEvent);
-      toast({ title: "File Read Error", description: "Could not read resume content. Please try a different file or format.", variant: "destructive" });
+      toast({ title: "File Read Error", description: "Could not read resume content. Please try a different file or format. Plain text (.txt, .md) is most reliable.", variant: "destructive" });
       setSelectedFile(null);
       setSelectedFileName(prevFileName); 
       setClientSideResumeText(prevResumeText);
       if (fileInputRef.current) fileInputRef.current.value = "";
       setIsReadingFile(false);
     };
-    reader.readAsText(file); // For PDF/DOCX, this gives limited results.
+    reader.readAsText(file);
   };
 
   const clearResume = () => {
@@ -329,9 +326,6 @@ export default function ProfilePage() {
     console.log("ProfilePage: onSubmit triggered.");
     setIsSubmitting(true);
     
-    // Resume data is handled by localStorage for AI, not saved to Firestore UserProfile
-    // If you want to save it, you'd add resumeFileName, resumeFileUrl etc. here
-    
     try {
       const profileDataToSave: UserProfile = {
         uid: user.uid,
@@ -352,11 +346,12 @@ export default function ProfilePage() {
         isPlusSubscriber: userProfile?.isPlusSubscriber || false,
         subscriptionPlan: userProfile?.subscriptionPlan || null,
         isAdmin: userProfile?.isAdmin || false,
-        // Resume fields (resumeFileName, resumeFileUrl, resumeStoragePath, resumeProcessedText) are omitted
-        // as per the requirement to not save them to Firestore
+        // resumeFileName, resumeFileUrl, resumeStoragePath, resumeProcessedText are NOT saved to Firestore profile
+        // resumeProcessedText is handled by localStorage for AI use during interview start
+        // resumeFileName is only for display purposes locally
       };
 
-      console.log("ProfilePage: FINAL data to save to Firestore (excluding resume fields):", JSON.stringify(profileDataToSave, null, 2));
+      console.log("ProfilePage: FINAL data to save to Firestore (excluding resume specific fields):", JSON.stringify(profileDataToSave, null, 2));
       const userDocRef = doc(db, "users", user.uid);
       await setDoc(userDocRef, profileDataToSave, { merge: true });
       console.log("ProfilePage: Profile data successfully saved to Firestore.");
@@ -368,10 +363,6 @@ export default function ProfilePage() {
          console.error("ProfilePage: Error refreshing user profile in context after save:", err);
       });
       
-      // Do not clear selectedFile here if we are only using localStorage for resume
-      // as the user might want the current selection to persist in localStorage.
-      // clearResume() function is for explicit user action.
-
     } catch (error: any) {
       console.error("ProfilePage: onSubmit - Profile update error:", error);
       const description = error.code ? `${error.message} (Code: ${error.code})` : error.message || "Could not update profile.";
@@ -490,7 +481,7 @@ export default function ProfilePage() {
                   <CardHeader className="p-0 pb-2 flex flex-row justify-between items-start">
                     <div>
                         <CardTitle className="text-md font-semibold">{exp.jobTitle} at {exp.companyName}</CardTitle>
-                        <CardDescription className="text-xs">{exp.startDate} - {exp.endDate || 'Present'}</CardDescription>
+                        <CardDescription className="text-xs">{exp.startDate ? exp.startDate.substring(0,7) : ''} - {exp.endDate ? exp.endDate.substring(0,7) : 'Present'}</CardDescription>
                     </div>
                     <div className="flex gap-1 shrink-0">
                         <Button type="button" variant="ghost" size="icon" onClick={() => openModal('experience', exp)} aria-label={`Edit experience ${exp.jobTitle}`}><Edit3 className="h-4 w-4 text-muted-foreground hover:text-primary" /></Button>
@@ -576,7 +567,7 @@ export default function ProfilePage() {
           <Card className="shadow-md">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl"><FileText className="h-6 w-6 text-primary" /> Resume</CardTitle>
-              <CardDescription>Upload your resume. Text will be extracted for AI question generation (PDF, DOCX, TXT, MD accepted). This text is stored in your browser and used when you start an interview. It is NOT saved to your main profile in the database.</CardDescription>
+              <CardDescription>Upload your resume. Text will be extracted for AI question generation. This text is stored in your browser and used when you start an interview. It is NOT saved to your main profile in the database.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center gap-2">
@@ -592,7 +583,16 @@ export default function ProfilePage() {
                 </FormControl>
                 {isReadingFile && <Loader2 className="h-5 w-5 animate-spin" />}
               </div>
-              <p className="text-xs text-muted-foreground">Max {MAX_FILE_SIZE_MB}MB. Plain text (.txt, .md) is best for AI. For PDF/DOCX, text extraction may be limited.</p>
+              
+              <Alert variant="default" className="border-blue-500/50 text-blue-700 dark:text-blue-300 dark:border-blue-400/50">
+                <Info className="h-4 w-4 !text-blue-500 dark:!text-blue-400" />
+                <AlertTitle className="text-blue-700 dark:text-blue-300">File Format Recommendation</AlertTitle>
+                <AlertDescription className="text-blue-600 dark:text-blue-200">
+                  For the best AI question generation, please upload your resume as a <strong>plain text file (.txt or .md)</strong>.
+                  While .pdf, .doc, and .docx are accepted, client-side text extraction from these formats can be limited and may not capture all content accurately.
+                </AlertDescription>
+              </Alert>
+
 
               {selectedFileName && (
                 <div className="mt-2 text-sm text-muted-foreground flex items-center justify-between p-2 border rounded-md bg-secondary/50">

@@ -163,7 +163,7 @@ Questions are categorized by 'stage' ('oral' or 'technical_written') and 'type' 
         - Example for Web Dev (if JD/Resume/Profile mentions React): "Explain the concept of reconciliation in React. How does the virtual DOM contribute to this process?"
         - Example for Data Science (if JD/Resume/Profile mentions PyTorch/dimensionality reduction): "What are Tensors in PyTorch and how are they different from NumPy arrays? How does PyTorch's Autograd feature work?" or "Describe Principal Component Analysis (PCA). What are its main assumptions and when might it not be the best technique for dimensionality reduction?"
         - Example for Backend (if JD/Resume/Profile mentions microservices): "Discuss the trade-offs of synchronous versus asynchronous communication between microservices. When would you choose one over the other, referencing specific scenarios if possible from the JD/resume/profile?"
-    - For Non-Technical Roles: Questions are primarily 'conversational', 'behavioral', and 'jd_based', 'resume_based' or 'profile_based' (if applicable based on priority), focusing on job-specific scenarios, processes, and problem-solving relevant to the highest priority source.
+    - For Non-Technical Roles: Questions are primarily 'conversational', 'behavioral', and 'jd_based', 'resume_based' or 'profile_based' (if applicable based on priority), or general questions based on profile/role.
 
 - 'technical_written' stage: For questions requiring typed answers (e.g., code, detailed technical explanations, system design). This stage is primarily for technical roles.
     - Examples for Technical Roles (tailor to JD/Resume/Profile if available):
@@ -237,10 +237,15 @@ const generateInterviewQuestionsFlow = ai.defineFlow(
         interviewDuration: input.interviewDuration,
         jobDescriptionProvided: !!input.jobDescription,
         resumeProcessedTextProvided: !!input.resumeProcessedText,
+        resumeProcessedTextSnippet: input.resumeProcessedText ? input.resumeProcessedText.substring(0, 200) + (input.resumeProcessedText.length > 200 ? "..." : "") : "N/A",
         keySkillsProvided: !!(input.keySkills && input.keySkills.length > 0),
+        keySkillsCount: input.keySkills?.length || 0,
         experiencesProvided: !!(input.experiences && input.experiences.length > 0),
+        experiencesCount: input.experiences?.length || 0,
         projectsProvided: !!(input.projects && input.projects.length > 0),
+        projectsCount: input.projects?.length || 0,
         educationHistoryProvided: !!(input.educationHistory && input.educationHistory.length > 0),
+        educationHistoryCount: input.educationHistory?.length || 0,
         isLikelyTechnicalRole,
     });
 
@@ -248,6 +253,7 @@ const generateInterviewQuestionsFlow = ai.defineFlow(
 
     if (!output || !output.questions || output.questions.length === 0) {
         console.error("AI did not return any questions for generation. Input was:", input);
+        // Fallback to a generic question if AI fails to generate
         return { questions: [{
             id: 'q1',
             text: 'Tell me about yourself and your experience relevant to this field.',
@@ -256,22 +262,26 @@ const generateInterviewQuestionsFlow = ai.defineFlow(
         }] };
     }
 
+    // Ensure unique IDs and sort questions: oral first, then technical_written
     const sortedQuestions = output.questions
       .map((q, index) => ({
         ...q,
-        id: q.id || `gen_q${index + 1}`, 
+        id: q.id || `gen_q${index + 1}`, // Ensure ID exists, fallback if AI missed it
       }))
       .sort((a, b) => {
+        // Sort by stage: 'oral' before 'technical_written'
         if (a.stage === 'oral' && b.stage === 'technical_written') return -1;
         if (a.stage === 'technical_written' && b.stage === 'oral') return 1;
         
+        // If stages are the same, maintain original order or sort by ID if numeric
+        // (Assuming IDs like q1, q2... are somewhat ordered by AI)
         const idANum = parseInt((a.id || 'q0').replace( /^\D+/g, ''), 10) || 0;
         const idBNum = parseInt((b.id || 'q0').replace( /^\D+/g, ''), 10) || 0;
         return idANum - idBNum;
     });
 
     return {
-      questions: sortedQuestions as GeneratedQuestion[], 
+      questions: sortedQuestions as GeneratedQuestion[], // Cast to ensure GeneratedQuestion type
     };
   }
 );
