@@ -75,17 +75,21 @@ export default function StartInterviewPage() {
       const newInterviewRef = doc(collection(db, "users", user.uid, "interviews"));
       const interviewId = newInterviewRef.id;
 
-      const initialSessionData: InterviewSession = {
+      const initialSessionData: Partial<InterviewSession> = { // Use Partial to build conditionally
         id: interviewId,
         userId: user.uid,
         duration: parseInt(duration) as 15 | 30 | 45,
         status: "questions_generated", 
         createdAt: new Date().toISOString(),
         questions: questionGenOutput.questions as GeneratedQuestion[],
-        // Optionally store the jobDescription used for this session for later review
-        jobDescriptionUsed: jobDescriptionInput.trim() || undefined,
       };
-      await setDoc(newInterviewRef, initialSessionData);
+
+      const trimmedJobDescription = jobDescriptionInput.trim();
+      if (trimmedJobDescription) {
+        initialSessionData.jobDescriptionUsed = trimmedJobDescription;
+      }
+
+      await setDoc(newInterviewRef, initialSessionData as InterviewSession); // Cast back to full type
       
       toast({ title: "Interview Ready!", description: "Redirecting to your session..." });
       router.push(`/interview/${interviewId}`);
@@ -302,3 +306,6 @@ export default function StartInterviewPage() {
     </div>
   );
 }
+
+
+    
