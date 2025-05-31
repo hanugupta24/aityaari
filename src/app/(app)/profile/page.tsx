@@ -24,7 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, FileText, UploadCloud, XCircle, PlusCircle, Edit3, Trash2, Briefcase, Lightbulb, GraduationCap, Trophy, UserCircle2, Info, AlertTriangle, Sparkles } from "lucide-react";
+import { Loader2, FileText, UploadCloud, XCircle, PlusCircle, Edit3, Trash2, Briefcase, Lightbulb, GraduationCap, Trophy, UserCircle2, Info, AlertTriangle, Sparkles, Brain } from "lucide-react";
 import type { UserProfile, ExperienceItem, ProjectItem, EducationItem } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -40,6 +40,7 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import mammoth from 'mammoth';
 import * as pdfjsLib from 'pdfjs-dist';
+import { extractResumeSections, type ExtractResumeSectionsInput, type ExtractResumeSectionsOutput } from "@/ai/flows/extract-resume-sections-flow";
 
 
 // Zod schema for the main form fields
@@ -72,6 +73,7 @@ export default function ProfilePage() {
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null); 
   const [clientSideResumeText, setClientSideResumeText] = useState<string | null>(null); 
   const [isProcessingFile, setIsProcessingFile] = useState(false); 
+  const [isAnalyzingResume, setIsAnalyzingResume] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [keySkills, setKeySkills] = useState<string[]>([]);
@@ -88,23 +90,22 @@ export default function ProfilePage() {
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
-    // defaultValues are set based on userProfile later
   });
   
   useEffect(() => {
-    if (typeof window !== 'undefined' && pdfjsLib && pdfjsLib.GlobalWorkerOptions) {
-      const workerSrc = `${window.location.origin}/pdf.worker.mjs`;
-      console.log(`ProfilePage: Attempting to set pdf.js workerSrc to: ${workerSrc}. 
-      CRITICAL: Ensure 'pdf.worker.mjs' from 'node_modules/pdfjs-dist/build/' is copied to your 'public/' directory.
-      If it's not there, pdf.js will fail to load its worker, and you will see errors like "Failed to fetch dynamically imported module".`);
-      try {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
-      } catch (e) {
-        console.error("ProfilePage: Error setting pdfjsLib.GlobalWorkerOptions.workerSrc:", e);
-      }
+    if (typeof window !== 'undefined' && pdfjsLib?.GlobalWorkerOptions) {
+        const workerUrl = `${window.location.origin}/pdf.worker.mjs`;
+        console.log(`ProfilePage: Attempting to set pdf.js workerSrc to: ${workerUrl}. 
+        CRITICAL: Ensure you have copied 'node_modules/pdfjs-dist/build/pdf.worker.mjs' to your 'public/' directory. 
+        If it's not there, PDF parsing will fail with a 'Failed to fetch dynamically imported module' error in the browser console.`);
+        try {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+        } catch (e) {
+            console.error("ProfilePage: Error setting pdfjsLib.GlobalWorkerOptions.workerSrc. pdf.js might not be loaded correctly.", e);
+        }
     } else if (typeof window !== 'undefined') {
-      if (!pdfjsLib) console.error("ProfilePage: pdfjsLib is not defined. PDF parsing will likely fail.");
-      if (pdfjsLib && !pdfjsLib.GlobalWorkerOptions) console.warn("ProfilePage: pdfjsLib.GlobalWorkerOptions is not available. PDF parsing might fail.");
+        if (!pdfjsLib) console.error("ProfilePage: pdfjsLib is not defined. PDF parsing will likely fail.");
+        else if (pdfjsLib && !pdfjsLib.GlobalWorkerOptions) console.warn("ProfilePage: pdfjsLib.GlobalWorkerOptions is not available. PDF parsing might fail.");
     }
   }, []);
   
@@ -135,9 +136,9 @@ export default function ProfilePage() {
         if (resumeTextFromDb) {
             setClientSideResumeText(resumeTextFromDb);
             setSelectedFileName(storedFileName || (resumeTextFromDb.length > 0 ? "resume_from_profile.txt" : null) );
-        } else if (typeof window !== "undefined") { // Fallback to localStorage only if DB has no resume text
+        } else if (typeof window !== "undefined") { 
             const lsText = localStorage.getItem(LOCAL_STORAGE_RESUME_TEXT_KEY);
-            if (lsText && storedFileName) { // Only use LS if both text and filename are present
+            if (lsText && storedFileName) { 
                 setClientSideResumeText(lsText);
                 setSelectedFileName(storedFileName);
             }
@@ -284,10 +285,10 @@ export default function ProfilePage() {
     try {
       console.log(`ProfilePage: CLIENT_SIDE_PARSE - Processing file: ${file.name}, type: ${file.type}`);
       if (file.type === 'application/pdf') {
-        if (!pdfjsLib || !pdfjsLib.getDocument || !pdfjsLib.GlobalWorkerOptions.workerSrc) {
-            const errorMsg = "ProfilePage: pdf.js workerSrc not set or pdfjsLib not fully loaded. PDF parsing will fail.";
-            console.error(errorMsg, "Current workerSrc:", pdfjsLib?.GlobalWorkerOptions?.workerSrc);
-            throw new Error("PDF.js library not configured correctly. Ensure 'pdf.worker.mjs' is in public/ and workerSrc is set.");
+        if (!pdfjsLib || !pdfjsLib.getDocument || !pdfjsLib.GlobalWorkerOptions.workerSrc || !pdfjsLib.GlobalWorkerOptions.workerSrc.includes('/pdf.worker.mjs')) {
+            const errorMsg = "ProfilePage: pdf.js workerSrc not correctly set or pdfjsLib not fully loaded. PDF parsing will fail. WorkerSrc: " + (pdfjsLib?.GlobalWorkerOptions?.workerSrc || 'undefined');
+            console.error(errorMsg);
+            throw new Error("PDF.js library not configured correctly. Ensure 'pdf.worker.mjs' is in public/ and workerSrc is set, then reload.");
         }
         console.log(`ProfilePage: CLIENT_SIDE_PARSE - Using pdf.js workerSrc: ${pdfjsLib.GlobalWorkerOptions.workerSrc}`);
         const arrayBuffer = await file.arrayBuffer();
@@ -299,7 +300,7 @@ export default function ProfilePage() {
           if (pdfError instanceof Error) {
             detailedErrorMessage += ` Error: ${pdfError.message}`;
             if (pdfError.message.includes("NetworkError") || pdfError.message.includes("Failed to fetch") || pdfError.message.includes("dynamically imported module") || pdfError.message.includes("Setting up fake worker failed")) {
-              detailedErrorMessage += " This is often due to the 'pdf.worker.mjs' script not being found, not loadable, or an issue with its execution environment. Ensure it's in your 'public/' folder and your server can serve it correctly. Also check browser console for more specific network errors related to this file.";
+              detailedErrorMessage += " This is often due to the 'pdf.worker.mjs' script not being found at the specified path, not loadable, or an issue with its execution environment. Ensure it's in your 'public/' folder and your server can serve it correctly. Check browser console (Network tab) for errors related to this file.";
             }
           }
           throw new Error(detailedErrorMessage); 
@@ -345,7 +346,7 @@ export default function ProfilePage() {
           localStorage.setItem(LOCAL_STORAGE_RESUME_TEXT_KEY, extractedText);
           localStorage.setItem(LOCAL_STORAGE_RESUME_FILENAME_KEY, currentSelectedFileName);
         }
-        toast({ title: "Resume Text Extracted (Client-Side)", description: `Text successfully extracted from ${currentSelectedFileName}. Save profile to store it.` });
+        toast({ title: "Resume Text Extracted (Client-Side)", description: `Text successfully extracted from ${currentSelectedFileName}. Review and save profile to store it.` });
       } else {
         toast({ title: "Text Extraction Failed (Client-Side)", description: `No text could be extracted from ${currentSelectedFileName}. The file might be empty, protected, or an unsupported format variant.`, variant: "destructive" });
         setSelectedFile(prevSelectedFile); 
@@ -368,6 +369,7 @@ export default function ProfilePage() {
             variant: "destructive",
             duration: 15000, 
           });
+          // Preserve previous resume data if setup failed for new file
           setSelectedFile(prevSelectedFile);
           setSelectedFileName(prevFileName);
           setClientSideResumeText(prevResumeText);
@@ -377,6 +379,36 @@ export default function ProfilePage() {
       }
     } finally {
       setIsProcessingFile(false);
+    }
+  };
+
+  const handleAnalyzeResume = async () => {
+    if (!clientSideResumeText || clientSideResumeText.trim() === "") {
+      toast({ title: "No Resume Text", description: "Please upload a resume and extract its text first.", variant: "destructive" });
+      return;
+    }
+    setIsAnalyzingResume(true);
+    toast({ title: "Analyzing Resume...", description: "AI is extracting experience and project sections. This may take a moment." });
+    try {
+      const input: ExtractResumeSectionsInput = { resumeText: clientSideResumeText };
+      const output: ExtractResumeSectionsOutput = await extractResumeSections(input);
+
+      if (output.experiences && output.experiences.length > 0) {
+        setExperiences(output.experiences.map(exp => ({...exp, id: exp.id || uuidv4() }))); // Ensure IDs
+      }
+      if (output.projects && output.projects.length > 0) {
+        setProjects(output.projects.map(proj => ({...proj, id: proj.id || uuidv4() }))); // Ensure IDs
+      }
+      toast({ title: "Resume Analysis Complete", description: "Experience and Project sections have been auto-filled. Please review and save your profile." });
+    } catch (error: any) {
+      console.error("Error analyzing resume with AI:", error);
+      let description = "Could not auto-fill Experience and Project sections from resume. Please try again or fill them manually.";
+      if (error.message && (error.message.includes("503") || error.message.toLowerCase().includes("overloaded") || error.message.toLowerCase().includes("service unavailable"))) {
+        description = "The AI service for resume analysis is currently busy or unavailable. Please try again in a few moments.";
+      }
+      toast({ title: "Resume Analysis Failed", description, variant: "destructive" });
+    } finally {
+      setIsAnalyzingResume(false);
     }
   };
 
@@ -426,7 +458,7 @@ export default function ProfilePage() {
     }
   };
   
-  const canSubmit = !isSubmitting && !authLoading && !isProcessingFile && !isFetchingProfile;
+  const canSubmit = !isSubmitting && !authLoading && !isProcessingFile && !isFetchingProfile && !isAnalyzingResume;
   const isEmailFromAuthProvider = !!user?.email; 
 
   if (isFetchingProfile || initialLoading || (authLoading && !userProfile && !initialLoading)) {
@@ -504,18 +536,57 @@ export default function ProfilePage() {
           </Card>
           
           <Card className="shadow-md">
-            <CardHeader><CardTitle className="flex items-center gap-2 text-xl"><Briefcase className="h-6 w-6 text-primary" /> Work Experience</CardTitle><CardDescription>Detail your professional journey. Changes are saved when you click 'Save All Profile Changes'.</CardDescription></CardHeader>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-xl"><FileText className="h-6 w-6 text-primary" /> Resume (Raw Text & Structured Data)</CardTitle>
+                <CardDescription>
+                    Upload your resume. Text will be extracted client-side. Then, use the 'Analyze Resume' button to auto-fill Experience and Projects using AI.
+                </CardDescription>
+            </CardHeader>
             <CardContent className="space-y-4">
-              {experiences.length === 0 && <p className="text-sm text-muted-foreground">No work experience added yet.</p>}
+              <div className="flex items-center gap-2">
+                <FormControl>
+                  <Input type="file" ref={fileInputRef} accept={ACCEPT_FILE_EXTENSIONS} onChange={handleFileChange} className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20" disabled={isProcessingFile || isSubmitting || isAnalyzingResume}/>
+                </FormControl>
+                {isProcessingFile && <Loader2 className="h-5 w-5 animate-spin" />}
+              </div>
+              <Alert variant="default" className="border-blue-500/50 text-blue-700 dark:text-blue-300 dark:border-blue-400/50">
+                <Info className="h-4 w-4 !text-blue-500 dark:!text-blue-400" />
+                <AlertTitle className="text-blue-700 dark:text-blue-300">File Format & PDF Worker Information</AlertTitle>
+                <AlertDescription className="text-blue-600 dark:text-blue-200">
+                  Supported formats for client-side raw text extraction: <strong>.txt, .md, .pdf, .docx</strong>. Max file size: {MAX_FILE_SIZE_MB}MB.
+                  <br/><strong>Important for PDF:</strong> You must copy <code>node_modules/pdfjs-dist/build/pdf.worker.mjs</code> to your <code>public/</code> directory and restart your server for PDF parsing to work.
+                </AlertDescription>
+              </Alert>
+              {selectedFileName && (<div className="mt-2 text-sm text-muted-foreground flex items-center justify-between p-2 border rounded-md bg-secondary/50"><div className="flex items-center gap-2 overflow-hidden"><FileText className="h-4 w-4 text-primary shrink-0" /><span className="truncate" title={selectedFileName}>{selectedFileName}</span> ({clientSideResumeText ? `${Math.round(clientSideResumeText.length / 1024)} KB` : 'No text'})</div><div className="flex items-center gap-1 shrink-0"><Button type="button" variant="ghost" size="icon" onClick={() => clearResume(true, "Resume selection removed locally. Save profile to update in database.")} title="Clear resume selection" aria-label="Clear resume" disabled={isSubmitting || isProcessingFile || isAnalyzingResume}><XCircle className="h-4 w-4 text-destructive" /></Button></div></div>)}
+              
+              {clientSideResumeText && clientSideResumeText.trim() !== "" && (
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  className="w-full" 
+                  onClick={handleAnalyzeResume}
+                  disabled={isAnalyzingResume || isSubmitting || isProcessingFile}
+                >
+                  {isAnalyzingResume ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Brain className="mr-2 h-4 w-4" />}
+                  {isAnalyzingResume ? "Analyzing Resume..." : "Auto-fill Experience & Projects from Resume Text"}
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-md">
+            <CardHeader><CardTitle className="flex items-center gap-2 text-xl"><Briefcase className="h-6 w-6 text-primary" /> Work Experience</CardTitle><CardDescription>Detail your professional journey. Can be auto-filled from resume. Changes are saved when you click 'Save All Profile Changes'.</CardDescription></CardHeader>
+            <CardContent className="space-y-4">
+              {experiences.length === 0 && <p className="text-sm text-muted-foreground">No work experience added yet. Upload a resume and click 'Analyze Resume' or add manually.</p>}
               {experiences.map((exp) => (<Card key={exp.id} className="bg-muted/30 p-4 shadow-sm rounded-md"><CardHeader className="p-0 pb-2 flex flex-row justify-between items-start"><div><CardTitle className="text-md font-semibold">{exp.jobTitle} at {exp.companyName}</CardTitle><CardDescription className="text-xs">{exp.startDate || 'N/A'} - {exp.endDate || 'Present'}</CardDescription></div><div className="flex gap-1 shrink-0"><Button type="button" variant="ghost" size="icon" onClick={() => openModal('experience', exp)} aria-label={`Edit experience ${exp.jobTitle}`}><Edit3 className="h-4 w-4 text-muted-foreground hover:text-primary" /></Button><Button type="button" variant="ghost" size="icon" onClick={() => handleDeleteItem('experience', exp.id)} aria-label={`Delete experience ${exp.jobTitle}`}><Trash2 className="h-4 w-4 text-destructive hover:text-destructive/80" /></Button></div></CardHeader><CardContent className="p-0 text-sm text-muted-foreground"><p className="whitespace-pre-wrap">{exp.description || "No description provided."}</p></CardContent></Card>))}
               <Button type="button" variant="outline" className="w-full mt-2 border-dashed hover:border-primary hover:text-primary" onClick={() => openModal('experience')}><PlusCircle className="mr-2 h-4 w-4" /> Add Experience Manually</Button>
             </CardContent>
           </Card>
 
           <Card className="shadow-md">
-            <CardHeader><CardTitle className="flex items-center gap-2 text-xl"><Sparkles className="h-6 w-6 text-primary" /> Projects</CardTitle><CardDescription>Showcase your personal or professional projects. Changes are saved when you click 'Save All Profile Changes'.</CardDescription></CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2 text-xl"><Sparkles className="h-6 w-6 text-primary" /> Projects</CardTitle><CardDescription>Showcase your personal or professional projects. Can be auto-filled from resume. Changes are saved when you click 'Save All Profile Changes'.</CardDescription></CardHeader>
             <CardContent className="space-y-4">
-              {projects.length === 0 && <p className="text-sm text-muted-foreground">No projects added yet.</p>}
+              {projects.length === 0 && <p className="text-sm text-muted-foreground">No projects added yet. Upload a resume and click 'Analyze Resume' or add manually.</p>}
               {projects.map((proj) => (<Card key={proj.id} className="bg-muted/30 p-4 shadow-sm rounded-md"><CardHeader className="p-0 pb-2 flex flex-row justify-between items-start"><div><CardTitle className="text-md font-semibold">{proj.title}</CardTitle></div><div className="flex gap-1 shrink-0"><Button type="button" variant="ghost" size="icon" onClick={() => openModal('project', proj)} aria-label={`Edit project ${proj.title}`}><Edit3 className="h-4 w-4 text-muted-foreground hover:text-primary" /></Button><Button type="button" variant="ghost" size="icon" onClick={() => handleDeleteItem('project', proj.id)} aria-label={`Delete project ${proj.title}`}><Trash2 className="h-4 w-4 text-destructive hover:text-destructive/80" /></Button></div></CardHeader><CardContent className="p-0 text-sm text-muted-foreground"><p className="whitespace-pre-wrap">{proj.description}</p>{proj.technologiesUsed && proj.technologiesUsed.length > 0 && <p className="mt-1 text-xs">Tech: {proj.technologiesUsed.join(', ')}</p>}{proj.projectUrl && <a href={proj.projectUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs block mt-1 break-all">View Project</a>}</CardContent></Card>))}
               <Button type="button" variant="outline" className="w-full mt-2 border-dashed hover:border-primary hover:text-primary" onClick={() => openModal('project')}><PlusCircle className="mr-2 h-4 w-4" /> Add Project Manually</Button>
             </CardContent>
@@ -535,38 +606,11 @@ export default function ProfilePage() {
             <CardContent><FormField control={form.control} name="accomplishments" render={({ field }) => (<FormItem><ShadcnFormLabel>Accomplishments</ShadcnFormLabel><FormControl><Textarea placeholder="e.g., 'Led a team to successfully launch Product X...' or 'Published research paper Y...'" {...field} value={field.value ?? ""} rows={5} /></FormControl><FormMessage /></FormItem>)} /></CardContent>
           </Card>
 
-          <Card className="shadow-md">
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-xl"><FileText className="h-6 w-6 text-primary" /> Resume</CardTitle>
-                <CardDescription>
-                    Upload your resume. Text will be extracted client-side.
-                    Ensure it's up-to-date for interview question generation. Saved to Firestore when you save all profile changes.
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-2">
-                <FormControl>
-                  <Input type="file" ref={fileInputRef} accept={ACCEPT_FILE_EXTENSIONS} onChange={handleFileChange} className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20" disabled={isProcessingFile || isSubmitting}/>
-                </FormControl>
-                {isProcessingFile && <Loader2 className="h-5 w-5 animate-spin" />}
-              </div>
-              <Alert variant="default" className="border-blue-500/50 text-blue-700 dark:text-blue-300 dark:border-blue-400/50">
-                <Info className="h-4 w-4 !text-blue-500 dark:!text-blue-400" />
-                <AlertTitle className="text-blue-700 dark:text-blue-300">File Format Information</AlertTitle>
-                <AlertDescription className="text-blue-600 dark:text-blue-200">
-                  Supported formats for client-side extraction: <strong>.txt, .md, .pdf, .docx</strong>.
-                  Text extraction quality can vary. Max file size: {MAX_FILE_SIZE_MB}MB.
-                  <br/><strong>Important for PDF:</strong> Ensure you have copied <code>pdf.worker.mjs</code> from <code>node_modules/pdfjs-dist/build/</code> to your <code>public/</code> directory and restarted your server.
-                </AlertDescription>
-              </Alert>
-              {selectedFileName && (<div className="mt-2 text-sm text-muted-foreground flex items-center justify-between p-2 border rounded-md bg-secondary/50"><div className="flex items-center gap-2 overflow-hidden"><FileText className="h-4 w-4 text-primary shrink-0" /><span className="truncate" title={selectedFileName}>{selectedFileName}</span></div><div className="flex items-center gap-1 shrink-0"><Button type="button" variant="ghost" size="icon" onClick={() => clearResume(true, "Resume selection removed locally. Save profile to update in database.")} title="Clear resume selection" aria-label="Clear resume" disabled={isSubmitting || isProcessingFile}><XCircle className="h-4 w-4 text-destructive" /></Button></div></div>)}
-            </CardContent>
-          </Card>
 
           <div className="fixed bottom-0 left-0 right-0 md:relative bg-background/80 backdrop-blur-sm md:bg-transparent md:backdrop-blur-none p-4 border-t md:border-none md:p-0">
              <Button type="submit" disabled={!canSubmit} className="w-full md:w-auto text-lg py-3 px-6 shadow-lg">
-                {(isSubmitting || isProcessingFile) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {isProcessingFile ? 'Processing File...' : (isSubmitting ? 'Saving Profile...' : 'Save All Profile Changes')}
+                {(isSubmitting || isProcessingFile || isAnalyzingResume) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isProcessingFile ? 'Processing File...' : (isAnalyzingResume ? 'Analyzing...' : (isSubmitting ? 'Saving Profile...' : 'Save All Profile Changes'))}
              </Button>
           </div>
         </form>
@@ -590,3 +634,6 @@ export default function ProfilePage() {
     </div>
   );
 }
+
+
+    
