@@ -24,8 +24,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, FileText, XCircle, PlusCircle, Edit3, Trash2, Briefcase, Lightbulb, GraduationCap, Trophy, UserCircle2, Info, AlertTriangle, UploadCloud, Brain } from "lucide-react";
-import type { UserProfile, ExperienceItem, ProjectItem, EducationItem, ExtractedResumeData } from "@/types";
+import { Loader2, FileText, XCircle, PlusCircle, Edit3, Trash2, Briefcase, Lightbulb, GraduationCap, Trophy, UserCircle2, Info, AlertTriangle, UploadCloud } from "lucide-react";
+import type { UserProfile, ExperienceItem, ProjectItem, EducationItem } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -38,6 +38,8 @@ import {
   DialogClose
 } from "@/components/ui/dialog";
 import { v4 as uuidv4 } from 'uuid';
+import * as pdfjsLib from 'pdfjs-dist';
+import mammoth from 'mammoth';
 
 const profileFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }).max(50).optional().nullable(),
@@ -51,10 +53,8 @@ const profileFormSchema = z.object({
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
-const ACCEPT_FILE_EXTENSIONS = ".txt,.md,.pdf,.doc,.docx"; // Now accepting all for server-side
-const MAX_FILE_SIZE_MB = 10; // Increased for server-side processing
-const LOCAL_STORAGE_RESUME_TEXT_KEY = 'tyaariResumeProcessedText';
-const LOCAL_STORAGE_RESUME_FILENAME_KEY = 'tyaariResumeFileName';
+const ACCEPT_FILE_EXTENSIONS = ".txt,.md,.pdf,.docx";
+const MAX_FILE_SIZE_MB = 5; 
 
 
 export default function ProfilePage() {
@@ -84,6 +84,20 @@ export default function ProfilePage() {
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
   });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && typeof pdfjsLib.GlobalWorkerOptions !== 'undefined') {
+      try {
+         // CRITICAL: Ensure public/pdf.worker.mjs exists
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `${window.location.origin}/pdf.worker.mjs`;
+        console.log("ProfilePage: Attempting to set pdf.js workerSrc to:", pdfjsLib.GlobalWorkerOptions.workerSrc, ". Ensure node_modules/pdfjs-dist/build/pdf.worker.mjs is copied to public/pdf.worker.mjs and server restarted.");
+      } catch (e) {
+        console.error("ProfilePage: Error setting pdfjsLib.GlobalWorkerOptions.workerSrc. pdf.js might not be loaded or an unexpected error occurred.", e);
+      }
+    } else {
+      console.warn("ProfilePage: pdfjsLib or GlobalWorkerOptions not available on window, skipping workerSrc setup. This might happen during SSR or if pdf.js isn't loaded.");
+    }
+  }, []);
   
   useEffect(() => {
     if (!initialLoading && !authLoading && user) {
@@ -105,15 +119,9 @@ export default function ProfilePage() {
         setProjects(userProfile.projects || []);
         setEducationHistory(userProfile.educationHistory || []);
         
-        const lsText = typeof window !== "undefined" ? localStorage.getItem(LOCAL_STORAGE_RESUME_TEXT_KEY) : null;
-        const lsFileName = typeof window !== "undefined" ? localStorage.getItem(LOCAL_STORAGE_RESUME_FILENAME_KEY) : null;
-
-        if (lsText && lsFileName) {
-            setClientSideResumeText(lsText);
-            setSelectedFileName(lsFileName);
-        } else if (userProfile.resumeRawText) { 
-            setClientSideResumeText(userProfile.resumeRawText);
-            setSelectedFileName("resume_from_profile.txt");
+        if (userProfile.resumeRawText) {
+          setClientSideResumeText(userProfile.resumeRawText);
+          setSelectedFileName(userProfile.resumeFileName || "resume_from_profile.txt"); 
         }
 
       } else { 
@@ -126,14 +134,6 @@ export default function ProfilePage() {
             company: "", 
             accomplishments:"" 
         });
-        if (typeof window !== "undefined") {
-            const lsText = localStorage.getItem(LOCAL_STORAGE_RESUME_TEXT_KEY);
-            const lsFileName = localStorage.getItem(LOCAL_STORAGE_RESUME_FILENAME_KEY);
-            if (lsText && lsFileName) {
-                setClientSideResumeText(lsText);
-                setSelectedFileName(lsFileName);
-            }
-        }
       }
       setIsFetchingProfile(false);
     } else if (!initialLoading && !authLoading && !user) { 
@@ -213,13 +213,9 @@ export default function ProfilePage() {
   const clearResumeDisplay = (showToast: boolean = false, toastMessage?: string) => {
     setSelectedFileName(null); 
     setClientSideResumeText(null);
-    if (typeof window !== "undefined") {
-      localStorage.removeItem(LOCAL_STORAGE_RESUME_TEXT_KEY);
-      localStorage.removeItem(LOCAL_STORAGE_RESUME_FILENAME_KEY);
-    }
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (showToast) {
-        toast({ title: "Resume Cleared", description: toastMessage || "Resume selection and local storage text removed." });
+        toast({ title: "Resume Cleared", description: toastMessage || "Resume selection removed." });
     }
   };
 
@@ -234,8 +230,8 @@ export default function ProfilePage() {
     
     setSelectedFileName(file.name);
     setIsProcessingFile(true);
-    setClientSideResumeText(null); 
-    toast({ title: "Processing Resume", description: `Uploading and analyzing ${file.name}... This may take a moment.` });
+    setClientSideResumeText(null);
+    toast({ title: "Processing Resume", description: `Extracting text from ${file.name}...` });
 
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
       toast({ title: "File Too Large", description: `Maximum file size is ${MAX_FILE_SIZE_MB}MB.`, variant: "destructive" });
@@ -244,51 +240,53 @@ export default function ProfilePage() {
       return;
     }
     
-    const formData = new FormData();
-    formData.append('resumeFile', file);
-
     try {
-      const response = await fetch('/api/process-resume-external', {
-        method: 'POST',
-        body: formData,
-      });
+      let rawText = "";
+      const arrayBuffer = await file.arrayBuffer();
 
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || `Server error: ${response.status}`);
-      }
-      
-      const extractedData = result.data as ExtractedResumeData;
-      console.log("ProfilePage: Received structured data from API:", extractedData);
-
-      // Populate form fields
-      if (extractedData.name) form.setValue('name', extractedData.name);
-      if (extractedData.email && !user?.email) form.setValue('email', extractedData.email); // Only if not set by auth provider
-      if (extractedData.phoneNumber && !user?.phoneNumber) form.setValue('phoneNumber', extractedData.phoneNumber);
-      if (extractedData.profileField) form.setValue('profileField', extractedData.profileField);
-      if (extractedData.role) form.setValue('role', extractedData.role);
-      if (extractedData.accomplishments) form.setValue('accomplishments', extractedData.accomplishments);
-
-      // Populate state arrays
-      if (extractedData.keySkills && extractedData.keySkills.length > 0) setKeySkills(extractedData.keySkills);
-      if (extractedData.experiences && extractedData.experiences.length > 0) setExperiences(extractedData.experiences);
-      if (extractedData.projects && extractedData.projects.length > 0) setProjects(extractedData.projects);
-      if (extractedData.educationHistory && extractedData.educationHistory.length > 0) setEducationHistory(extractedData.educationHistory);
-      
-      if (extractedData.rawText) {
-        setClientSideResumeText(extractedData.rawText);
-        if (typeof window !== "undefined") {
-          localStorage.setItem(LOCAL_STORAGE_RESUME_TEXT_KEY, extractedData.rawText);
-          localStorage.setItem(LOCAL_STORAGE_RESUME_FILENAME_KEY, file.name);
+      if (file.name.toLowerCase().endsWith('.pdf')) {
+        console.log("ProfilePage: CLIENT_SIDE_PARSE - Attempting PDF processing. Worker path:", pdfjsLib.GlobalWorkerOptions.workerSrc);
+        if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+            console.error("ProfilePage: pdf.js workerSrc is not set. PDF processing will likely fail. Ensure public/pdf.worker.mjs exists and the path is correctly set.");
+            toast({ title: "PDF Worker Error", description: "PDF.js worker not configured. Please ensure 'public/pdf.worker.mjs' is in place and refresh. Copy from 'node_modules/pdfjs-dist/build/pdf.worker.mjs'.", variant: "destructive", duration: 10000 });
+            throw new Error("PDF.js workerSrc not configured.");
         }
+        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+        const pdf = await loadingTask.promise;
+        let textContent = "";
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const text = await page.getTextContent();
+          textContent += text.items.map((s: any) => s.str).join(" ") + "\\n";
+        }
+        rawText = textContent;
+      } else if (file.name.toLowerCase().endsWith('.docx')) {
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        rawText = result.value;
+      } else if (file.name.toLowerCase().endsWith('.txt') || file.name.toLowerCase().endsWith('.md')) {
+        rawText = new TextDecoder().decode(arrayBuffer);
+      } else {
+        toast({ title: "Unsupported File Type", description: `Cannot extract text from ${file.name}. Supported: PDF, DOCX, TXT, MD.`, variant: "destructive" });
+        clearResumeDisplay(true, "Previous resume data (if any) cleared due to unsupported file type.");
+        setIsProcessingFile(false);
+        return;
       }
-      toast({ title: "Resume Processed & Profile Updated", description: `Data from ${file.name} has populated relevant fields. Review and save.` });
+      
+      setClientSideResumeText(rawText);
+      toast({ title: "Resume Text Extracted", description: `Text from ${file.name} is ready. Remember to save profile changes.` });
 
     } catch (error: any) {
-      console.error("ProfilePage: Error processing file via API:", error);
-      toast({ title: "Resume Processing Error", description: error.message || "Could not process resume.", variant: "destructive", duration: 7000 });
-      clearResumeDisplay(true, "Previous resume data (if any) cleared due to an error processing the new file.");
+      console.error("ProfilePage: Error processing file client-side:", error);
+      let userMessage = "Could not extract text from the resume.";
+      if (error.message && error.message.includes("workerSrc")) {
+        userMessage = "PDF processing setup error. Ensure 'public/pdf.worker.mjs' is in place. Check console for details. Previous resume data kept if any.";
+         // Don't clear resume if it's a PDF worker issue
+        setSelectedFileName(null); // Clear selection for the new file
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      } else {
+        clearResumeDisplay(true, "Previous resume data (if any) cleared due to an error processing the new file.");
+      }
+      toast({ title: "Resume Processing Error", description: userMessage, variant: "destructive", duration: 7000 });
     } finally {
       setIsProcessingFile(false);
     }
@@ -320,7 +318,8 @@ export default function ProfilePage() {
         projects: projects || [],
         educationHistory: educationHistory || [],
         accomplishments: values.accomplishments || null,
-        resumeRawText: clientSideResumeText !== null ? clientSideResumeText : (userProfile?.resumeRawText || null),
+        resumeRawText: clientSideResumeText, // Save the extracted raw text
+        resumeFileName: selectedFileName, // Save the file name too
         createdAt: userProfile?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         interviewsTaken: userProfile?.interviewsTaken || 0,
@@ -407,71 +406,80 @@ export default function ProfilePage() {
 
           <Card className="shadow-md">
             <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-xl"><FileText className="h-6 w-6 text-primary" /> Upload & Process Resume</CardTitle>
+                <CardTitle className="flex items-center gap-2 text-xl"><UploadCloud className="h-6 w-6 text-primary" /> Upload Resume Text</CardTitle>
                 <CardDescription>
-                    Upload any resume file (PDF, DOCX, TXT, etc.). It will be sent for server-side processing to extract raw text and auto-fill profile sections.
+                    Upload a resume (PDF, DOCX, TXT, MD). Text will be extracted client-side and saved to your profile.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center gap-2">
                 <FormControl>
-                  <Input type="file" ref={fileInputRef} accept="*" onChange={handleFileChange} className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20" disabled={isProcessingFile || isSubmitting}/>
+                  <Input type="file" ref={fileInputRef} accept={ACCEPT_FILE_EXTENSIONS} onChange={handleFileChange} className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20" disabled={isProcessingFile || isSubmitting}/>
                 </FormControl>
                 {isProcessingFile && <Loader2 className="h-5 w-5 animate-spin" />}
               </div>
               <Alert variant="default" className="border-blue-500/50 text-blue-700 dark:text-blue-300 dark:border-blue-400/50">
-                <Brain className="h-4 w-4 !text-blue-500 dark:!text-blue-400" />
-                <AlertTitle className="text-blue-700 dark:text-blue-300">Server-Side AI Processing</AlertTitle>
+                <Info className="h-4 w-4 !text-blue-500 dark:!text-blue-400" />
+                <AlertTitle className="text-blue-700 dark:text-blue-300">Client-Side Text Extraction</AlertTitle>
                 <AlertDescription className="text-blue-600 dark:text-blue-200">
-                  Your resume will be securely uploaded and processed on our server to extract information and auto-populate relevant fields below. Max: {MAX_FILE_SIZE_MB}MB.
-                  This step uses AI and may take a few moments.
+                  Raw text will be extracted directly in your browser. For PDF, ensure you have copied `pdf.worker.mjs` to your `public` folder.
+                  Max file size: {MAX_FILE_SIZE_MB}MB.
                 </AlertDescription>
               </Alert>
-              {selectedFileName && (<div className="mt-2 text-sm text-muted-foreground flex items-center justify-between p-2 border rounded-md bg-secondary/50"><div className="flex items-center gap-2 overflow-hidden"><FileText className="h-4 w-4 text-primary shrink-0" /><span className="truncate" title={selectedFileName}>{selectedFileName}</span> ({clientSideResumeText ? `${Math.round(clientSideResumeText.length / 1024)} KB text` : 'Processing...'})</div><div className="flex items-center gap-1 shrink-0"><Button type="button" variant="ghost" size="icon" onClick={() => clearResumeDisplay(true, "Resume selection removed. Extracted data (if any) will be cleared on next save unless a new resume is processed.")} title="Clear resume selection" aria-label="Clear resume" disabled={isSubmitting || isProcessingFile}><XCircle className="h-4 w-4 text-destructive" /></Button></div></div>)}
+              {selectedFileName && (<div className="mt-2 text-sm text-muted-foreground flex items-center justify-between p-2 border rounded-md bg-secondary/50"><div className="flex items-center gap-2 overflow-hidden"><FileText className="h-4 w-4 text-primary shrink-0" /><span className="truncate" title={selectedFileName}>{selectedFileName}</span> ({clientSideResumeText ? `${Math.round(clientSideResumeText.length / 1024)} KB text` : 'Processing...'})</div><div className="flex items-center gap-1 shrink-0"><Button type="button" variant="ghost" size="icon" onClick={() => clearResumeDisplay(true, "Resume selection and extracted text cleared. Save profile to update in database.")} title="Clear resume selection" aria-label="Clear resume" disabled={isSubmitting || isProcessingFile}><XCircle className="h-4 w-4 text-destructive" /></Button></div></div>)}
+               {clientSideResumeText && (
+                <Textarea
+                    value={clientSideResumeText}
+                    readOnly
+                    rows={5}
+                    className="mt-2 text-xs bg-muted/30"
+                    placeholder="Extracted resume text will appear here..."
+                />
+              )}
             </CardContent>
           </Card>
 
           <Card className="shadow-md">
-            <CardHeader><CardTitle className="flex items-center gap-2 text-xl"><Lightbulb className="h-6 w-6 text-primary" /> Key Skills</CardTitle><CardDescription>Highlight your top professional skills. These may be auto-populated from your resume.</CardDescription></CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2 text-xl"><Lightbulb className="h-6 w-6 text-primary" /> Key Skills</CardTitle><CardDescription>Highlight your top professional skills.</CardDescription></CardHeader>
             <CardContent className="space-y-4">
               <div className="flex gap-2 items-center">
                 <Input placeholder="e.g., React, Python, Project Management" value={currentSkill} onChange={(e) => setCurrentSkill(e.target.value)} className="flex-grow" onKeyDown={(e) => {if(e.key === 'Enter'){ e.preventDefault(); handleAddSkill();}}} />
                 <Button type="button" onClick={handleAddSkill} variant="outline" size="icon" aria-label="Add Skill"><PlusCircle className="h-5 w-5" /></Button>
               </div>
               {keySkills.length > 0 && (<div className="flex flex-wrap gap-2 pt-2">{keySkills.map(skill => (<Badge key={skill} variant="secondary" className="text-sm py-1 px-3 rounded-md shadow-sm">{skill}<button type="button" onClick={() => handleRemoveSkill(skill)} className="ml-2 text-muted-foreground hover:text-destructive" aria-label={`Remove skill ${skill}`}><XCircle className="h-4 w-4" /></button></Badge>))}</div>)}
-              {keySkills.length === 0 && <p className="text-sm text-muted-foreground">No skills added or extracted yet.</p>}
+              {keySkills.length === 0 && <p className="text-sm text-muted-foreground">No skills added yet.</p>}
             </CardContent>
           </Card>
           
           <Card className="shadow-md">
-            <CardHeader><CardTitle className="flex items-center gap-2 text-xl"><Briefcase className="h-6 w-6 text-primary" /> Work Experience</CardTitle><CardDescription>Detail your professional journey. This may be auto-populated from your resume.</CardDescription></CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2 text-xl"><Briefcase className="h-6 w-6 text-primary" /> Work Experience</CardTitle><CardDescription>Detail your professional journey. (Manually entered)</CardDescription></CardHeader>
             <CardContent className="space-y-4">
-              {experiences.length === 0 && <p className="text-sm text-muted-foreground">No work experience added or extracted yet.</p>}
+              {experiences.length === 0 && <p className="text-sm text-muted-foreground">No work experience added yet.</p>}
               {experiences.map((exp) => (<Card key={exp.id} className="bg-muted/30 p-4 shadow-sm rounded-md"><CardHeader className="p-0 pb-2 flex flex-row justify-between items-start"><div><CardTitle className="text-md font-semibold">{exp.jobTitle} at {exp.companyName}</CardTitle><CardDescription className="text-xs">{exp.startDate || 'N/A'} - {exp.endDate || 'Present'}</CardDescription></div><div className="flex gap-1 shrink-0"><Button type="button" variant="ghost" size="icon" onClick={() => openModal('experience', exp)} aria-label={`Edit experience ${exp.jobTitle}`}><Edit3 className="h-4 w-4 text-muted-foreground hover:text-primary" /></Button><Button type="button" variant="ghost" size="icon" onClick={() => handleDeleteItem('experience', exp.id)} aria-label={`Delete experience ${exp.jobTitle}`}><Trash2 className="h-4 w-4 text-destructive hover:text-destructive/80" /></Button></div></CardHeader><CardContent className="p-0 text-sm text-muted-foreground"><p className="whitespace-pre-wrap">{exp.description || "No description provided."}</p></CardContent></Card>))}
               <Button type="button" variant="outline" className="w-full mt-2 border-dashed hover:border-primary hover:text-primary" onClick={() => openModal('experience')}><PlusCircle className="mr-2 h-4 w-4" /> Add Experience Manually</Button>
             </CardContent>
           </Card>
 
           <Card className="shadow-md">
-            <CardHeader><CardTitle className="flex items-center gap-2 text-xl"><Lightbulb className="h-6 w-6 text-primary" /> Projects</CardTitle><CardDescription>Showcase your personal or professional projects. This may be auto-populated from your resume.</CardDescription></CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2 text-xl"><Lightbulb className="h-6 w-6 text-primary" /> Projects</CardTitle><CardDescription>Showcase your personal or professional projects. (Manually entered)</CardDescription></CardHeader>
             <CardContent className="space-y-4">
-              {projects.length === 0 && <p className="text-sm text-muted-foreground">No projects added or extracted yet.</p>}
+              {projects.length === 0 && <p className="text-sm text-muted-foreground">No projects added yet.</p>}
               {projects.map((proj) => (<Card key={proj.id} className="bg-muted/30 p-4 shadow-sm rounded-md"><CardHeader className="p-0 pb-2 flex flex-row justify-between items-start"><div><CardTitle className="text-md font-semibold">{proj.title}</CardTitle></div><div className="flex gap-1 shrink-0"><Button type="button" variant="ghost" size="icon" onClick={() => openModal('project', proj)} aria-label={`Edit project ${proj.title}`}><Edit3 className="h-4 w-4 text-muted-foreground hover:text-primary" /></Button><Button type="button" variant="ghost" size="icon" onClick={() => handleDeleteItem('project', proj.id)} aria-label={`Delete project ${proj.title}`}><Trash2 className="h-4 w-4 text-destructive hover:text-destructive/80" /></Button></div></CardHeader><CardContent className="p-0 text-sm text-muted-foreground"><p className="whitespace-pre-wrap">{proj.description}</p>{proj.technologiesUsed && proj.technologiesUsed.length > 0 && <p className="mt-1 text-xs">Tech: {proj.technologiesUsed.join(', ')}</p>}{proj.projectUrl && <a href={proj.projectUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs block mt-1 break-all">View Project</a>}</CardContent></Card>))}
               <Button type="button" variant="outline" className="w-full mt-2 border-dashed hover:border-primary hover:text-primary" onClick={() => openModal('project')}><PlusCircle className="mr-2 h-4 w-4" /> Add Project Manually</Button>
             </CardContent>
           </Card>
 
           <Card className="shadow-md">
-            <CardHeader><CardTitle className="flex items-center gap-2 text-xl"><GraduationCap className="h-6 w-6 text-primary" /> Education History</CardTitle><CardDescription>List your educational qualifications. This may be auto-populated from your resume.</CardDescription></CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2 text-xl"><GraduationCap className="h-6 w-6 text-primary" /> Education History</CardTitle><CardDescription>List your educational qualifications. (Manually entered)</CardDescription></CardHeader>
             <CardContent className="space-y-4">
-              {educationHistory.length === 0 && <p className="text-sm text-muted-foreground">No education history added or extracted yet.</p>}
+              {educationHistory.length === 0 && <p className="text-sm text-muted-foreground">No education history added yet.</p>}
               {educationHistory.map((edu) => (<Card key={edu.id} className="bg-muted/30 p-4 shadow-sm rounded-md"><CardHeader className="p-0 pb-2 flex flex-row justify-between items-start"><div><CardTitle className="text-md font-semibold">{edu.degree} from {edu.institution}</CardTitle><CardDescription className="text-xs">Completed: {edu.yearOfCompletion}</CardDescription></div><div className="flex gap-1 shrink-0"><Button type="button" variant="ghost" size="icon" onClick={() => openModal('education', edu)} aria-label={`Edit education ${edu.degree}`}><Edit3 className="h-4 w-4 text-muted-foreground hover:text-primary" /></Button><Button type="button" variant="ghost" size="icon" onClick={() => handleDeleteItem('education', edu.id)} aria-label={`Delete education ${edu.degree}`}><Trash2 className="h-4 w-4 text-destructive hover:text-destructive/80" /></Button></div></CardHeader><CardContent className="p-0 text-sm text-muted-foreground"><p className="whitespace-pre-wrap">{edu.details || "No additional details."}</p></CardContent></Card>))}
               <Button type="button" variant="outline" className="w-full mt-2 border-dashed hover:border-primary hover:text-primary" onClick={() => openModal('education')}><PlusCircle className="mr-2 h-4 w-4" /> Add Education</Button>
             </CardContent>
           </Card>
 
           <Card className="shadow-md">
-             <CardHeader><CardTitle className="flex items-center gap-2 text-xl"><Trophy className="h-6 w-6 text-primary" /> Accomplishments</CardTitle><CardDescription>Share your significant achievements, awards, or recognitions (optional). This may be auto-populated.</CardDescription></CardHeader>
+             <CardHeader><CardTitle className="flex items-center gap-2 text-xl"><Trophy className="h-6 w-6 text-primary" /> Accomplishments</CardTitle><CardDescription>Share your significant achievements, awards, or recognitions (optional).</CardDescription></CardHeader>
             <CardContent><FormField control={form.control} name="accomplishments" render={({ field }) => (<FormItem><ShadcnFormLabel>Accomplishments</ShadcnFormLabel><FormControl><Textarea placeholder="e.g., 'Led a team to successfully launch Product X...' or 'Published research paper Y...'" {...field} value={field.value ?? ""} rows={5} /></FormControl><FormMessage /></FormItem>)} /></CardContent>
           </Card>
 

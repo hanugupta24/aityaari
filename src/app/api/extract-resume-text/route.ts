@@ -1,17 +1,30 @@
 
 // src/app/api/extract-resume-text/route.ts
 import { NextResponse } from 'next/server';
-// This API route is not actively used for client-side resume processing in the current reverted flow.
-// It's kept as a placeholder or for potential future server-side utilities.
 
 export async function POST(request: Request) {
-  console.log("API_ROUTE_PROCESS_RESUME: Received request, but this route is not actively used for profile page uploads in the current simple flow.");
+  console.log("API_ROUTE_PROCESS_RESUME: Received request.");
+  // This route is not actively used for the primary resume upload flow from the profile page
+  // in the current reverted client-side extraction model.
+  // It's kept as a placeholder or for potential future server-side utilities
+  // that might not involve AI structuring.
   
   return NextResponse.json({ 
     success: false, 
-    message: 'This API route is not used for client-side resume text extraction. Processing happens directly in the browser.',
+    message: 'This API route is not the primary handler for resume uploads from the profile page in the current client-side processing model. Raw text extraction and AI structuring (if any) are handled differently now.',
     rawText: null,
-    experiences: [],
+    // Ensure the structure matches what the profile page *might* expect if it accidentally called this old route,
+    // to prevent hard crashes, even though it shouldn't be calling it for the main flow.
+    experiences: [], 
     projects: [],
-  }, { status: 404 }); // Not Found, as it's not serving the intended client-side purpose
+    name: null,
+    email: null,
+    phoneNumber: null,
+    profileField: null,
+    role: null,
+    keySkills: [],
+    educationHistory: [],
+    accomplishments: null,
+
+  }, { status: 404 }); // Not Found, as it's not serving an active purpose in this reverted flow.
 }

@@ -20,7 +20,6 @@ import { db } from "@/lib/firebase";
 import Link from "next/link";
 
 const FREE_INTERVIEW_LIMIT = 3;
-const LOCAL_STORAGE_RESUME_TEXT_KEY = 'tyaariResumeProcessedText';
 
 export default function StartInterviewPage() {
   const { user, userProfile, loading: authLoading, initialLoading: authInitialLoading, refreshUserProfile } = useAuth();
@@ -55,9 +54,8 @@ export default function StartInterviewPage() {
     toast({ title: "Preparing Interview", description: "Generating questions, please wait..." });
 
     try {
-      // Prioritize resume text from localStorage, then from Firestore profile
-      const resumeTextFromLocalStorage = typeof window !== "undefined" ? localStorage.getItem(LOCAL_STORAGE_RESUME_TEXT_KEY) : null;
-      const resumeTextForAI = resumeTextFromLocalStorage || userProfile.resumeRawText || undefined;
+      // Primarily use resume text from Firestore profile
+      const resumeTextForAI = userProfile.resumeRawText || undefined;
 
       const questionGenInput: GenerateInterviewQuestionsInput = {
         profileField: userProfile.profileField,
@@ -210,7 +208,7 @@ export default function StartInterviewPage() {
             <AlertTitle>Personalized Questions</AlertTitle>
             <AlertDescription>
               Interview questions will be based on your targeted role and profile field.
-              Your uploaded resume text (from .txt/.md/.pdf/.docx files, saved in browser storage), structured experiences, projects, skills (all from your saved profile),
+              Your uploaded resume text (from your saved profile), structured experiences, projects, skills,
               and a job description below can further tailor questions.
             </AlertDescription>
           </Alert>
