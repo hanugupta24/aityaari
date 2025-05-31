@@ -38,10 +38,7 @@ export interface UserProfile {
   projects?: ProjectItem[];
   educationHistory?: EducationItem[];
   accomplishments?: string | null;
-
-  // resumeFileName, resumeFileUrl, resumeStoragePath, resumeProcessedText are NOT part of the UserProfile document in Firestore
-  // resumeProcessedText is handled by localStorage for AI use during interview start
-  // resumeFileName is only for display purposes locally on the profile page
+  resumeRawText?: string | null; // Added to store extracted resume text
 
   createdAt: string;
   interviewsTaken?: number;
@@ -64,7 +61,7 @@ export interface InterviewSession {
   endedReason?: "completed_by_user" | "time_up" | "prolonged_face_absence" | "all_questions_answered" | "tab_switch_limit" | "face_not_detected_limit";
   proctoringIssues?: {
     tabSwitch: number;
-    faceNotDetected_short: number; // Renamed from faceNotDetected to be more specific
+    faceNotDetected_short: number; 
     task_inactivity: number; 
     distraction: number; 
   };
@@ -75,7 +72,7 @@ export interface GeneratedQuestion {
   id: string;
   text: string;
   stage: "oral" | "technical_written";
-  type: "behavioral" | "technical" | "coding" | "conversational" | "resume_based" | "jd_based" | "profile_based";
+  type: "behavioral" | "technical" | "coding" | "conversational" | "resume_based" | "jd_based" | "profile_based" | "structured_exp_based" | "structured_proj_based";
   answer?: string;
 }
 

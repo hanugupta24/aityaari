@@ -38,6 +38,8 @@ import {
   DialogClose
 } from "@/components/ui/dialog";
 import { v4 as uuidv4 } from 'uuid';
+import mammoth from 'mammoth';
+import * as pdfjsLib from 'pdfjs-dist';
 
 // Zod schema for the main form fields
 const profileFormSchema = z.object({
@@ -53,12 +55,9 @@ const profileFormSchema = z.object({
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
 const CLIENT_SIDE_PROCESSING_MIME_TYPES = ['text/plain', 'text/markdown'];
-const SERVER_SIDE_PDF_MIME_TYPE = 'application/pdf';
-const SERVER_SIDE_DOCX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-
 const ACCEPT_FILE_EXTENSIONS = ".txt,.md,.pdf,.doc,.docx"; 
 const MAX_FILE_SIZE_MB = 5;
-const LOCAL_STORAGE_RESUME_TEXT_KEY = 'tyaariResumeProcessedText';
+const LOCAL_STORAGE_RESUME_TEXT_KEY = 'tyaariResumeProcessedText'; // Still used for immediate UI update
 const LOCAL_STORAGE_RESUME_FILENAME_KEY = 'tyaariResumeFileName';
 
 
@@ -94,6 +93,22 @@ export default function ProfilePage() {
       name: "", email: "", profileField: "", role: "", company: "", phoneNumber: "", accomplishments: ""
     },
   });
+  
+  // Effect to configure pdf.js worker on component mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // IMPORTANT: For this to work, you must copy 
+      // `node_modules/pdfjs-dist/build/pdf.worker.mjs` (or .min.js) 
+      // to your `public/` directory (e.g., `public/pdf.worker.mjs`).
+      try {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs'; 
+        console.log("ProfilePage: pdf.js workerSrc configured to /pdf.worker.mjs");
+      } catch (e) {
+        console.error("ProfilePage: Error trying to access pdfjsLib.GlobalWorkerOptions.workerSrc. This can happen during SSR or if pdfjsLib is not loaded.", e);
+      }
+    }
+  }, []);
+
 
   useEffect(() => {
     if (!initialLoading && !authLoading && user) {
@@ -114,6 +129,7 @@ export default function ProfilePage() {
         setExperiences(userProfile.experiences || []);
         setProjects(userProfile.projects || []);
         setEducationHistory(userProfile.educationHistory || []);
+        setClientSideResumeText(userProfile.resumeRawText || null); // Load from Firestore
       } else {
         form.reset({ 
             name: user.displayName || "", 
@@ -125,6 +141,11 @@ export default function ProfilePage() {
             accomplishments:"" 
         });
       }
+      // Load filename from localStorage if resume text came from Firestore
+      if (userProfile?.resumeRawText && typeof window !== "undefined") {
+        const storedFileName = localStorage.getItem(LOCAL_STORAGE_RESUME_FILENAME_KEY);
+        if (storedFileName) setSelectedFileName(storedFileName);
+      }
       setIsFetchingProfile(false);
     } else if (!initialLoading && !authLoading && !user) {
       setIsFetchingProfile(false);
@@ -132,14 +153,13 @@ export default function ProfilePage() {
     }
   }, [user, userProfile, form, authLoading, initialLoading]);
 
+  // Load filename from localStorage if it exists (primarily for display after manual upload)
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const storedResumeText = localStorage.getItem(LOCAL_STORAGE_RESUME_TEXT_KEY);
-      const storedFileName = localStorage.getItem(LOCAL_STORAGE_RESUME_FILENAME_KEY); 
-      if (storedResumeText) setClientSideResumeText(storedResumeText);
+    if (typeof window !== "undefined" && !userProfile?.resumeRawText) { // Only if not already loaded from DB
+      const storedFileName = localStorage.getItem(LOCAL_STORAGE_RESUME_FILENAME_KEY);
       if (storedFileName) setSelectedFileName(storedFileName);
     }
-  }, []);
+  }, [userProfile?.resumeRawText]);
 
 
   const handleAddSkill = () => {
@@ -159,7 +179,6 @@ export default function ProfilePage() {
       setEditingItem(itemToEdit);
       setCurrentItemData(itemToEdit);
     } else {
-      setEditingItem(null);
       if (type === "experience") setCurrentItemData({ id: uuidv4(), jobTitle: '', companyName: '', startDate: '', endDate: '', description: '' });
       else if (type === "project") setCurrentItemData({ id: uuidv4(), title: '', description: '', technologiesUsed: [], projectUrl: '' });
       else if (type === "education") setCurrentItemData({ id: uuidv4(), degree: '', institution: '', yearOfCompletion: '', details: '' });
@@ -220,27 +239,22 @@ export default function ProfilePage() {
     }
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (showToast) {
-        toast({ title: "Resume Cleared", description: "Resume selection removed." });
+        toast({ title: "Resume Cleared", description: "Resume selection removed. Save profile to clear from database." });
     }
   };
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    const prevSelectedFile = selectedFile;
-    const prevFileName = selectedFileName;
-    const prevResumeText = clientSideResumeText;
-
     if (fileInputRef.current) fileInputRef.current.value = ""; 
 
     if (!file) {
-      setSelectedFile(null); 
-      return;
+      setSelectedFile(null); return;
     }
 
     setIsProcessingFile(true);
     setSelectedFile(file); 
     setSelectedFileName(file.name); 
-    setClientSideResumeText("");   
+    setClientSideResumeText(""); // Reset any previous text
 
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
       toast({ title: "File Too Large", description: `Maximum file size is ${MAX_FILE_SIZE_MB}MB.`, variant: "destructive" });
@@ -250,120 +264,64 @@ export default function ProfilePage() {
     }
     
     const isClientProcessable = CLIENT_SIDE_PROCESSING_MIME_TYPES.includes(file.type) || file.name.toLowerCase().endsWith('.txt') || file.name.toLowerCase().endsWith('.md');
+    let extractedText: string | null = null;
 
-    if (isClientProcessable) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const text = e.target?.result as string;
-        if (text && text.trim().length > 0) {
-          setClientSideResumeText(text);
-          setSelectedFileName(file.name);
-          if (typeof window !== "undefined") {
-            localStorage.setItem(LOCAL_STORAGE_RESUME_TEXT_KEY, text);
-            localStorage.setItem(LOCAL_STORAGE_RESUME_FILENAME_KEY, file.name);
-          }
-          toast({ title: "Resume Text Loaded (Client-side)", description: `Text extracted from ${file.name}. This will be used for AI question generation if AI-structured extraction fails.` });
-        } else {
-          toast({ title: "Text Extraction Failed", description: "No text could be extracted from the uploaded file. Please try a different file or format.", variant: "destructive" });
-          clearResume(true);
+    try {
+      if (isClientProcessable) {
+        extractedText = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target?.result as string);
+          reader.onerror = (e) => reject(reader.error || new Error("FileReadError"));
+          reader.readAsText(file);
+        });
+      } else if (file.type === 'application/pdf') {
+        const arrayBuffer = await file.arrayBuffer();
+        const typedArray = new Uint8Array(arrayBuffer);
+        // Worker should be configured by useEffect once pdfjsLib is loaded
+        if (!pdfjsLib.GlobalWorkerOptions.workerSrc && typeof window !== 'undefined') {
+            console.warn("ProfilePage: pdf.js workerSrc not set, attempting to set to default /pdf.worker.mjs for client-side PDF processing.");
+            pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs';
         }
+        const pdfDoc = await pdfjsLib.getDocument({ data: typedArray }).promise;
+        let textContentAcc = '';
+        for (let i = 1; i <= pdfDoc.numPages; i++) {
+          const page = await pdfDoc.getPage(i);
+          const pageTextContent = await page.getTextContent();
+          pageTextContent.items.forEach((item: any) => {
+            textContentAcc += item.str + (item.hasEOL ? '\n' : ' ');
+          });
+          textContentAcc += '\n';
+        }
+        extractedText = textContentAcc.trim();
+      } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || file.name.toLowerCase().endsWith('.docx')) {
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        extractedText = result.value;
+      } else {
+        toast({ title: "Unsupported File Type", description: `Cannot process ${file.type}. Please upload PDF, DOCX, TXT, or MD.`, variant: "destructive" });
+        clearResume();
         setIsProcessingFile(false);
-      };
-      reader.onerror = () => {
-        toast({ title: "File Read Error", description: "Could not read plain text resume.", variant: "destructive" });
-        clearResume(true);
-        setIsProcessingFile(false);
-      };
-      reader.readAsText(file);
-    } else { 
-      const formData = new FormData();
-      formData.append("file", file);
-      try {
-        const response = await fetch("/api/extract-resume-text", { method: "POST", body: formData });
-        const responseBodyText = await response.text(); // Read body as text ONCE
-
-        let data;
-        let errorMessageFromServer = `Server responded with ${response.status}: ${response.statusText}.`;
-
-        if (!response.ok) {
-            try {
-                data = JSON.parse(responseBodyText); // Try to parse as JSON first
-                if (data && data.message) {
-                    errorMessageFromServer = data.message;
-                } else if (responseBodyText.trim().toLowerCase().startsWith('<!doctype html') || responseBodyText.trim().toLowerCase().startsWith('<html>')) {
-                    errorMessageFromServer = `Server returned an HTML error page (Status: ${response.status}). Please check server logs for details.`;
-                } else {
-                    errorMessageFromServer = responseBodyText.length > 200 ? responseBodyText.substring(0, 200) + "..." : responseBodyText;
-                }
-            } catch (parseError) { 
-                if (responseBodyText.trim().toLowerCase().startsWith('<!doctype html') || responseBodyText.trim().toLowerCase().startsWith('<html>')) {
-                   errorMessageFromServer = `Server returned an HTML error page (Status: ${response.status}). Please check server logs for details.`;
-                } else {
-                   errorMessageFromServer = `Server error (Status: ${response.status}). Response: ${responseBodyText.substring(0,200)}...`;
-                }
-            }
-            clearResume(true); 
-            setSelectedFile(prevSelectedFile); 
-            setSelectedFileName(prevFileName);
-            setClientSideResumeText(prevResumeText);
-            throw new Error(errorMessageFromServer);
-        }
-
-        try {
-            data = JSON.parse(responseBodyText);
-        } catch (jsonParseError) {
-            clearResume(true);
-            setSelectedFile(prevSelectedFile); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText);
-            throw new Error("Failed to parse server response as JSON. Response was: " + responseBodyText.substring(0, 200) + "...");
-        }
-        
-
-        if (!data.success) {
-            clearResume(true); 
-            setSelectedFile(prevSelectedFile); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText);
-            throw new Error(data.message || "Server reported an error during resume processing.");
-        }
-        
-        if (data.rawText === undefined || data.rawText === null || data.rawText.trim() === "") {
-            clearResume(true);
-            setSelectedFile(prevSelectedFile); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText);
-            toast({ title: "Text Extraction Failed", description: `No text could be extracted from ${data.fileName || file.name}. Try another file or format.`, variant: "destructive" });
-            setIsProcessingFile(false);
-            return;
-        }
-
-        setClientSideResumeText(data.rawText);
-        setSelectedFileName(data.fileName || file.name); 
-        if (typeof window !== "undefined") {
-          localStorage.setItem(LOCAL_STORAGE_RESUME_TEXT_KEY, data.rawText);
-          localStorage.setItem(LOCAL_STORAGE_RESUME_FILENAME_KEY, data.fileName || file.name);
-        }
-        toast({ title: "Resume Processed by Server", description: `Raw text extracted from ${data.fileName || file.name}.` });
-
-        if (data.extractedSections && (data.extractedSections.experiences?.length > 0 || data.extractedSections.projects?.length > 0)) {
-            setExperiences(data.extractedSections.experiences || []);
-            setProjects(data.extractedSections.projects || []);
-            toast({
-                title: "Resume Sections Auto-Populated!",
-                description: "Experience and Project sections have been updated from your resume. Review and save your profile.",
-                duration: 7000,
-                variant: "default",
-                className: "bg-green-100 dark:bg-green-900 border-green-500",
-            });
-        } else if (data.structuredExtractionError) {
-             toast({ title: "Structured Data Note", description: `AI could not fully structure all sections: ${data.structuredExtractionError}. Raw text is still available.`, variant: "default" });
-        } else {
-            toast({ title: "Structured Data Note", description: "AI did not find distinct Experience or Project sections to auto-populate. Raw text is available.", variant: "default" });
-        }
-
-      } catch (error: any) {
-        console.error("Error processing resume:", error);
-        toast({ title: "Resume Processing Error", description: error.message || "Could not extract text from file.", variant: "destructive" });
-        clearResume(true); 
-        setSelectedFile(prevSelectedFile); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText);
-      } finally {
-        setIsProcessingFile(false);
+        return;
       }
+
+      if (extractedText && extractedText.trim().length > 0) {
+        setClientSideResumeText(extractedText);
+        setSelectedFileName(file.name); // Ensure filename is set here too
+        if (typeof window !== "undefined") {
+          localStorage.setItem(LOCAL_STORAGE_RESUME_TEXT_KEY, extractedText);
+          localStorage.setItem(LOCAL_STORAGE_RESUME_FILENAME_KEY, file.name);
+        }
+        toast({ title: "Resume Text Extracted (Client-side)", description: `Text extracted from ${file.name}. Save profile to store it.` });
+      } else {
+        toast({ title: "Text Extraction Failed", description: `No text could be extracted from ${file.name}.`, variant: "destructive" });
+        clearResume(true);
+      }
+    } catch (error: any) {
+      console.error("Error processing resume client-side:", error);
+      toast({ title: "Resume Processing Error", description: `Client-side error: ${error.message || "Could not extract text."}`, variant: "destructive" });
+      clearResume(true);
+    } finally {
+      setIsProcessingFile(false);
     }
   };
 
@@ -393,6 +351,7 @@ export default function ProfilePage() {
         projects: projects || [],
         educationHistory: educationHistory || [],
         accomplishments: values.accomplishments || null,
+        resumeRawText: clientSideResumeText || null, // Save extracted text
         createdAt: userProfile?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         interviewsTaken: userProfile?.interviewsTaken || 0,
@@ -490,18 +449,18 @@ export default function ProfilePage() {
           </Card>
           
           <Card className="shadow-md">
-            <CardHeader><CardTitle className="flex items-center gap-2 text-xl"><Briefcase className="h-6 w-6 text-primary" /> Work Experience</CardTitle><CardDescription>Detail your professional journey. Uploading a resume may auto-populate this section. Changes are saved when you click 'Save All Profile Changes'.</CardDescription></CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2 text-xl"><Briefcase className="h-6 w-6 text-primary" /> Work Experience</CardTitle><CardDescription>Detail your professional journey. Changes are saved when you click 'Save All Profile Changes'.</CardDescription></CardHeader>
             <CardContent className="space-y-4">
-              {experiences.length === 0 && <p className="text-sm text-muted-foreground">No work experience added yet. You can add it manually or try uploading a resume.</p>}
+              {experiences.length === 0 && <p className="text-sm text-muted-foreground">No work experience added yet.</p>}
               {experiences.map((exp) => (<Card key={exp.id} className="bg-muted/30 p-4 shadow-sm rounded-md"><CardHeader className="p-0 pb-2 flex flex-row justify-between items-start"><div><CardTitle className="text-md font-semibold">{exp.jobTitle} at {exp.companyName}</CardTitle><CardDescription className="text-xs">{exp.startDate || 'N/A'} - {exp.endDate || 'Present'}</CardDescription></div><div className="flex gap-1 shrink-0"><Button type="button" variant="ghost" size="icon" onClick={() => openModal('experience', exp)} aria-label={`Edit experience ${exp.jobTitle}`}><Edit3 className="h-4 w-4 text-muted-foreground hover:text-primary" /></Button><Button type="button" variant="ghost" size="icon" onClick={() => handleDeleteItem('experience', exp.id)} aria-label={`Delete experience ${exp.jobTitle}`}><Trash2 className="h-4 w-4 text-destructive hover:text-destructive/80" /></Button></div></CardHeader><CardContent className="p-0 text-sm text-muted-foreground"><p className="whitespace-pre-wrap">{exp.description || "No description provided."}</p></CardContent></Card>))}
               <Button type="button" variant="outline" className="w-full mt-2 border-dashed hover:border-primary hover:text-primary" onClick={() => openModal('experience')}><PlusCircle className="mr-2 h-4 w-4" /> Add Experience Manually</Button>
             </CardContent>
           </Card>
 
           <Card className="shadow-md">
-            <CardHeader><CardTitle className="flex items-center gap-2 text-xl"><Sparkles className="h-6 w-6 text-primary" /> Projects</CardTitle><CardDescription>Showcase your personal or professional projects. Uploading a resume may auto-populate this. Changes are saved when you click 'Save All Profile Changes'.</CardDescription></CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2 text-xl"><Sparkles className="h-6 w-6 text-primary" /> Projects</CardTitle><CardDescription>Showcase your personal or professional projects. Changes are saved when you click 'Save All Profile Changes'.</CardDescription></CardHeader>
             <CardContent className="space-y-4">
-              {projects.length === 0 && <p className="text-sm text-muted-foreground">No projects added yet. You can add them manually or try uploading a resume.</p>}
+              {projects.length === 0 && <p className="text-sm text-muted-foreground">No projects added yet.</p>}
               {projects.map((proj) => (<Card key={proj.id} className="bg-muted/30 p-4 shadow-sm rounded-md"><CardHeader className="p-0 pb-2 flex flex-row justify-between items-start"><div><CardTitle className="text-md font-semibold">{proj.title}</CardTitle></div><div className="flex gap-1 shrink-0"><Button type="button" variant="ghost" size="icon" onClick={() => openModal('project', proj)} aria-label={`Edit project ${proj.title}`}><Edit3 className="h-4 w-4 text-muted-foreground hover:text-primary" /></Button><Button type="button" variant="ghost" size="icon" onClick={() => handleDeleteItem('project', proj.id)} aria-label={`Delete project ${proj.title}`}><Trash2 className="h-4 w-4 text-destructive hover:text-destructive/80" /></Button></div></CardHeader><CardContent className="p-0 text-sm text-muted-foreground"><p className="whitespace-pre-wrap">{proj.description}</p>{proj.technologiesUsed && proj.technologiesUsed.length > 0 && <p className="mt-1 text-xs">Tech: {proj.technologiesUsed.join(', ')}</p>}{proj.projectUrl && <a href={proj.projectUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs block mt-1 break-all">View Project</a>}</CardContent></Card>))}
               <Button type="button" variant="outline" className="w-full mt-2 border-dashed hover:border-primary hover:text-primary" onClick={() => openModal('project')}><PlusCircle className="mr-2 h-4 w-4" /> Add Project Manually</Button>
             </CardContent>
@@ -522,7 +481,17 @@ export default function ProfilePage() {
           </Card>
 
           <Card className="shadow-md">
-            <CardHeader><CardTitle className="flex items-center gap-2 text-xl"><FileText className="h-6 w-6 text-primary" /> Resume</CardTitle><CardDescription>Upload your resume. AI will extract raw text and attempt to populate Experience & Project sections. Raw text is stored in your browser. Ensure it's up-to-date before starting an interview.</CardDescription></CardHeader>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-xl"><FileText className="h-6 w-6 text-primary" /> Resume</CardTitle>
+                <CardDescription>
+                    Upload your resume. Text will be extracted client-side and saved to your profile in the database.
+                    Ensure it's up-to-date for interview question generation.
+                    <br />
+                    <span className="text-xs text-amber-600 dark:text-amber-400">
+                        Note: For client-side PDF processing, ensure `public/pdf.worker.mjs` exists (copied from `node_modules/pdfjs-dist/build/`).
+                    </span>
+                </CardDescription>
+            </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center gap-2">
                 <FormControl>
@@ -534,8 +503,7 @@ export default function ProfilePage() {
                 <Info className="h-4 w-4 !text-blue-500 dark:!text-blue-400" />
                 <AlertTitle className="text-blue-700 dark:text-blue-300">File Format Information</AlertTitle>
                 <AlertDescription className="text-blue-600 dark:text-blue-200">
-                  For best AI results, <strong>.txt or .md</strong> files are preferred for instant client-side processing.
-                  <strong>.pdf and .docx</strong> files are also supported (server-side processing).
+                  Supported formats: <strong>.txt, .md, .pdf, .docx</strong>.
                   Text extraction quality can vary. Max file size: {MAX_FILE_SIZE_MB}MB.
                 </AlertDescription>
               </Alert>
@@ -570,5 +538,3 @@ export default function ProfilePage() {
     </div>
   );
 }
-
-    

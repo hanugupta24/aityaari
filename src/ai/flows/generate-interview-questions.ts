@@ -48,11 +48,12 @@ const GenerateInterviewQuestionsInputSchema = z.object({
   interviewDuration: z.enum(['15', '30', '45']).describe('The selected interview duration in minutes.'),
   jobDescription: z.string().optional().describe('Optional: The targeted job description provided by the user for this specific interview. This should be the primary source for questions if available.'),
   
-  // Structured data (NEW HIGHER PRIORITY than raw resume text if JD is absent)
   experiences: z.array(ExperienceItemInputSchema).optional().describe("Optional: Structured list of work experiences from the user's profile. Prioritized over raw resume text if no JD."),
   projects: z.array(ProjectItemInputSchema).optional().describe("Optional: Structured list of projects from the user's profile. Prioritized over raw resume text if no JD."),
   
-  resumeProcessedText: z.string().optional().describe('Optional: The client-side processed text content of the candidate\'s resume. Use this if structured experiences/projects are not available and no JD is provided.'),
+  resumeRawText: z.string().optional().describe('Optional: The raw text content of the candidate\'s resume, extracted and saved to their profile. Use this if structured experiences/projects are not available and no JD is provided.'),
+  // resumeProcessedText is deprecated in favor of resumeRawText from UserProfile
+  
   keySkills: z.array(z.string()).optional().describe("Optional: A list of key skills from the user's profile. Used as context or fallback."),
   educationHistory: z.array(EducationItemInputSchema).optional().describe("Optional: A list of education items from the user's profile. Used as context or fallback."),
 });
@@ -144,15 +145,15 @@ The interview duration is {{{interviewDuration}}} minutes.
       {{/each}}
   {{/if}}
 
-  {{#if resumeProcessedText}}
+  {{#if resumeRawText}}
     **PRIORITY 3: BASED ON RAW RESUME TEXT (Fallback if no JD, and no/sparse structured Experiences/Projects)**
     *   **CRITICAL INSTRUCTION: If Job Description (Priority 1) AND structured Experiences/Projects (Priority 2) are NOT available or are very sparse, then the raw resume content provided below is the NEXT MOST IMPORTANT source.**
     *   Generate domain-specific, technical, and coding questions *directly and deeply* from this resume text.
     *   Probe into specific experiences, skills, projects, and technologies mentioned. Mark as 'resume_based'.
     *   Behavioral and general conversational questions should be MINIMIZED.
-    - Resume Content (Processed Text):
+    - Resume Content (Raw Text):
     ---
-    {{{resumeProcessedText}}}
+    {{{resumeRawText}}}
     ---
   {{else}}
     {{#unless experiences.length}}{{#unless projects.length}}
@@ -178,7 +179,7 @@ The interview duration is {{{interviewDuration}}} minutes.
 
 
   *   **Question Stages & Types (when No JD):**
-      *   Determine if the role (indicated by structured Experiences/Projects > Resume Text > General Profile Field/Role) is technical. Technical role keywords: ${technicalRolesKeywords.join(', ')}.
+      *   Determine if the role (indicated by structured Experiences/Projects > Resume Raw Text > General Profile Field/Role) is technical. Technical role keywords: ${technicalRolesKeywords.join(', ')}.
       *   **For Non-Technical Roles (if no JD):**
           *   All questions 'oral'.
           *   Prioritize 'structured_exp_based' / 'structured_proj_based', then 'resume_based', then 'profile_based'.
@@ -211,7 +212,6 @@ const generateInterviewQuestionsFlow = ai.defineFlow(
     outputSchema: GenerateInterviewQuestionsOutputSchema,
   },
   async (input) => {
-    // Enhanced logging
     console.log("generateInterviewQuestionsFlow INPUT:", {
         profileField: input.profileField,
         role: input.role,
@@ -221,7 +221,7 @@ const generateInterviewQuestionsFlow = ai.defineFlow(
         experiencesCount: input.experiences?.length || 0,
         projectsProvided: !!(input.projects && input.projects.length > 0),
         projectsCount: input.projects?.length || 0,
-        resumeProcessedTextProvidedAndNotEmpty: !!(input.resumeProcessedText && input.resumeProcessedText.trim() !== ""),
+        resumeRawTextProvidedAndNotEmpty: !!(input.resumeRawText && input.resumeRawText.trim() !== ""),
         keySkillsProvided: !!(input.keySkills && input.keySkills.length > 0),
         educationHistoryProvided: !!(input.educationHistory && input.educationHistory.length > 0),
     });
