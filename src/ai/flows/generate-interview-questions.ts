@@ -63,11 +63,16 @@ Questions MUST be tailored based on the following information, in a strict order
     *   Mark relevant questions with type: 'jd_based'.
 
 2.  **Candidate's Resume Content (if {{{resumeProcessedText}}} is provided):**
-    *   **If a Targeted Job Description (point 1) is NOT provided:** The Resume Content becomes the PRIMARY source. Generate specific 'resume_based' questions about projects, experiences, skills, and technologies listed in the resume.
+    *   **If a Targeted Job Description (point 1) is NOT provided:** The Resume Content becomes the PRIMARY source.
+        *   Generate specific 'resume_based' questions about projects, experiences, skills, and technologies listed in the resume.
+        *   **Crucially, if the resume's content (skills, experiences) points to a different field or domain than the general {{{profileField}}} and {{{role}}}, your questions MUST predominantly reflect the resume's content.** Ask questions that deeply probe the experiences and skills detailed in the resume.
+        *   You can then ask a *few* questions related to {{{profileField}}}/{{{role}}} to understand the candidate's interest or transferable skills, but the bulk of the questions should be resume-driven.
     *   **If a Targeted Job Description (point 1) IS provided:** Use the Resume Content to ask complementary 'resume_based' questions, or to seek more detail on items potentially mentioned in both the JD and resume. Do not let resume questions overshadow JD-based questions in this scenario.
 
 3.  **Candidate's Profile Field ({{{profileField}}}) and Role ({{{role}}}):**
-    *   Use these as a fallback or to add general relevant questions if no job description or resume is available, or if they provide context not covered by the JD/resume.
+    *   Use these as a **fallback if no Job Description (point 1) or detailed Resume Content (point 2) is available**.
+    *   Or, use them to add general relevant questions that supplement the JD/Resume-based questions, especially if the resume aligns with the profile field/role.
+    *   **If the resume was the primary source (point 2) and indicated a different focus, these fields should primarily be used for a small number of bridging or context-setting questions, not as the main driver for question generation.**
 
 Candidate Information:
 - Profile Field: {{{profileField}}}
@@ -86,7 +91,7 @@ Candidate Information:
 ---
 {{/if}}
 
-Determine if the role is technical. Roles are considered technical if they include keywords such as: ${technicalRolesKeywords.join(', ')}. Examples: "Software Developer", "Data Scientist", "AI Engineer". Roles like "Product Manager", "Marketing Manager" are non-technical.
+Determine if the role (primarily indicated by the highest priority source: JD, then Resume, then Profile Role/Field) is technical. Roles are considered technical if they include keywords such as: ${technicalRolesKeywords.join(', ')}. Examples: "Software Developer", "Data Scientist", "AI Engineer". Roles like "Product Manager", "Marketing Manager" are non-technical.
 
 Question Stages & Types:
 Questions are categorized by 'stage' ('oral' or 'technical_written') and 'type' ('conversational', 'behavioral', 'technical', 'coding', 'resume_based', 'jd_based').
@@ -163,7 +168,19 @@ const generateInterviewQuestionsFlow = ai.defineFlow(
       input.role.toLowerCase().includes(keyword) || input.profileField.toLowerCase().includes(keyword)
     );
 
-    console.log(`Generating questions for ${input.interviewDuration} min interview. Role: ${input.role}, Field: ${input.profileField}. Job Description provided: ${!!input.jobDescription}. Resume text provided: ${!!input.resumeProcessedText}. Considered technical by flow logic: ${isLikelyTechnicalRole}`);
+    // Log the input received by the flow for easier debugging
+    console.log("generateInterviewQuestionsFlow INPUT:", {
+        profileField: input.profileField,
+        role: input.role,
+        interviewDuration: input.interviewDuration,
+        jobDescriptionProvided: !!input.jobDescription,
+        resumeProcessedTextProvided: !!input.resumeProcessedText,
+        // For security/privacy, you might choose not to log the full text of JD/resume here in production logs
+        // resumeProcessedTextLength: input.resumeProcessedText?.length || 0, 
+        // jobDescriptionLength: input.jobDescription?.length || 0,
+        isLikelyTechnicalRole,
+    });
+
 
     const {output} = await prompt(input);
 
