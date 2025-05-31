@@ -16,7 +16,7 @@ import {
   FormField,
   FormItem,
   FormMessage,
-  FormLabel as ShadcnFormLabel,
+  FormLabel as ShadcnFormLabel, 
 } from "@/components/ui/form";
 import { Label } from "@/components/ui/label"; 
 
@@ -52,12 +52,14 @@ const profileFormSchema = z.object({
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
-const ACCEPTED_MIME_TYPES_FOR_CLIENT_PROCESSING = ['text/plain', 'text/markdown'];
-// application/msword for .doc, application/vnd.oasis.opendocument.text for .odt, application/rtf for .rtf
-const SERVER_SIDE_PROCESSING_MIME_TYPES = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']; 
-const ALL_SUPPORTED_MIME_TYPES = [...ACCEPTED_MIME_TYPES_FOR_CLIENT_PROCESSING, ...SERVER_SIDE_PROCESSING_MIME_TYPES];
+const CLIENT_SIDE_PROCESSING_MIME_TYPES = ['text/plain', 'text/markdown'];
+const SERVER_SIDE_PROCESSING_MIME_TYPES = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+const ALL_SUPPORTED_MIME_TYPES = [...CLIENT_SIDE_PROCESSING_MIME_TYPES, ...SERVER_SIDE_PROCESSING_MIME_TYPES];
 const ACCEPT_FILE_EXTENSIONS = ".txt,.md,.pdf,.doc,.docx"; 
 const MAX_FILE_SIZE_MB = 5;
+const LOCAL_STORAGE_RESUME_TEXT_KEY = 'tyaariResumeProcessedText';
+const LOCAL_STORAGE_RESUME_FILENAME_KEY = 'tyaariResumeFileName';
+
 
 export default function ProfilePage() {
   const { user, userProfile, loading: authLoading, initialLoading, refreshUserProfile } = useAuth();
@@ -133,8 +135,8 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const storedResumeText = localStorage.getItem('tyaariResumeProcessedText');
-      const storedFileName = localStorage.getItem('tyaariResumeFileName'); 
+      const storedResumeText = localStorage.getItem(LOCAL_STORAGE_RESUME_TEXT_KEY);
+      const storedFileName = localStorage.getItem(LOCAL_STORAGE_RESUME_FILENAME_KEY); 
       if (storedResumeText) setClientSideResumeText(storedResumeText);
       if (storedFileName) setSelectedFileName(storedFileName);
     }
@@ -211,7 +213,7 @@ export default function ProfilePage() {
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    const prevFileName = selectedFileName;
+    const prevFileName = selectedFileName; // Store previous values to revert on error
     const prevResumeText = clientSideResumeText;
 
     if (fileInputRef.current) fileInputRef.current.value = ""; 
@@ -222,17 +224,17 @@ export default function ProfilePage() {
     }
 
     setIsProcessingFile(true);
-    setSelectedFile(file);
-    setSelectedFileName(file.name);
-    setClientSideResumeText(""); 
+    setSelectedFile(file); // Optimistically set selected file
+    setSelectedFileName(file.name); // Optimistically set file name
+    setClientSideResumeText(""); // Clear previous text while processing
 
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
       toast({ title: "File Too Large", description: `Maximum file size is ${MAX_FILE_SIZE_MB}MB.`, variant: "destructive" });
-      setSelectedFile(null); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText);
+      setSelectedFile(null); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText); // Revert
       setIsProcessingFile(false); return;
     }
     
-    const isClientProcessable = ACCEPTED_MIME_TYPES_FOR_CLIENT_PROCESSING.includes(file.type) || file.name.toLowerCase().endsWith('.txt') || file.name.toLowerCase().endsWith('.md');
+    const isClientProcessable = CLIENT_SIDE_PROCESSING_MIME_TYPES.includes(file.type) || file.name.toLowerCase().endsWith('.txt') || file.name.toLowerCase().endsWith('.md');
     const isServerProcessable = SERVER_SIDE_PROCESSING_MIME_TYPES.includes(file.type) || file.name.toLowerCase().endsWith('.pdf') || file.name.toLowerCase().endsWith('.docx');
 
     if (isClientProcessable) {
@@ -241,15 +243,15 @@ export default function ProfilePage() {
         const text = e.target?.result as string;
         setClientSideResumeText(text);
         if (typeof window !== "undefined") {
-          localStorage.setItem('tyaariResumeProcessedText', text);
-          localStorage.setItem('tyaariResumeFileName', file.name);
+          localStorage.setItem(LOCAL_STORAGE_RESUME_TEXT_KEY, text);
+          localStorage.setItem(LOCAL_STORAGE_RESUME_FILENAME_KEY, file.name);
         }
         toast({ title: "Resume Content Loaded", description: `Text extracted from ${file.name}. This will be used for AI question generation.` });
         setIsProcessingFile(false);
       };
       reader.onerror = () => {
         toast({ title: "File Read Error", description: "Could not read plain text resume.", variant: "destructive" });
-        setSelectedFile(null); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText);
+        setSelectedFile(null); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText); // Revert
         setIsProcessingFile(false);
       };
       reader.readAsText(file);
@@ -260,27 +262,28 @@ export default function ProfilePage() {
         const response = await fetch("/api/extract-resume-text", { method: "POST", body: formData });
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({ message: "Failed to parse error from server."}));
-          throw new Error(errorData.message || `Server responded with ${response.status}`);
+          throw new Error(errorData.message || `Server responded with ${response.status}: ${response.statusText}`);
         }
         const data = await response.json();
+        if (data.text === undefined) { // Check if text field is missing
+            throw new Error("Server did not return extracted text.");
+        }
         setClientSideResumeText(data.text);
         if (typeof window !== "undefined") {
-          localStorage.setItem('tyaariResumeProcessedText', data.text);
-          localStorage.setItem('tyaariResumeFileName', file.name);
+          localStorage.setItem(LOCAL_STORAGE_RESUME_TEXT_KEY, data.text);
+          localStorage.setItem(LOCAL_STORAGE_RESUME_FILENAME_KEY, file.name);
         }
-        toast({ title: "Resume Processed", description: `Text extracted from ${file.name} via server. This will be used for AI question generation.` });
+        toast({ title: "Resume Processed by Server", description: `Text extracted from ${file.name}. This will be used for AI question generation.` });
       } catch (error: any) {
-        toast({ title: "Resume Processing Error", description: error.message || "Could not extract text from file.", variant: "destructive" });
-        setSelectedFile(null); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText);
+        console.error("Error processing resume on server:", error);
+        toast({ title: "Resume Processing Error", description: error.message || "Could not extract text from file via server.", variant: "destructive" });
+        setSelectedFile(null); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText); // Revert
       } finally {
         setIsProcessingFile(false);
       }
     } else {
-      // Fallback for other types (e.g. .doc, .odt, .rtf - if user manages to select them despite stricter accept)
-      // We can try sending them to the server, but the server API currently only handles PDF/DOCX explicitly.
-      // For now, treat other types as "best effort" or potentially "unsupported" by current explicit parsing.
-      toast({ title: "Unsupported File Type", description: `Uploaded ${file.name}. Best extraction for .txt, .md, .pdf, .docx. Other formats may have limited support.`, variant: "default" });
-      setSelectedFile(null); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText);
+      toast({ title: "Unsupported File Type", description: `Cannot process '${file.name}'. Please upload .txt, .md, .pdf, or .docx files.`, variant: "destructive" });
+      setSelectedFile(null); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText); // Revert
       setIsProcessingFile(false);
     }
   };
@@ -288,8 +291,8 @@ export default function ProfilePage() {
   const clearResume = () => {
     setSelectedFile(null); setSelectedFileName(null); setClientSideResumeText(null);
     if (typeof window !== "undefined") {
-      localStorage.removeItem('tyaariResumeProcessedText');
-      localStorage.removeItem('tyaariResumeFileName');
+      localStorage.removeItem(LOCAL_STORAGE_RESUME_TEXT_KEY);
+      localStorage.removeItem(LOCAL_STORAGE_RESUME_FILENAME_KEY);
     }
     if (fileInputRef.current) fileInputRef.current.value = "";
     toast({ title: "Resume Cleared", description: "Resume selection removed from this browser session." });
@@ -357,12 +360,12 @@ export default function ProfilePage() {
             <div>
               <Label htmlFor="startDate">Start Date*</Label>
               <Input id="startDate" name="startDate" type="date" value={currentItemData.startDate ? `${currentItemData.startDate}-01` : ''} onChange={handleModalFormChange} />
-               <p className="text-xs mt-1 text-muted-foreground">Select the month and year. You can click on the year in the picker to change it.</p>
+              <p className="text-xs mt-1 text-muted-foreground">Select the month and year. You can click on the year in the picker to change it.</p>
             </div>
             <div>
               <Label htmlFor="endDate">End Date (or select month for 'Present')</Label>
               <Input id="endDate" name="endDate" type="date" value={currentItemData.endDate ? `${currentItemData.endDate}-01` : ''} onChange={handleModalFormChange} />
-               <p className="text-xs mt-1 text-muted-foreground">Select the month and year. You can click on the year in the picker to change it.</p>
+              <p className="text-xs mt-1 text-muted-foreground">Select the month and year. You can click on the year in the picker to change it.</p>
             </div>
             <div><Label htmlFor="description">Description (Responsibilities, Achievements)</Label><Textarea id="description" name="description" value={currentItemData.description || ''} onChange={handleModalFormChange} rows={4}/></div>
           </div>
