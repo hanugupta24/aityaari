@@ -10,6 +10,7 @@ export async function POST(request: Request) {
     const file = formData.get('file') as File | null;
 
     if (!file) {
+      console.warn('API: No file uploaded.');
       return NextResponse.json({ message: 'No file uploaded.' }, { status: 400 });
     }
 
@@ -24,8 +25,6 @@ export async function POST(request: Request) {
         textContent = data.text.trim();
         if (!textContent) {
             console.warn(`API: PDF parsed but no text content found for ${file.name}. The PDF might be image-based or empty.`);
-            // It's not necessarily an error if a PDF has no text, could be an image PDF.
-            // Client can decide how to handle empty textContent.
         }
       } catch (pdfError: any) {
         console.error(`API: Error parsing PDF ${file.name}:`, pdfError);
@@ -37,7 +36,6 @@ export async function POST(request: Request) {
         textContent = result.value.trim();
         if (!textContent && result.messages && result.messages.length > 0) {
             console.warn(`API: DOCX processed with messages for ${file.name}:`, result.messages);
-            // Potentially return messages if needed, but for now, empty text is the result.
         }
       } catch (docxError: any) {
         console.error(`API: Error processing DOCX ${file.name}:`, docxError);
@@ -56,13 +54,12 @@ export async function POST(request: Request) {
 
   } catch (error: any) {
     console.error('API: General error in /api/extract-resume-text:', error);
-    let friendlyMessage = 'Error processing file.';
-    if (error.message && error.message.includes('Invalid PDF')) {
-         friendlyMessage = 'Invalid or corrupted PDF file.';
-    } else if (error.message && error.message.toLowerCase().includes('mammoth')) {
-        friendlyMessage = 'Error processing DOCX file. It might be corrupted or an unsupported DOCX variant.';
+    // This outer catch ensures that even if something unexpected happens before specific parsing logic,
+    // or during formData processing, we still attempt to send a JSON response.
+    let friendlyMessage = 'Error processing file on the server.';
+    if (error.message) {
+        friendlyMessage = error.message;
     }
-    return NextResponse.json({ message: friendlyMessage, errorDetails: error.message || 'Unknown server error' }, { status: 500 });
+    return NextResponse.json({ message: "An unexpected server error occurred during file processing.", errorDetails: friendlyMessage }, { status: 500 });
   }
 }
-

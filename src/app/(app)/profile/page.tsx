@@ -54,7 +54,7 @@ type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
 const CLIENT_SIDE_PROCESSING_MIME_TYPES = ['text/plain', 'text/markdown'];
 const SERVER_SIDE_PROCESSING_MIME_TYPES = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-const ALL_SUPPORTED_MIME_TYPES = [...CLIENT_SIDE_PROCESSING_MIME_TYPES, ...SERVER_SIDE_PROCESSING_MIME_TYPES];
+// Broaden accepted extensions for the input element, actual processing is determined by MIME type or API logic
 const ACCEPT_FILE_EXTENSIONS = ".txt,.md,.pdf,.doc,.docx"; 
 const MAX_FILE_SIZE_MB = 5;
 const LOCAL_STORAGE_RESUME_TEXT_KEY = 'tyaariResumeProcessedText';
@@ -213,7 +213,8 @@ export default function ProfilePage() {
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    const prevFileName = selectedFileName; // Store previous values to revert on error
+    const prevSelectedFile = selectedFile;
+    const prevFileName = selectedFileName; 
     const prevResumeText = clientSideResumeText;
 
     if (fileInputRef.current) fileInputRef.current.value = ""; 
@@ -224,13 +225,13 @@ export default function ProfilePage() {
     }
 
     setIsProcessingFile(true);
-    setSelectedFile(file); // Optimistically set selected file
-    setSelectedFileName(file.name); // Optimistically set file name
-    setClientSideResumeText(""); // Clear previous text while processing
+    setSelectedFile(file); 
+    setSelectedFileName(file.name); 
+    setClientSideResumeText(""); 
 
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
       toast({ title: "File Too Large", description: `Maximum file size is ${MAX_FILE_SIZE_MB}MB.`, variant: "destructive" });
-      setSelectedFile(null); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText); // Revert
+      setSelectedFile(prevSelectedFile); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText); 
       setIsProcessingFile(false); return;
     }
     
@@ -251,7 +252,7 @@ export default function ProfilePage() {
       };
       reader.onerror = () => {
         toast({ title: "File Read Error", description: "Could not read plain text resume.", variant: "destructive" });
-        setSelectedFile(null); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText); // Revert
+        setSelectedFile(prevSelectedFile); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText); 
         setIsProcessingFile(false);
       };
       reader.readAsText(file);
@@ -261,11 +262,17 @@ export default function ProfilePage() {
       try {
         const response = await fetch("/api/extract-resume-text", { method: "POST", body: formData });
         if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ message: "Failed to parse error from server."}));
+          let errorData;
+          try {
+            errorData = await response.json();
+          } catch (jsonError) {
+             const rawText = await response.text().catch(() => "Server returned non-JSON error and text could not be read.");
+             throw new Error(rawText.substring(0, 200) || `Server responded with ${response.status}: ${response.statusText}. Failed to parse JSON error response.`);
+          }
           throw new Error(errorData.message || `Server responded with ${response.status}: ${response.statusText}`);
         }
         const data = await response.json();
-        if (data.text === undefined) { // Check if text field is missing
+        if (data.text === undefined) { 
             throw new Error("Server did not return extracted text.");
         }
         setClientSideResumeText(data.text);
@@ -277,13 +284,13 @@ export default function ProfilePage() {
       } catch (error: any) {
         console.error("Error processing resume on server:", error);
         toast({ title: "Resume Processing Error", description: error.message || "Could not extract text from file via server.", variant: "destructive" });
-        setSelectedFile(null); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText); // Revert
+        setSelectedFile(prevSelectedFile); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText); 
       } finally {
         setIsProcessingFile(false);
       }
     } else {
       toast({ title: "Unsupported File Type", description: `Cannot process '${file.name}'. Please upload .txt, .md, .pdf, or .docx files.`, variant: "destructive" });
-      setSelectedFile(null); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText); // Revert
+      setSelectedFile(prevSelectedFile); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText); 
       setIsProcessingFile(false);
     }
   };
@@ -466,7 +473,9 @@ export default function ProfilePage() {
                 <Info className="h-4 w-4 !text-blue-500 dark:!text-blue-400" />
                 <AlertTitle className="text-blue-700 dark:text-blue-300">File Format Information</AlertTitle>
                 <AlertDescription className="text-blue-600 dark:text-blue-200">
-                  For best AI results, <strong>.txt or .md</strong> files are preferred. <strong>.pdf and .docx</strong> files are also supported for text extraction via our server. Other formats may have limited or no support for text extraction.
+                  For best AI results, <strong>.txt or .md</strong> files are preferred for client-side processing.
+                  <strong>.pdf and .docx</strong> files are also supported and will be processed on our server for text extraction.
+                  Other formats may have limited support.
                 </AlertDescription>
               </Alert>
               {selectedFileName && (<div className="mt-2 text-sm text-muted-foreground flex items-center justify-between p-2 border rounded-md bg-secondary/50"><div className="flex items-center gap-2 overflow-hidden"><FileText className="h-4 w-4 text-primary shrink-0" /><span className="truncate" title={selectedFileName}>{selectedFileName}</span></div><div className="flex items-center gap-1 shrink-0"><Button type="button" variant="ghost" size="icon" onClick={clearResume} title="Clear resume selection" aria-label="Clear resume" disabled={isSubmitting || isProcessingFile}><XCircle className="h-4 w-4 text-destructive" /></Button></div></div>)}
