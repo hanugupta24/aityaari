@@ -20,6 +20,7 @@ import { db } from "@/lib/firebase";
 import Link from "next/link";
 
 const FREE_INTERVIEW_LIMIT = 3;
+const LOCAL_STORAGE_RESUME_TEXT_KEY = 'tyaariResumeProcessedText';
 
 export default function StartInterviewPage() {
   const { user, userProfile, loading: authLoading, initialLoading: authInitialLoading, refreshUserProfile } = useAuth();
@@ -54,15 +55,16 @@ export default function StartInterviewPage() {
     toast({ title: "Preparing Interview", description: "Generating questions, please wait..." });
 
     try {
-      // Use resumeRawText from UserProfile if available, otherwise from localStorage as a fallback
-      const resumeTextForAI = userProfile.resumeRawText || (typeof window !== "undefined" ? localStorage.getItem('tyaariResumeProcessedText') : null);
+      // Read resume text from localStorage
+      const resumeTextFromLocalStorage = typeof window !== "undefined" ? localStorage.getItem(LOCAL_STORAGE_RESUME_TEXT_KEY) : null;
 
       const questionGenInput: GenerateInterviewQuestionsInput = {
         profileField: userProfile.profileField,
         role: userProfile.role,
         interviewDuration: duration,
         jobDescription: jobDescriptionInput.trim() || undefined,
-        resumeRawText: resumeTextForAI || undefined, 
+        // Pass resume text from localStorage to the AI flow
+        resumeRawText: resumeTextFromLocalStorage || userProfile.resumeRawText || undefined, 
         keySkills: userProfile.keySkills || [],
         experiences: userProfile.experiences || [],
         projects: userProfile.projects || [],
@@ -208,7 +210,7 @@ export default function StartInterviewPage() {
             <AlertTitle>Personalized Questions</AlertTitle>
             <AlertDescription>
               Interview questions will be based on your targeted role and profile field.
-              Your uploaded resume (text saved to profile), structured experiences, projects, skills,
+              Your uploaded resume text (from .txt/.md files, saved in browser storage), structured experiences, projects, skills (all from your saved profile),
               and a job description below can further tailor questions.
             </AlertDescription>
           </Alert>

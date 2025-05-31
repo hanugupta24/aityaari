@@ -51,9 +51,9 @@ const GenerateInterviewQuestionsInputSchema = z.object({
   experiences: z.array(ExperienceItemInputSchema).optional().describe("Optional: Structured list of work experiences from the user's profile. Prioritized over raw resume text if no JD."),
   projects: z.array(ProjectItemInputSchema).optional().describe("Optional: Structured list of projects from the user's profile. Prioritized over raw resume text if no JD."),
   
-  resumeRawText: z.string().optional().describe('Optional: The raw text content of the candidate\'s resume, extracted and saved to their profile. Use this if structured experiences/projects are not available and no JD is provided.'),
-  // resumeProcessedText is deprecated in favor of resumeRawText from UserProfile
-  
+  // This field will now primarily receive text from localStorage (via interview/start page) or from userProfile.resumeRawText
+  resumeRawText: z.string().optional().describe('Optional: The raw text content of the candidate\'s resume. This is typically sourced from localStorage (filled by profile page .txt/.md upload) or userProfile.resumeRawText (if previously saved to DB). Use this if structured experiences/projects are not available and no JD is provided.'),
+    
   keySkills: z.array(z.string()).optional().describe("Optional: A list of key skills from the user's profile. Used as context or fallback."),
   educationHistory: z.array(EducationItemInputSchema).optional().describe("Optional: A list of education items from the user's profile. Used as context or fallback."),
 });
@@ -151,7 +151,7 @@ The interview duration is {{{interviewDuration}}} minutes.
     *   Generate domain-specific, technical, and coding questions *directly and deeply* from this resume text.
     *   Probe into specific experiences, skills, projects, and technologies mentioned. Mark as 'resume_based'.
     *   Behavioral and general conversational questions should be MINIMIZED.
-    - Resume Content (Raw Text):
+    - Resume Content (Raw Text from localStorage or profile):
     ---
     {{{resumeRawText}}}
     ---
@@ -230,6 +230,7 @@ const generateInterviewQuestionsFlow = ai.defineFlow(
 
     if (!output || !output.questions || output.questions.length === 0) {
         console.error("AI did not return any questions for generation. Input was:", input);
+        // Fallback to a generic question if AI fails
         return { questions: [{
             id: 'q1',
             text: 'Tell me about yourself and your experience relevant to this field.',
@@ -238,21 +239,25 @@ const generateInterviewQuestionsFlow = ai.defineFlow(
         }] };
     }
 
+    // Ensure questions are sorted: oral first, then technical_written
+    // Also ensure IDs are unique if the LLM fails to provide them or provides duplicates.
     const sortedQuestions = output.questions
       .map((q, index) => ({
         ...q,
+        // Ensure ID is always present and somewhat unique if LLM doesn't generate it properly
         id: q.id || `gen_q${index + 1}`, 
       }))
       .sort((a, b) => {
         if (a.stage === 'oral' && b.stage === 'technical_written') return -1;
         if (a.stage === 'technical_written' && b.stage === 'oral') return 1;
+        // Basic sort by ID number if stages are the same
         const idANum = parseInt((a.id || 'q0').replace( /^\D+/g, ''), 10) || 0;
         const idBNum = parseInt((b.id || 'q0').replace( /^\D+/g, ''), 10) || 0;
         return idANum - idBNum;
     });
 
     return {
-      questions: sortedQuestions as GeneratedQuestion[],
+      questions: sortedQuestions as GeneratedQuestion[], // Cast as GeneratedQuestion to satisfy external type
     };
   }
 );
