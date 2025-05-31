@@ -93,24 +93,6 @@ export default function ProfilePage() {
   });
   
   useEffect(() => {
-    if (typeof window !== 'undefined' && pdfjsLib?.GlobalWorkerOptions) {
-        const workerUrl = `${window.location.origin}/pdf.worker.mjs`;
-        console.log(`ProfilePage: Attempting to set pdf.js workerSrc to: ${workerUrl}. 
-        CRITICAL: Ensure you have copied 'node_modules/pdfjs-dist/build/pdf.worker.mjs' to your 'public/' directory. 
-        If it's not there, PDF parsing will fail with a 'Failed to fetch dynamically imported module' error in the browser console.`);
-        try {
-            pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
-        } catch (e) {
-            console.error("ProfilePage: Error setting pdfjsLib.GlobalWorkerOptions.workerSrc. pdf.js might not be loaded correctly.", e);
-        }
-    } else if (typeof window !== 'undefined') {
-        if (!pdfjsLib) console.error("ProfilePage: pdfjsLib is not defined. PDF parsing will likely fail.");
-        else if (pdfjsLib && !pdfjsLib.GlobalWorkerOptions) console.warn("ProfilePage: pdfjsLib.GlobalWorkerOptions is not available. PDF parsing might fail.");
-    }
-  }, []);
-  
-
-  useEffect(() => {
     if (!initialLoading && !authLoading && user) {
       const initialEmail = user.email || "";
       const initialPhoneNumber = user.phoneNumber || userProfile?.phoneNumber || "";
@@ -285,10 +267,26 @@ export default function ProfilePage() {
     try {
       console.log(`ProfilePage: CLIENT_SIDE_PARSE - Processing file: ${file.name}, type: ${file.type}`);
       if (file.type === 'application/pdf') {
-        if (!pdfjsLib || !pdfjsLib.getDocument || !pdfjsLib.GlobalWorkerOptions.workerSrc || !pdfjsLib.GlobalWorkerOptions.workerSrc.includes('/pdf.worker.mjs')) {
-            const errorMsg = "ProfilePage: pdf.js workerSrc not correctly set or pdfjsLib not fully loaded. PDF parsing will fail. WorkerSrc: " + (pdfjsLib?.GlobalWorkerOptions?.workerSrc || 'undefined');
+        if (typeof window !== 'undefined' && pdfjsLib?.GlobalWorkerOptions) {
+            const workerUrl = `${window.location.origin}/pdf.worker.mjs`;
+            console.log(`ProfilePage: (handleFileChange) Ensuring pdf.js workerSrc is set to: ${workerUrl}. CRITICAL: Ensure 'pdf.worker.mjs' is in 'public/' and server restarted.`);
+            pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+        } else {
+            const errorMsg = "ProfilePage: pdfjsLib or GlobalWorkerOptions not available. PDF parsing setup failed.";
             console.error(errorMsg);
-            throw new Error("PDF.js library not configured correctly. Ensure 'pdf.worker.mjs' is in public/ and workerSrc is set, then reload.");
+            setSelectedFile(prevSelectedFile); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText);
+            toast({ title: "PDF Setup Error", description: "PDF library components not ready. Try reloading. Previous resume data preserved.", variant: "destructive", duration: 10000 });
+            setIsProcessingFile(false);
+            return;
+        }
+        
+        if (!pdfjsLib.GlobalWorkerOptions.workerSrc || !pdfjsLib.GlobalWorkerOptions.workerSrc.includes('/pdf.worker.mjs')) {
+            const errorMsg = "ProfilePage: pdf.js workerSrc not correctly set. Current: " + (pdfjsLib?.GlobalWorkerOptions?.workerSrc || 'undefined');
+            console.error(errorMsg);
+            setSelectedFile(prevSelectedFile); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText);
+            toast({ title: "PDF Worker Config Error", description: `PDF worker path issue. Check console. Previous resume data preserved.`, variant: "destructive", duration: 10000 });
+            setIsProcessingFile(false);
+            return;
         }
         console.log(`ProfilePage: CLIENT_SIDE_PARSE - Using pdf.js workerSrc: ${pdfjsLib.GlobalWorkerOptions.workerSrc}`);
         const arrayBuffer = await file.arrayBuffer();
@@ -299,8 +297,8 @@ export default function ProfilePage() {
           let detailedErrorMessage = "Failed to load PDF document with pdf.js.";
           if (pdfError instanceof Error) {
             detailedErrorMessage += ` Error: ${pdfError.message}`;
-            if (pdfError.message.includes("NetworkError") || pdfError.message.includes("Failed to fetch") || pdfError.message.includes("dynamically imported module") || pdfError.message.includes("Setting up fake worker failed")) {
-              detailedErrorMessage += " This is often due to the 'pdf.worker.mjs' script not being found at the specified path, not loadable, or an issue with its execution environment. Ensure it's in your 'public/' folder and your server can serve it correctly. Check browser console (Network tab) for errors related to this file.";
+             if (pdfError.message.includes("NetworkError") || pdfError.message.includes("Failed to fetch") || pdfError.message.includes("dynamically imported module") || pdfError.message.includes("Setting up fake worker failed")) {
+                detailedErrorMessage += " This is often due to the 'pdf.worker.mjs' script not being found at the specified path, not loadable, or an issue with its execution environment. Ensure it's in your 'public/' folder and your server can serve it correctly. Check browser console (Network tab) for errors related to this file.";
             }
           }
           throw new Error(detailedErrorMessage); 
@@ -349,6 +347,7 @@ export default function ProfilePage() {
         toast({ title: "Resume Text Extracted (Client-Side)", description: `Text successfully extracted from ${currentSelectedFileName}. Review and save profile to store it.` });
       } else {
         toast({ title: "Text Extraction Failed (Client-Side)", description: `No text could be extracted from ${currentSelectedFileName}. The file might be empty, protected, or an unsupported format variant.`, variant: "destructive" });
+        // If new file extraction fails, clear its selection but preserve old valid text if any
         setSelectedFile(prevSelectedFile); 
         setSelectedFileName(prevFileName);
         setClientSideResumeText(prevResumeText);
@@ -365,17 +364,16 @@ export default function ProfilePage() {
       if (isPdfSetupError) {
           toast({
             title: "PDF Processing Initialization Error",
-            description: `Failed to process PDF '${currentSelectedFileName}': ${errorMessage}. Please ensure pdf.worker.mjs is in your public folder and correctly served, then reload the page. Your previous resume data (if any) is preserved.`,
+            description: `Failed to process PDF '${currentSelectedFileName}': ${errorMessage}. Ensure pdf.worker.mjs is in public/ and reload. Previous resume data (if any) is preserved.`,
             variant: "destructive",
             duration: 15000, 
           });
-          // Preserve previous resume data if setup failed for new file
           setSelectedFile(prevSelectedFile);
           setSelectedFileName(prevFileName);
           setClientSideResumeText(prevResumeText);
       } else {
           toast({ title: "Resume Processing Error (Client-Side)", description: `Could not extract text from the uploaded file '${currentSelectedFileName}': ${errorMessage}`, variant: "destructive" });
-          clearResume(false); 
+          clearResume(false); // Clear all resume data if it's a general parsing error for this file
       }
     } finally {
       setIsProcessingFile(false);
@@ -394,10 +392,10 @@ export default function ProfilePage() {
       const output: ExtractResumeSectionsOutput = await extractResumeSections(input);
 
       if (output.experiences && output.experiences.length > 0) {
-        setExperiences(output.experiences.map(exp => ({...exp, id: exp.id || uuidv4() }))); // Ensure IDs
+        setExperiences(output.experiences.map(exp => ({...exp, id: exp.id || uuidv4() })));
       }
       if (output.projects && output.projects.length > 0) {
-        setProjects(output.projects.map(proj => ({...proj, id: proj.id || uuidv4() }))); // Ensure IDs
+        setProjects(output.projects.map(proj => ({...proj, id: proj.id || uuidv4() })));
       }
       toast({ title: "Resume Analysis Complete", description: "Experience and Project sections have been auto-filled. Please review and save your profile." });
     } catch (error: any) {
@@ -634,6 +632,3 @@ export default function ProfilePage() {
     </div>
   );
 }
-
-
-    
