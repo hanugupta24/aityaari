@@ -169,7 +169,7 @@ export default function ProfilePage() {
   
   const handleModalFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    if ((name === "startDate" || name === "endDate") && e.target instanceof HTMLInputElement && e.target.type === "date") {
+    if ((name === "startDate" || name === "endDate") && e.target instanceof HTMLInputElement && e.target.type === "month") {
       setCurrentItemData((prev: any) => ({ ...prev, [name]: value ? value.substring(0, 7) : '' }));
     } else {
       setCurrentItemData((prev: any) => ({ ...prev, [name]: value }));
@@ -263,64 +263,73 @@ export default function ProfilePage() {
             localStorage.setItem(LOCAL_STORAGE_RESUME_FILENAME_KEY, file.name);
           }
           toast({ title: "Resume Text Loaded (Client-side)", description: `Text extracted from ${file.name}. This will be used for AI question generation if AI-structured extraction fails.` });
-          // For client-side only text, we don't auto-populate structured fields.
         } else {
           toast({ title: "Text Extraction Failed", description: "No text could be extracted from the uploaded file. Please try a different file or format.", variant: "destructive" });
-          clearResume();
+          clearResume(true);
         }
         setIsProcessingFile(false);
       };
       reader.onerror = () => {
         toast({ title: "File Read Error", description: "Could not read plain text resume.", variant: "destructive" });
-        clearResume();
+        clearResume(true);
         setIsProcessingFile(false);
       };
       reader.readAsText(file);
-    } else { // For PDF, DOCX - send to server
+    } else { 
       const formData = new FormData();
       formData.append("file", file);
       try {
         const response = await fetch("/api/extract-resume-text", { method: "POST", body: formData });
+        const responseBodyText = await response.text(); // Read body as text ONCE
+
+        let data;
+        let errorMessageFromServer = `Server responded with ${response.status}: ${response.statusText}.`;
 
         if (!response.ok) {
-          let errorMessageFromServer = `Server responded with ${response.status}: ${response.statusText}.`;
-          try {
-              const responseBodyText = await response.text();
-              const jsonData = JSON.parse(responseBodyText); // Try to parse as JSON first
-              if (jsonData && jsonData.message) {
-                  errorMessageFromServer = jsonData.message;
-              } else if (responseBodyText.trim().toLowerCase().startsWith('<!doctype html') || responseBodyText.trim().toLowerCase().startsWith('<html>')) {
-                  errorMessageFromServer = `Server returned an HTML error page (Status: ${response.status}). Please check server logs for details.`;
-              } else {
-                  errorMessageFromServer = responseBodyText.length > 200 ? responseBodyText.substring(0, 200) + "..." : responseBodyText;
-              }
-          } catch (parseError) { // If response wasn't JSON or was HTML that couldn't be parsed further
-              const errorText = await response.text(); // Re-read text if first attempt failed
-              if (errorText.trim().toLowerCase().startsWith('<!doctype html') || errorText.trim().toLowerCase().startsWith('<html>')) {
-                 errorMessageFromServer = `Server returned an HTML error page (Status: ${response.status}). Please check server logs for details.`;
-              } else {
-                 errorMessageFromServer = `Server error (Status: ${response.status}). Response: ${errorText.substring(0,200)}...`;
-              }
-          }
-          clearResume(); // Clear state on error
-          setSelectedFile(prevSelectedFile); // Restore previous state if server error
-          setSelectedFileName(prevFileName);
-          setClientSideResumeText(prevResumeText);
-          throw new Error(errorMessageFromServer);
+            try {
+                data = JSON.parse(responseBodyText); // Try to parse as JSON first
+                if (data && data.message) {
+                    errorMessageFromServer = data.message;
+                } else if (responseBodyText.trim().toLowerCase().startsWith('<!doctype html') || responseBodyText.trim().toLowerCase().startsWith('<html>')) {
+                    errorMessageFromServer = `Server returned an HTML error page (Status: ${response.status}). Please check server logs for details.`;
+                } else {
+                    errorMessageFromServer = responseBodyText.length > 200 ? responseBodyText.substring(0, 200) + "..." : responseBodyText;
+                }
+            } catch (parseError) { 
+                if (responseBodyText.trim().toLowerCase().startsWith('<!doctype html') || responseBodyText.trim().toLowerCase().startsWith('<html>')) {
+                   errorMessageFromServer = `Server returned an HTML error page (Status: ${response.status}). Please check server logs for details.`;
+                } else {
+                   errorMessageFromServer = `Server error (Status: ${response.status}). Response: ${responseBodyText.substring(0,200)}...`;
+                }
+            }
+            clearResume(true); 
+            setSelectedFile(prevSelectedFile); 
+            setSelectedFileName(prevFileName);
+            setClientSideResumeText(prevResumeText);
+            throw new Error(errorMessageFromServer);
         }
 
-        const data = await response.json();
+        try {
+            data = JSON.parse(responseBodyText);
+        } catch (jsonParseError) {
+            clearResume(true);
+            setSelectedFile(prevSelectedFile); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText);
+            throw new Error("Failed to parse server response as JSON. Response was: " + responseBodyText.substring(0, 200) + "...");
+        }
+        
 
         if (!data.success) {
-            clearResume(); // Clear state on explicit API failure
+            clearResume(true); 
             setSelectedFile(prevSelectedFile); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText);
             throw new Error(data.message || "Server reported an error during resume processing.");
         }
         
         if (data.rawText === undefined || data.rawText === null || data.rawText.trim() === "") {
-            clearResume();
+            clearResume(true);
             setSelectedFile(prevSelectedFile); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText);
-            throw new Error("Server did not return extracted text or text was empty.");
+            toast({ title: "Text Extraction Failed", description: `No text could be extracted from ${data.fileName || file.name}. Try another file or format.`, variant: "destructive" });
+            setIsProcessingFile(false);
+            return;
         }
 
         setClientSideResumeText(data.rawText);
@@ -350,7 +359,7 @@ export default function ProfilePage() {
       } catch (error: any) {
         console.error("Error processing resume:", error);
         toast({ title: "Resume Processing Error", description: error.message || "Could not extract text from file.", variant: "destructive" });
-        clearResume(); // Also clear on catch-all client-side fetch errors
+        clearResume(true); 
         setSelectedFile(prevSelectedFile); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText);
       } finally {
         setIsProcessingFile(false);
@@ -561,3 +570,5 @@ export default function ProfilePage() {
     </div>
   );
 }
+
+    
