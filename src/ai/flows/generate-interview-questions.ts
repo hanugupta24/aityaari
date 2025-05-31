@@ -123,10 +123,12 @@ The interview duration is {{{interviewDuration}}} minutes.
   **PRIORITY 2: BASED ON CANDIDATE'S DETAILED PROFILE (NO SPECIFIC JOB DESCRIPTION PROVIDED FOR THIS SESSION)**
   *   Use the following candidate profile information.
   {{#if resumeProcessedText}}
-  *   **The resume content provided is the MOST IMPORTANT source.** Prioritize generating in-depth, domain-specific questions directly from the experiences, skills, projects, and technologies mentioned in the resume. Mark these as 'resume_based'.
-  *   If the resume indicates a technical role, ensure a significant portion of 'technical' and 'coding' questions are derived from specific details in the resume.
-  *   Behavioral/conversational questions should be secondary to these resume-derived specific questions.
-  - Resume Content (Processed Text from client-side - **Primary source within profile**):
+  *   **CRITICAL INSTRUCTION: The resume content provided below is the ABSOLUTE MOST IMPORTANT source for generating questions in this scenario.**
+  *   You MUST generate the majority of your domain-specific, technical, and coding questions *directly and deeply* from the content of this resume.
+  *   Probe into specific experiences, skills, projects, and technologies mentioned. Ask "Tell me about X project from your resume," "Explain Y technology you listed," "Describe your role in Z experience."
+  *   Mark these questions as type: 'resume_based'.
+  *   Behavioral and general conversational questions should be MINIMIZED. They are secondary and should ONLY be used if the resume content is exceptionally sparse and insufficient to meet the required number of questions for the interview duration. Resume-derived, domain-specific questions take STRONG PRECEDENCE.
+  - Resume Content (Processed Text from client-side - **PARAMOUNT source within profile**):
   ---
   {{{resumeProcessedText}}}
   ---
@@ -135,10 +137,10 @@ The interview duration is {{{interviewDuration}}} minutes.
   *   No resume text provided. Rely on structured profile data and general role/field as described below.
   {{/if}}
 
-  *   Order of importance if resume is sparse or absent:
+  *   Order of importance if resume is sparse or absent (or as supplementary to a sparse resume):
       1.  **Structured Experiences, Projects, Key Skills:** Use these to ask specific, experience-based questions. Mark as 'profile_based'.
       2.  **Education History:** Use for context or relevant academic projects. Mark as 'profile_based'.
-      3.  **General Profile Field & Role:** Use for general domain questions or as a fallback.
+      3.  **General Profile Field & Role:** Use for general domain questions or as a fallback *only if resume and detailed profile are insufficient*.
 
   Candidate's General Profile:
   - Profile Field: {{{profileField}}}
@@ -178,22 +180,17 @@ The interview duration is {{{interviewDuration}}} minutes.
   *   Use for context or relevant academic projects if not in resume. Mark as 'profile_based'.
   {{/if}}
 
-  *   **Question Focus when No JD:**
-      *   **If Resume is provided:** The candidate's demonstrated experience, skills, and projects from the resume should be the **MAIN DRIVER** for questions. Domain-specific and technical questions MUST come from the resume.
-      *   **If No Resume, but structured profile data exists:** Use experiences, projects, skills as the main driver.
-      *   Supplement these highly specific questions with a few broader questions related to their target {{{profileField}}} and {{{role}}} to assess interest, transferable skills, and alignment (these can be 'profile_based', 'conversational', or 'behavioral' but should be FEWER in number if resume/detailed profile is rich).
-      *   If resume AND structured profile data are sparse/unavailable, generate more questions based on {{{profileField}}} and {{{role}}} (type: 'behavioral', 'technical', 'conversational' as appropriate).
-
   *   **Question Stages & Types (when No JD):**
       *   Determine if the role (primarily indicated by Resume > Structured Profile > General Profile Field/Role) is technical. Technical role keywords: ${technicalRolesKeywords.join(', ')}.
       *   **For Non-Technical Roles (if no JD):**
-          *   All questions 'oral'. Mix of 'conversational', 'behavioral', and (if resume/profile available) 'resume_based'/'profile_based' derived from that data.
+          *   All questions 'oral'.
+          *   If resumeProcessedText is available, prioritize 'resume_based' questions. Supplement with 'profile_based' from structured data if needed. Use 'conversational' or 'behavioral' types sparingly only if resume/profile data is insufficient.
           *   Number of questions: 15 mins (6-7 oral), 30 mins (10-12 oral), 45 mins (15-16 oral).
       *   **For Technical Roles (if no JD):**
-          *   Prioritize questions based on Resume/Profile Data. 'technical' questions must be specific and in-depth, relevant to this data (ideally 'resume_based' if resume available).
-          *   Technical Oral (approx. 45% of total): stage 'oral', type 'resume_based' (if resume) or 'profile_based' (if no resume but profile data), focusing on deep conceptual topics from these sources. Also use 'technical' for general concepts if resume/profile is light.
-          *   Technical Written (approx. 30% of total): stage 'technical_written', type 'resume_based' (if resume) or 'profile_based' (if no resume but profile data), focusing on explanations, system design, coding tasks related to these sources. Also use 'technical' or 'coding' for general tasks if resume/profile is light.
-          *   Non-Technical Oral (approx. 25% of total): stage 'oral', type 'conversational', 'behavioral', or 'resume_based'/'profile_based' (soft skills aspects from resume/profile data).
+          *   **If resumeProcessedText is available, Technical Oral (approx. 45%) and Technical Written (approx. 30%) questions MUST be primarily resume_based.** These questions must be specific, in-depth, and directly relevant to the technologies, projects, and experiences detailed in the resume.
+          *   Generic 'technical' or 'coding' questions (not tied to the resume) should ONLY be used as a last resort if the resume is extremely sparse and does not offer enough specific topics to cover the required number of technical questions for the duration.
+          *   If resumeProcessedText is NOT available, then use 'profile_based' questions derived from structured experiences, projects, and skills for these technical slots. If that data is also sparse, then (and only then) use general 'technical' or 'coding' types.
+          *   Non-Technical Oral (approx. 25% of total): stage 'oral'. If resume/profile data is rich, these can also be 'resume_based' or 'profile_based' (e.g., "Tell me about a time you led a team, based on X project in your resume."). Otherwise, use 'conversational' or 'behavioral'.
           *   Specific counts for Technical Roles (if no JD), ensuring 'oral' questions come before 'technical_written':
               *   15 mins (Total 6-7): Tech Oral: 2-3, Tech Written: 2, Non-Tech Oral: 2
               *   30 mins (Total 10-12): Tech Oral: 4-5, Tech Written: 3-4, Non-Tech Oral: 2-3
@@ -276,3 +273,5 @@ const generateInterviewQuestionsFlow = ai.defineFlow(
   }
 );
 
+
+    
