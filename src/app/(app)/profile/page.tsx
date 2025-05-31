@@ -54,10 +54,9 @@ const profileFormSchema = z.object({
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
-const CLIENT_SIDE_PROCESSING_MIME_TYPES = ['text/plain', 'text/markdown'];
 const ACCEPT_FILE_EXTENSIONS = ".txt,.md,.pdf,.doc,.docx"; 
 const MAX_FILE_SIZE_MB = 5;
-const LOCAL_STORAGE_RESUME_TEXT_KEY = 'tyaariResumeProcessedText'; // Still used for immediate UI update
+const LOCAL_STORAGE_RESUME_TEXT_KEY = 'tyaariResumeProcessedText';
 const LOCAL_STORAGE_RESUME_FILENAME_KEY = 'tyaariResumeFileName';
 
 
@@ -94,20 +93,29 @@ export default function ProfilePage() {
     },
   });
   
-  // Effect to configure pdf.js worker on component mount
+  // Effect to configure pdf.js worker on component mount for client-side parsing
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      // IMPORTANT: For this to work, you must copy 
-      // `node_modules/pdfjs-dist/build/pdf.worker.mjs` (or .min.js) 
-      // to your `public/` directory (e.g., `public/pdf.worker.mjs`).
+    if (typeof window !== 'undefined' && typeof pdfjsLib !== 'undefined' && pdfjsLib.GlobalWorkerOptions) {
       try {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs'; 
-        console.log("ProfilePage: pdf.js workerSrc configured to /pdf.worker.mjs");
+        // Check if it's already set to avoid re-setting, though pdf.js might handle this.
+        // The path '/pdf.worker.mjs' assumes the worker file is in the 'public' directory of your Next.js project.
+        if (pdfjsLib.GlobalWorkerOptions.workerSrc !== '/pdf.worker.mjs') {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs';
+            console.log("ProfilePage: pdf.js workerSrc configured for client-side: /pdf.worker.mjs. \nCRITICAL: Ensure 'node_modules/pdfjs-dist/build/pdf.worker.mjs' is copied to your project's '/public' directory as 'pdf.worker.mjs'.");
+        }
       } catch (e) {
-        console.error("ProfilePage: Error trying to access pdfjsLib.GlobalWorkerOptions.workerSrc. This can happen during SSR or if pdfjsLib is not loaded.", e);
+        console.error("ProfilePage: Error trying to access or set pdfjsLib.GlobalWorkerOptions.workerSrc. This can happen if pdfjsLib is not loaded correctly or during SSR.", e);
+        toast({
+            title: "PDF Processing Setup Error",
+            description: "Could not configure PDF parsing. PDF uploads may fail. Ensure 'pdf.worker.mjs' is in /public.",
+            variant: "destructive",
+            duration: 10000,
+        });
       }
+    } else if (typeof window !== 'undefined') {
+        console.warn("ProfilePage: pdfjsLib or pdfjsLib.GlobalWorkerOptions not available when attempting to set workerSrc. PDF parsing might fail. Ensure you have copied 'pdf.worker.mjs' from 'node_modules/pdfjs-dist/build/' to your '/public' directory.");
     }
-  }, []);
+  }, [toast]);
 
 
   useEffect(() => {
@@ -129,7 +137,13 @@ export default function ProfilePage() {
         setExperiences(userProfile.experiences || []);
         setProjects(userProfile.projects || []);
         setEducationHistory(userProfile.educationHistory || []);
-        setClientSideResumeText(userProfile.resumeRawText || null); // Load from Firestore
+        setClientSideResumeText(userProfile.resumeRawText || null); 
+        
+        if (userProfile.resumeRawText && typeof window !== "undefined") {
+          const storedFileName = localStorage.getItem(LOCAL_STORAGE_RESUME_FILENAME_KEY);
+          if (storedFileName) setSelectedFileName(storedFileName);
+        }
+
       } else {
         form.reset({ 
             name: user.displayName || "", 
@@ -141,11 +155,6 @@ export default function ProfilePage() {
             accomplishments:"" 
         });
       }
-      // Load filename from localStorage if resume text came from Firestore
-      if (userProfile?.resumeRawText && typeof window !== "undefined") {
-        const storedFileName = localStorage.getItem(LOCAL_STORAGE_RESUME_FILENAME_KEY);
-        if (storedFileName) setSelectedFileName(storedFileName);
-      }
       setIsFetchingProfile(false);
     } else if (!initialLoading && !authLoading && !user) {
       setIsFetchingProfile(false);
@@ -153,9 +162,8 @@ export default function ProfilePage() {
     }
   }, [user, userProfile, form, authLoading, initialLoading]);
 
-  // Load filename from localStorage if it exists (primarily for display after manual upload)
   useEffect(() => {
-    if (typeof window !== "undefined" && !userProfile?.resumeRawText) { // Only if not already loaded from DB
+    if (typeof window !== "undefined" && !userProfile?.resumeRawText) { 
       const storedFileName = localStorage.getItem(LOCAL_STORAGE_RESUME_FILENAME_KEY);
       if (storedFileName) setSelectedFileName(storedFileName);
     }
@@ -229,7 +237,7 @@ export default function ProfilePage() {
     toast({ title: "Item Removed", description: "Item removed locally. Save all profile changes to make it permanent." });
   };
 
-  const clearResume = (showToast: boolean = false) => {
+  const clearResume = (showToast: boolean = false, toastMessage?: string) => {
     setSelectedFile(null); 
     setSelectedFileName(null); 
     setClientSideResumeText(null);
@@ -239,7 +247,7 @@ export default function ProfilePage() {
     }
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (showToast) {
-        toast({ title: "Resume Cleared", description: "Resume selection removed. Save profile to clear from database." });
+        toast({ title: "Resume Cleared", description: toastMessage || "Resume selection removed. Save profile to update in database." });
     }
   };
 
@@ -254,72 +262,100 @@ export default function ProfilePage() {
     setIsProcessingFile(true);
     setSelectedFile(file); 
     setSelectedFileName(file.name); 
-    setClientSideResumeText(""); // Reset any previous text
+    setClientSideResumeText(""); 
 
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
       toast({ title: "File Too Large", description: `Maximum file size is ${MAX_FILE_SIZE_MB}MB.`, variant: "destructive" });
-      clearResume(); 
+      clearResume(false); // No toast for this specific clear, main toast is enough
       setIsProcessingFile(false); 
       return;
     }
     
-    const isClientProcessable = CLIENT_SIDE_PROCESSING_MIME_TYPES.includes(file.type) || file.name.toLowerCase().endsWith('.txt') || file.name.toLowerCase().endsWith('.md');
     let extractedText: string | null = null;
+    const currentSelectedFileName = file.name; // Capture for use in toasts
+
+    // Preserve previous valid resume text and filename in case current processing fails due to setup/infra issues
+    const prevValidText = clientSideResumeText;
+    const prevValidFileName = selectedFileName;
 
     try {
-      if (isClientProcessable) {
-        extractedText = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = (e) => resolve(e.target?.result as string);
-          reader.onerror = (e) => reject(reader.error || new Error("FileReadError"));
-          reader.readAsText(file);
-        });
-      } else if (file.type === 'application/pdf') {
+      if (file.type === 'application/pdf') {
+        if (typeof pdfjsLib === 'undefined' || !pdfjsLib.GlobalWorkerOptions.workerSrc) {
+            throw new Error("PDF.js worker is not configured. Ensure 'pdf.worker.mjs' is in /public and workerSrc is set.");
+        }
         const arrayBuffer = await file.arrayBuffer();
         const typedArray = new Uint8Array(arrayBuffer);
-        // Worker should be configured by useEffect once pdfjsLib is loaded
-        if (!pdfjsLib.GlobalWorkerOptions.workerSrc && typeof window !== 'undefined') {
-            console.warn("ProfilePage: pdf.js workerSrc not set, attempting to set to default /pdf.worker.mjs for client-side PDF processing.");
-            pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs';
-        }
         const pdfDoc = await pdfjsLib.getDocument({ data: typedArray }).promise;
         let textContentAcc = '';
         for (let i = 1; i <= pdfDoc.numPages; i++) {
           const page = await pdfDoc.getPage(i);
           const pageTextContent = await page.getTextContent();
-          pageTextContent.items.forEach((item: any) => {
+          pageTextContent.items.forEach((item: any) => { // Cast item to any if TextItem not directly available
             textContentAcc += item.str + (item.hasEOL ? '\n' : ' ');
           });
-          textContentAcc += '\n';
+          textContentAcc += '\n'; 
         }
         extractedText = textContentAcc.trim();
       } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || file.name.toLowerCase().endsWith('.docx')) {
         const arrayBuffer = await file.arrayBuffer();
         const result = await mammoth.extractRawText({ arrayBuffer });
         extractedText = result.value;
+      } else if (file.type === 'text/plain' || file.name.toLowerCase().endsWith('.txt') || file.name.toLowerCase().endsWith('.md')) {
+        extractedText = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target?.result as string);
+          reader.onerror = (e) => reject(reader.error || new Error("FileReadError"));
+          reader.readAsText(file);
+        });
       } else {
         toast({ title: "Unsupported File Type", description: `Cannot process ${file.type}. Please upload PDF, DOCX, TXT, or MD.`, variant: "destructive" });
-        clearResume();
+        clearResume(false); // No toast for this specific clear
         setIsProcessingFile(false);
         return;
       }
 
       if (extractedText && extractedText.trim().length > 0) {
         setClientSideResumeText(extractedText);
-        setSelectedFileName(file.name); // Ensure filename is set here too
+        setSelectedFileName(currentSelectedFileName);
         if (typeof window !== "undefined") {
           localStorage.setItem(LOCAL_STORAGE_RESUME_TEXT_KEY, extractedText);
-          localStorage.setItem(LOCAL_STORAGE_RESUME_FILENAME_KEY, file.name);
+          localStorage.setItem(LOCAL_STORAGE_RESUME_FILENAME_KEY, currentSelectedFileName);
         }
-        toast({ title: "Resume Text Extracted (Client-side)", description: `Text extracted from ${file.name}. Save profile to store it.` });
+        toast({ title: "Resume Text Extracted", description: `Text successfully extracted from ${currentSelectedFileName}. Save profile to store it.` });
       } else {
-        toast({ title: "Text Extraction Failed", description: `No text could be extracted from ${file.name}.`, variant: "destructive" });
-        clearResume(true);
+        toast({ title: "Text Extraction Failed", description: `No text could be extracted from ${currentSelectedFileName}. The file might be empty or protected.`, variant: "destructive" });
+        clearResume(true, `No text extracted from '${currentSelectedFileName}'. Previous resume data (if any) cleared.`);
       }
     } catch (error: any) {
       console.error("Error processing resume client-side:", error);
-      toast({ title: "Resume Processing Error", description: `Client-side error: ${error.message || "Could not extract text."}`, variant: "destructive" });
-      clearResume(true);
+      const errorMessage = error.message || "Could not extract text from the uploaded file.";
+      
+      // Reset current (failed) selection
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      setSelectedFile(null);
+      setSelectedFileName(null); // Clear the name of the file that just failed
+
+      if (errorMessage.toLowerCase().includes("worker") || errorMessage.toLowerCase().includes("fetch dynamically imported module") || errorMessage.toLowerCase().includes("pdf.js worker")) {
+        toast({
+          title: "PDF Processing Initialization Error",
+          description: `Failed to set up PDF processing: ${errorMessage}. Ensure 'pdf.worker.mjs' is in your /public directory and try again. Your previous resume (if any) is preserved.`,
+          variant: "destructive",
+          duration: 10000,
+        });
+        // Restore previous valid states if they existed.
+        // clientSideResumeText still holds the previous valid text if this was just an init error.
+        // So, we only need to restore selectedFileName if there was previous text.
+        setSelectedFileName(prevValidText ? prevValidFileName : null);
+      } else {
+        // This means the file itself is likely bad or unparsable by the chosen library
+        toast({ title: "Resume Processing Error", description: `Could not extract text from the uploaded file '${currentSelectedFileName}': ${errorMessage}`, variant: "destructive" });
+        // Clear everything, as the new file is problematic and we shouldn't keep its failed state.
+        setClientSideResumeText(null); 
+        if (typeof window !== "undefined") {
+          localStorage.removeItem(LOCAL_STORAGE_RESUME_TEXT_KEY);
+          localStorage.removeItem(LOCAL_STORAGE_RESUME_FILENAME_KEY);
+        }
+      }
     } finally {
       setIsProcessingFile(false);
     }
@@ -351,7 +387,7 @@ export default function ProfilePage() {
         projects: projects || [],
         educationHistory: educationHistory || [],
         accomplishments: values.accomplishments || null,
-        resumeRawText: clientSideResumeText || null, // Save extracted text
+        resumeRawText: clientSideResumeText || null, 
         createdAt: userProfile?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         interviewsTaken: userProfile?.interviewsTaken || 0,
@@ -488,7 +524,7 @@ export default function ProfilePage() {
                     Ensure it's up-to-date for interview question generation.
                     <br />
                     <span className="text-xs text-amber-600 dark:text-amber-400">
-                        Note: For client-side PDF processing, ensure `public/pdf.worker.mjs` exists (copied from `node_modules/pdfjs-dist/build/`).
+                        CRITICAL: For PDF parsing, copy <strong>node_modules/pdfjs-dist/build/pdf.worker.mjs</strong> to your <strong>/public</strong> directory as <strong>pdf.worker.mjs</strong>.
                     </span>
                 </CardDescription>
             </CardHeader>
@@ -507,7 +543,7 @@ export default function ProfilePage() {
                   Text extraction quality can vary. Max file size: {MAX_FILE_SIZE_MB}MB.
                 </AlertDescription>
               </Alert>
-              {selectedFileName && (<div className="mt-2 text-sm text-muted-foreground flex items-center justify-between p-2 border rounded-md bg-secondary/50"><div className="flex items-center gap-2 overflow-hidden"><FileText className="h-4 w-4 text-primary shrink-0" /><span className="truncate" title={selectedFileName}>{selectedFileName}</span></div><div className="flex items-center gap-1 shrink-0"><Button type="button" variant="ghost" size="icon" onClick={() => clearResume(true)} title="Clear resume selection" aria-label="Clear resume" disabled={isSubmitting || isProcessingFile}><XCircle className="h-4 w-4 text-destructive" /></Button></div></div>)}
+              {selectedFileName && (<div className="mt-2 text-sm text-muted-foreground flex items-center justify-between p-2 border rounded-md bg-secondary/50"><div className="flex items-center gap-2 overflow-hidden"><FileText className="h-4 w-4 text-primary shrink-0" /><span className="truncate" title={selectedFileName}>{selectedFileName}</span></div><div className="flex items-center gap-1 shrink-0"><Button type="button" variant="ghost" size="icon" onClick={() => clearResume(true, "Resume selection removed locally. Save profile to update in database.")} title="Clear resume selection" aria-label="Clear resume" disabled={isSubmitting || isProcessingFile}><XCircle className="h-4 w-4 text-destructive" /></Button></div></div>)}
             </CardContent>
           </Card>
 
