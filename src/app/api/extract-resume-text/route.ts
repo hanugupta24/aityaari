@@ -1,13 +1,13 @@
 
 import { NextResponse } from 'next/server';
 import mammoth from 'mammoth';
-// @ts-ignore
+// @ts-ignore No official types for pdf-parse, or use a community one if available
 import pdf from 'pdf-parse';
 
-const LOG_PREFIX = "API_ROUTE_DEBUG (TXT_MD_ONLY_TEST):";
+const LOG_PREFIX = "API_ROUTE_DEBUG (v_PDF_DOCX_ENABLED):";
 
 export async function POST(request: Request) {
-  console.log(`${LOG_PREFIX} /api/extract-resume-text POST handler INVOKED.`);
+  console.log(`${LOG_PREFIX} POST handler invoked.`);
 
   let file: File | null = null;
   let fileBuffer: Buffer | null = null;
@@ -21,12 +21,12 @@ export async function POST(request: Request) {
 
     if (!fileEntry) {
       console.error(`${LOG_PREFIX} 'file' entry not found in formData. Available keys: ${Array.from(formData.keys()).join(', ')}`);
-      return NextResponse.json({ message: "'file' entry not found in formData." }, { status: 400 });
+      return NextResponse.json({ message: "'file' entry not found in formData. Ensure the client is sending the file under the 'file' key." }, { status: 400 });
     }
 
     if (!(fileEntry instanceof File)) {
       console.error(`${LOG_PREFIX} 'file' entry is not a File instance. Type received: ${typeof fileEntry}`);
-      return NextResponse.json({ message: "'file' entry is not a valid File." }, { status: 400 });
+      return NextResponse.json({ message: "'file' entry is not a valid File object." }, { status: 400 });
     }
     file = fileEntry;
     console.log(`${LOG_PREFIX} File identified: ${file.name}, Type: ${file.type}, Size: ${file.size} bytes.`);
@@ -36,67 +36,95 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Uploaded file is empty." }, { status: 400 });
     }
 
-    console.log(`${LOG_PREFIX} Attempting to read file into ArrayBuffer...`);
-    const arrayBuffer = await file.arrayBuffer();
-    fileBuffer = Buffer.from(arrayBuffer);
-    console.log(`${LOG_PREFIX} File buffer created successfully. Buffer size: ${fileBuffer.length} bytes.`);
+    try {
+      console.log(`${LOG_PREFIX} Attempting to read file into ArrayBuffer for: ${file.name}`);
+      const arrayBuffer = await file.arrayBuffer();
+      fileBuffer = Buffer.from(arrayBuffer);
+      console.log(`${LOG_PREFIX} File buffer created successfully for: ${file.name}. Buffer size: ${fileBuffer.length} bytes.`);
+    } catch (bufferError: any) {
+      console.error(`${LOG_PREFIX} Error creating buffer from file ${file.name}:`, bufferError.message, bufferError.stack);
+      return NextResponse.json({ message: `Error reading file into buffer: ${bufferError.message}` }, { status: 500 });
+    }
 
     let extractedText = "";
 
     if (file.type === "text/plain" || file.name.toLowerCase().endsWith(".txt")) {
       console.log(`${LOG_PREFIX} Processing TXT file: ${file.name}`);
-      extractedText = fileBuffer.toString("utf-8").trim();
-      console.log(`${LOG_PREFIX} TXT processing successful for: ${file.name}. Extracted text length: ${extractedText.length}`);
+      try {
+        extractedText = fileBuffer.toString("utf-8").trim();
+        console.log(`${LOG_PREFIX} TXT processing successful for: ${file.name}. Extracted text length: ${extractedText.length}`);
+      } catch (txtError: any) {
+        console.error(`${LOG_PREFIX} Error processing TXT file ${file.name}:`, txtError.message, txtError.stack);
+        return NextResponse.json({ message: `Error processing TXT file: ${txtError.message}` }, { status: 500 });
+      }
     } else if (file.type === "text/markdown" || file.name.toLowerCase().endsWith(".md")) {
       console.log(`${LOG_PREFIX} Processing MD file: ${file.name}`);
-      extractedText = fileBuffer.toString("utf-8").trim();
-      console.log(`${LOG_PREFIX} MD processing successful for: ${file.name}. Extracted text length: ${extractedText.length}`);
+      try {
+        extractedText = fileBuffer.toString("utf-8").trim();
+        console.log(`${LOG_PREFIX} MD processing successful for: ${file.name}. Extracted text length: ${extractedText.length}`);
+      } catch (mdError: any) {
+        console.error(`${LOG_PREFIX} Error processing MD file ${file.name}:`, mdError.message, mdError.stack);
+        return NextResponse.json({ message: `Error processing MD file: ${mdError.message}` }, { status: 500 });
+      }
     } else if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
-      console.warn(`${LOG_PREFIX} PDF parsing temporarily disabled for testing: ${file.name}`);
-      return NextResponse.json({ message: `PDF parsing for '${file.name}' is temporarily disabled for testing. Please try a .txt or .md file.`, text: "" }, { status: 200 }); // Return 200 so client doesn't throw !response.ok immediately
+      console.log(`${LOG_PREFIX} Attempting to parse PDF file: ${file.name} using pdf-parse.`);
+      try {
+        const data = await pdf(fileBuffer);
+        extractedText = data.text.trim();
+        console.log(`${LOG_PREFIX} PDF parsing successful for: ${file.name}. Extracted text length: ${extractedText.length}`);
+      } catch (pdfError: any) {
+        console.error(`${LOG_PREFIX} Error parsing PDF file ${file.name} with pdf-parse:`, pdfError.message, pdfError.stack);
+        return NextResponse.json({ message: `Error parsing PDF file: ${pdfError.message}` }, { status: 500 });
+      }
     } else if (
       file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
       file.name.toLowerCase().endsWith(".docx")
     ) {
-      console.warn(`${LOG_PREFIX} DOCX parsing temporarily disabled for testing: ${file.name}`);
-      return NextResponse.json({ message: `DOCX parsing for '${file.name}' is temporarily disabled for testing. Please try a .txt or .md file.`, text: "" }, { status: 200 }); // Return 200
+      console.log(`${LOG_PREFIX} Attempting to parse DOCX file: ${file.name} using mammoth.`);
+      try {
+        const result = await mammoth.extractRawText({ buffer: fileBuffer });
+        extractedText = result.value.trim();
+        console.log(`${LOG_PREFIX} DOCX parsing successful for: ${file.name}. Extracted text length: ${extractedText.length}`);
+      } catch (docxError: any) {
+        console.error(`${LOG_PREFIX} Error parsing DOCX file ${file.name} with mammoth:`, docxError.message, docxError.stack);
+        return NextResponse.json({ message: `Error parsing DOCX file: ${docxError.message}` }, { status: 500 });
+      }
     } else {
       console.warn(`${LOG_PREFIX} Unsupported file type: ${file.type} for file ${file.name}`);
       return NextResponse.json(
-        { message: `Unsupported file type: '${file.type || 'unknown'}'. Please upload a TXT, or MD file for current testing.` },
-        { status: 415 }
+        { message: `Unsupported file type: '${file.type || 'unknown'}'. Please upload a TXT, MD, PDF, or DOCX file.` },
+        { status: 415 } // 415 Unsupported Media Type
       );
     }
 
-    if (!extractedText && file.size > 0 && (file.name.toLowerCase().endsWith(".txt") || file.name.toLowerCase().endsWith(".md"))) {
-      console.warn(`${LOG_PREFIX} Text extraction resulted in empty string for non-empty TXT/MD file: ${file.name}.`);
+    if (!extractedText && file.size > 0) {
+      // This case might happen if parsing was "successful" but yielded no text from a non-empty file.
+      console.warn(`${LOG_PREFIX} Text extraction resulted in empty string for non-empty file: ${file.name} of type ${file.type}. This might indicate an issue with the file's content or the parser for this type.`);
+      // Optionally, return a specific message or treat as success with empty text
+      // For now, we'll proceed and let the client decide if empty text is an issue.
     }
 
-    console.log(`${LOG_PREFIX} Returning successfully processed text for TXT/MD: ${file.name}. Length: ${extractedText.length}`);
+    console.log(`${LOG_PREFIX} Returning successfully processed text for: ${file.name}. Length: ${extractedText.length}`);
     return NextResponse.json({ text: extractedText });
 
   } catch (error: any) {
-    let errorDetails = "Unknown error occurred.";
+    // This is the outermost catch block. It catches errors from formData parsing or other unexpected issues.
+    let errorDetails = "Unknown error occurred during API request processing.";
     let errorStack = error?.stack || "No stack trace available.";
 
     if (error instanceof Error) {
         errorDetails = error.message;
     } else if (typeof error === 'string') {
         errorDetails = error;
-    } else {
-        try {
-            errorDetails = JSON.stringify(error);
-        } catch (stringifyError: any) {
-            errorDetails = `Could not stringify error object: ${stringifyError.message}`;
-        }
     }
+    
     console.error(`${LOG_PREFIX} CRITICAL UNHANDLED ERROR in POST handler: ${errorDetails}`, errorStack);
-    console.error(`${LOG_PREFIX} File context: Name: ${file?.name || 'N/A'}, Type: ${file?.type || 'N/A'}, Size: ${file?.size || 'N/A'}`);
-    console.error(`${LOG_PREFIX} Buffer context: Created: ${!!fileBuffer}, Size: ${fileBuffer?.length || 'N/A'}`);
-
-    // This error might still be overridden by Next.js HTML 500 if the crash is too severe.
+    console.error(`${LOG_PREFIX} File context if available: Name: ${file?.name || 'N/A'}, Type: ${file?.type || 'N/A'}, Size: ${file?.size || 'N/A'}`);
+    console.error(`${LOG_PREFIX} Buffer context if available: Created: ${!!fileBuffer}, Size: ${fileBuffer?.length || 'N/A'}`);
+    
+    // Attempt to return a JSON response even for these critical errors
     return NextResponse.json(
-      { message: `Server error during file processing: ${errorDetails.substring(0,250)}` },
+      { message: `Server error during file processing: ${errorDetails.substring(0,300)}` }, // Limit error message length
       { status: 500 }
     );
   } finally {
