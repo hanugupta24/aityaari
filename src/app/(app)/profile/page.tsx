@@ -24,7 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, FileText, UploadCloud, XCircle, PlusCircle, Edit3, Trash2, Briefcase, Lightbulb, GraduationCap, Trophy, UserCircle2, Info, AlertTriangle } from "lucide-react";
+import { Loader2, FileText, XCircle, PlusCircle, Edit3, Trash2, Briefcase, Lightbulb, GraduationCap, Trophy, UserCircle2, Info, AlertTriangle, UploadCloud } from "lucide-react";
 import type { UserProfile, ExperienceItem, ProjectItem, EducationItem } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -52,8 +52,8 @@ const profileFormSchema = z.object({
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
-const ACCEPT_FILE_EXTENSIONS = ".txt,.md"; // Simplified to TXT and MD
-const MAX_FILE_SIZE_MB = 2; // Reduced for simple text files
+const ACCEPT_FILE_EXTENSIONS = ".txt,.md,.pdf,.doc,.docx";
+const MAX_FILE_SIZE_MB = 5; 
 const LOCAL_STORAGE_RESUME_TEXT_KEY = 'tyaariResumeProcessedText';
 const LOCAL_STORAGE_RESUME_FILENAME_KEY = 'tyaariResumeFileName';
 
@@ -107,16 +107,15 @@ export default function ProfilePage() {
         setProjects(userProfile.projects || []);
         setEducationHistory(userProfile.educationHistory || []);
         
-        // Load from localStorage as primary source for client-side display
         const lsText = typeof window !== "undefined" ? localStorage.getItem(LOCAL_STORAGE_RESUME_TEXT_KEY) : null;
         const lsFileName = typeof window !== "undefined" ? localStorage.getItem(LOCAL_STORAGE_RESUME_FILENAME_KEY) : null;
 
         if (lsText && lsFileName) {
             setClientSideResumeText(lsText);
             setSelectedFileName(lsFileName);
-        } else if (userProfile.resumeRawText) { // Fallback to DB text if localStorage is empty (e.g. new browser)
+        } else if (userProfile.resumeRawText) { 
             setClientSideResumeText(userProfile.resumeRawText);
-            setSelectedFileName("resume_from_profile.txt"); // Generic name
+            setSelectedFileName("resume_from_profile.txt");
             if (typeof window !== "undefined") {
               localStorage.setItem(LOCAL_STORAGE_RESUME_TEXT_KEY, userProfile.resumeRawText);
               localStorage.setItem(LOCAL_STORAGE_RESUME_FILENAME_KEY, "resume_from_profile.txt");
@@ -133,7 +132,7 @@ export default function ProfilePage() {
             company: "", 
             accomplishments:"" 
         });
-        if (typeof window !== "undefined") { // Still load from localStorage if profile is new
+        if (typeof window !== "undefined") {
             const lsText = localStorage.getItem(LOCAL_STORAGE_RESUME_TEXT_KEY);
             const lsFileName = localStorage.getItem(LOCAL_STORAGE_RESUME_FILENAME_KEY);
             if (lsText && lsFileName) {
@@ -226,78 +225,113 @@ export default function ProfilePage() {
       localStorage.removeItem(LOCAL_STORAGE_RESUME_FILENAME_KEY);
     }
     if (fileInputRef.current) fileInputRef.current.value = "";
+    // Also clear AI-populated experiences and projects if a resume is fully cleared
+    // This assumes that if a resume is manually cleared, the user might not want the AI-extracted data from it anymore.
+    // setExperiences([]); 
+    // setProjects([]);
+    // Commented out above for now, let's see if this is desired behavior. Clearing might be just for the *file selection*
     if (showToast) {
-        toast({ title: "Resume Cleared", description: toastMessage || "Resume selection removed from localStorage. Save profile to update in database if necessary." });
+        toast({ title: "Resume Cleared", description: toastMessage || "Resume selection and local storage text removed." });
     }
   };
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (fileInputRef.current) fileInputRef.current.value = ""; 
+    if (fileInputRef.current) fileInputRef.current.value = "";
 
     if (!file) {
-      setSelectedFile(null); 
+      clearResume(false); // Clear if no file is selected (e.g., user cancels file dialog)
       return;
     }
-
-    const prevSelectedFile = selectedFile;
-    const prevFileName = selectedFileName;
-    const prevResumeText = clientSideResumeText;
-
+    
+    setSelectedFile(file);
+    setSelectedFileName(file.name);
     setIsProcessingFile(true);
-    setSelectedFile(file); 
-    setSelectedFileName(file.name); 
-    setClientSideResumeText(""); 
+    setClientSideResumeText(null); // Clear previous text while processing new file
+
+    toast({ title: "Processing Resume", description: `Uploading and analyzing ${file.name}...`, duration: 15000 });
 
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-      toast({ title: "File Too Large", description: `Maximum file size for TXT/MD is ${MAX_FILE_SIZE_MB}MB.`, variant: "destructive" });
-      setSelectedFile(prevSelectedFile); 
-      setSelectedFileName(prevFileName);
-      setClientSideResumeText(prevResumeText);
+      toast({ title: "File Too Large", description: `Maximum file size is ${MAX_FILE_SIZE_MB}MB.`, variant: "destructive" });
+      clearResume(false);
       setIsProcessingFile(false);
       return;
     }
     
-    let extractedText: string | null = null;
-    const currentSelectedFileName = file.name; 
+    const formData = new FormData();
+    formData.append('resume', file);
 
     try {
-      console.log(`ProfilePage: CLIENT_SIDE_PARSE - Processing file: ${file.name}, type: ${file.type}`);
-      if (file.type === 'text/plain' || file.name.toLowerCase().endsWith('.txt') || file.name.toLowerCase().endsWith('.md')) {
-        extractedText = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = (e) => resolve(e.target?.result as string);
-          reader.onerror = (e) => reject(reader.error || new Error("FileReadError"));
-          reader.readAsText(file);
-        });
-        console.log(`ProfilePage: CLIENT_SIDE_PARSE - TXT/MD text extracted. Length: ${extractedText?.length}`);
-      } else {
-        toast({ title: "Unsupported File Type", description: `Cannot process ${file.type}. Please upload TXT or MD files.`, variant: "destructive" });
-        setSelectedFile(prevSelectedFile); 
-        setSelectedFileName(prevFileName);
-        setClientSideResumeText(prevResumeText);
+      const response = await fetch('/api/extract-resume-text', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const responseBodyText = await response.text(); // Read body as text first
+
+      if (!response.ok) {
+        let errorMessageFromServer = `Server error: ${response.status} ${response.statusText}`;
+        try {
+            const errorData = JSON.parse(responseBodyText); // Try to parse as JSON
+            if (errorData && errorData.message) {
+                errorMessageFromServer = errorData.message;
+            }
+        } catch (e) {
+            // If parsing as JSON fails, use the raw text if it looks like a simple error message
+            if (!responseBodyText.trim().toLowerCase().startsWith('<!doctype html') && !responseBodyText.trim().toLowerCase().startsWith('<html>') && responseBodyText.length < 500) {
+                 errorMessageFromServer = responseBodyText || errorMessageFromServer;
+            } else if (responseBodyText.trim().toLowerCase().startsWith('<!doctype html') || responseBodyText.trim().toLowerCase().startsWith('<html>')) {
+                 errorMessageFromServer = `Server returned an HTML error page (Status: ${response.status}). Please check server logs.`;
+            }
+        }
+        console.error("ProfilePage: API Error Response:", errorMessageFromServer, "Raw text:", responseBodyText.substring(0,500));
+        toast({ title: "Resume Processing Failed", description: errorMessageFromServer, variant: "destructive", duration: 10000 });
+        clearResume(true, "Previous resume data (if any) cleared due to processing error of new file.");
         setIsProcessingFile(false);
         return;
       }
+      
+      const data = JSON.parse(responseBodyText); // Parse the successful response text as JSON
 
-      if (extractedText && extractedText.trim().length > 0) {
-        setClientSideResumeText(extractedText);
-        setSelectedFileName(currentSelectedFileName); 
-        if (typeof window !== "undefined") {
-          localStorage.setItem(LOCAL_STORAGE_RESUME_TEXT_KEY, extractedText);
-          localStorage.setItem(LOCAL_STORAGE_RESUME_FILENAME_KEY, currentSelectedFileName);
+      if (data.success) {
+        if (data.rawText && data.rawText.trim().length > 0) {
+          setClientSideResumeText(data.rawText);
+          if (typeof window !== "undefined") {
+            localStorage.setItem(LOCAL_STORAGE_RESUME_TEXT_KEY, data.rawText);
+            localStorage.setItem(LOCAL_STORAGE_RESUME_FILENAME_KEY, file.name);
+          }
+          toast({ title: "Resume Processed", description: `Raw text extracted from ${file.name}.`, duration: 5000 });
+        } else {
+          toast({ title: "No Text Extracted", description: `Could not extract text from ${file.name}. It might be empty or in an unsupported format.`, variant: "default", duration: 7000 });
+          clearResume(true, "Resume data cleared as no text was extracted from the new file.");
         }
-        toast({ title: "Resume Text Extracted (Client-Side)", description: `Text successfully extracted from ${currentSelectedFileName} and saved to local storage.` });
+
+        if (data.experiences && data.experiences.length > 0) {
+          setExperiences(data.experiences);
+          toast({ title: "Experiences Auto-filled", description: `${data.experiences.length} experience items extracted from resume. Please review.`, duration: 6000});
+        }
+        if (data.projects && data.projects.length > 0) {
+          setProjects(data.projects);
+           toast({ title: "Projects Auto-filled", description: `${data.projects.length} project items extracted from resume. Please review.`, duration: 6000 });
+        }
+        if (data.structuredExtractionError) {
+            toast({ title: "AI Structuring Note", description: data.structuredExtractionError, variant: "default", duration: 8000 });
+        }
+
       } else {
-        toast({ title: "Text Extraction Failed (Client-Side)", description: `No text could be extracted from ${currentSelectedFileName}. The file might be empty.`, variant: "destructive" });
-        setSelectedFile(prevSelectedFile); 
-        setSelectedFileName(prevFileName);
-        setClientSideResumeText(prevResumeText); // Revert to previous if new extraction fails
+        toast({ title: "Resume Processing Failed", description: data.message || "Unknown error from server.", variant: "destructive", duration: 7000 });
+        clearResume(true, "Previous resume data (if any) cleared due to processing error of new file.");
       }
     } catch (error: any) {
-      console.error("ProfilePage: CLIENT_SIDE_PARSE - Error processing resume client-side:", error);
-      toast({ title: "Resume Processing Error (Client-Side)", description: `Could not extract text from the uploaded file '${currentSelectedFileName}': ${error.message}`, variant: "destructive" });
-      clearResume(false); 
+      console.error("ProfilePage: Error in handleFileChange:", error);
+      let desc = "An error occurred while uploading or processing your resume. Check console for details.";
+      if (error.message?.includes("Failed to fetch") || error.message?.includes("NetworkError")) {
+        desc = "Network error. Please check your connection and if the server is running.";
+      } else if (error.name === "AbortError") {
+        desc = "The request was aborted, possibly due to a timeout.";
+      }
+      toast({ title: "Upload Error", description: desc, variant: "destructive", duration: 10000 });
+      clearResume(true, "Previous resume data (if any) cleared due to upload/network error.");
     } finally {
       setIsProcessingFile(false);
     }
@@ -316,11 +350,6 @@ export default function ProfilePage() {
     }
     setIsSubmitting(true);
     try {
-      // The resume text is taken from localStorage by the interview start page.
-      // We will save the localStorage version of resume text to DB if userProfile.resumeRawText is empty
-      // This handles the case where a user uploads, doesn't save profile, starts interview, then comes back.
-      const resumeTextFromLocalStorage = typeof window !== "undefined" ? localStorage.getItem(LOCAL_STORAGE_RESUME_TEXT_KEY) : null;
-
       const profileDataToSave: UserProfile = {
         uid: user.uid,
         email: values.email || user.email || null, 
@@ -334,8 +363,7 @@ export default function ProfilePage() {
         projects: projects || [],
         educationHistory: educationHistory || [],
         accomplishments: values.accomplishments || null,
-        // Save localStorage resume text to DB only if DB version is empty, or if localStorage has text and DB doesn't
-        resumeRawText: userProfile?.resumeRawText ? userProfile.resumeRawText : (resumeTextFromLocalStorage || null),
+        resumeRawText: clientSideResumeText || userProfile?.resumeRawText || null, // Prefer clientSideText, fallback to existing DB text
         createdAt: userProfile?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         interviewsTaken: userProfile?.interviewsTaken || 0,
@@ -434,9 +462,9 @@ export default function ProfilePage() {
           
           <Card className="shadow-md">
             <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-xl"><FileText className="h-6 w-6 text-primary" /> Resume (Text Only)</CardTitle>
+                <CardTitle className="flex items-center gap-2 text-xl"><FileText className="h-6 w-6 text-primary" /> Upload Resume</CardTitle>
                 <CardDescription>
-                    Upload your resume (.txt or .md). Extracted text will be stored in your browser's local storage and used for interview question generation.
+                    Upload your resume (PDF, DOCX, TXT, MD). Raw text and AI-extracted Experience/Projects will auto-fill.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -447,11 +475,11 @@ export default function ProfilePage() {
                 {isProcessingFile && <Loader2 className="h-5 w-5 animate-spin" />}
               </div>
               <Alert variant="default" className="border-blue-500/50 text-blue-700 dark:text-blue-300 dark:border-blue-400/50">
-                <Info className="h-4 w-4 !text-blue-500 dark:!text-blue-400" />
-                <AlertTitle className="text-blue-700 dark:text-blue-300">File Format Information</AlertTitle>
+                <UploadCloud className="h-4 w-4 !text-blue-500 dark:!text-blue-400" />
+                <AlertTitle className="text-blue-700 dark:text-blue-300">Resume Processing</AlertTitle>
                 <AlertDescription className="text-blue-600 dark:text-blue-200">
-                  Supported formats: <strong>.txt, .md</strong>. Max file size: {MAX_FILE_SIZE_MB}MB.
-                  PDF/DOCX parsing is not currently supported for direct text extraction here. Please convert your resume to TXT or MD.
+                  Supported: <strong>.pdf, .docx, .txt, .md</strong>. Max: {MAX_FILE_SIZE_MB}MB. 
+                  The server will extract raw text and attempt to auto-fill Experience & Projects using AI.
                 </AlertDescription>
               </Alert>
               {selectedFileName && (<div className="mt-2 text-sm text-muted-foreground flex items-center justify-between p-2 border rounded-md bg-secondary/50"><div className="flex items-center gap-2 overflow-hidden"><FileText className="h-4 w-4 text-primary shrink-0" /><span className="truncate" title={selectedFileName}>{selectedFileName}</span> ({clientSideResumeText ? `${Math.round(clientSideResumeText.length / 1024)} KB` : 'No text'})</div><div className="flex items-center gap-1 shrink-0"><Button type="button" variant="ghost" size="icon" onClick={() => clearResume(true, "Resume selection and local storage text removed.")} title="Clear resume selection" aria-label="Clear resume" disabled={isSubmitting || isProcessingFile}><XCircle className="h-4 w-4 text-destructive" /></Button></div></div>)}
@@ -459,18 +487,18 @@ export default function ProfilePage() {
           </Card>
 
           <Card className="shadow-md">
-            <CardHeader><CardTitle className="flex items-center gap-2 text-xl"><Briefcase className="h-6 w-6 text-primary" /> Work Experience</CardTitle><CardDescription>Detail your professional journey. This information is saved to your profile for tailored interviews.</CardDescription></CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2 text-xl"><Briefcase className="h-6 w-6 text-primary" /> Work Experience</CardTitle><CardDescription>Detail your professional journey. This can be auto-filled by uploading a resume. Saved to your profile.</CardDescription></CardHeader>
             <CardContent className="space-y-4">
-              {experiences.length === 0 && <p className="text-sm text-muted-foreground">No work experience added yet. Click below to add manually.</p>}
+              {experiences.length === 0 && <p className="text-sm text-muted-foreground">No work experience added yet. Upload a resume or click below to add manually.</p>}
               {experiences.map((exp) => (<Card key={exp.id} className="bg-muted/30 p-4 shadow-sm rounded-md"><CardHeader className="p-0 pb-2 flex flex-row justify-between items-start"><div><CardTitle className="text-md font-semibold">{exp.jobTitle} at {exp.companyName}</CardTitle><CardDescription className="text-xs">{exp.startDate || 'N/A'} - {exp.endDate || 'Present'}</CardDescription></div><div className="flex gap-1 shrink-0"><Button type="button" variant="ghost" size="icon" onClick={() => openModal('experience', exp)} aria-label={`Edit experience ${exp.jobTitle}`}><Edit3 className="h-4 w-4 text-muted-foreground hover:text-primary" /></Button><Button type="button" variant="ghost" size="icon" onClick={() => handleDeleteItem('experience', exp.id)} aria-label={`Delete experience ${exp.jobTitle}`}><Trash2 className="h-4 w-4 text-destructive hover:text-destructive/80" /></Button></div></CardHeader><CardContent className="p-0 text-sm text-muted-foreground"><p className="whitespace-pre-wrap">{exp.description || "No description provided."}</p></CardContent></Card>))}
               <Button type="button" variant="outline" className="w-full mt-2 border-dashed hover:border-primary hover:text-primary" onClick={() => openModal('experience')}><PlusCircle className="mr-2 h-4 w-4" /> Add Experience Manually</Button>
             </CardContent>
           </Card>
 
           <Card className="shadow-md">
-            <CardHeader><CardTitle className="flex items-center gap-2 text-xl"><Lightbulb className="h-6 w-6 text-primary" /> Projects</CardTitle><CardDescription>Showcase your personal or professional projects. This is saved to your profile.</CardDescription></CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2 text-xl"><Lightbulb className="h-6 w-6 text-primary" /> Projects</CardTitle><CardDescription>Showcase your personal or professional projects. Can be auto-filled by resume. Saved to your profile.</CardDescription></CardHeader>
             <CardContent className="space-y-4">
-              {projects.length === 0 && <p className="text-sm text-muted-foreground">No projects added yet. Click below to add manually.</p>}
+              {projects.length === 0 && <p className="text-sm text-muted-foreground">No projects added yet. Upload a resume or click below to add manually.</p>}
               {projects.map((proj) => (<Card key={proj.id} className="bg-muted/30 p-4 shadow-sm rounded-md"><CardHeader className="p-0 pb-2 flex flex-row justify-between items-start"><div><CardTitle className="text-md font-semibold">{proj.title}</CardTitle></div><div className="flex gap-1 shrink-0"><Button type="button" variant="ghost" size="icon" onClick={() => openModal('project', proj)} aria-label={`Edit project ${proj.title}`}><Edit3 className="h-4 w-4 text-muted-foreground hover:text-primary" /></Button><Button type="button" variant="ghost" size="icon" onClick={() => handleDeleteItem('project', proj.id)} aria-label={`Delete project ${proj.title}`}><Trash2 className="h-4 w-4 text-destructive hover:text-destructive/80" /></Button></div></CardHeader><CardContent className="p-0 text-sm text-muted-foreground"><p className="whitespace-pre-wrap">{proj.description}</p>{proj.technologiesUsed && proj.technologiesUsed.length > 0 && <p className="mt-1 text-xs">Tech: {proj.technologiesUsed.join(', ')}</p>}{proj.projectUrl && <a href={proj.projectUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs block mt-1 break-all">View Project</a>}</CardContent></Card>))}
               <Button type="button" variant="outline" className="w-full mt-2 border-dashed hover:border-primary hover:text-primary" onClick={() => openModal('project')}><PlusCircle className="mr-2 h-4 w-4" /> Add Project Manually</Button>
             </CardContent>
