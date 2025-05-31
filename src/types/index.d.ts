@@ -3,7 +3,7 @@ export interface EducationItem {
   id: string; 
   degree: string;
   institution: string;
-  yearOfCompletion: string;
+  yearOfCompletion: string; // Should be YYYY
   details?: string;
 }
 
@@ -38,7 +38,7 @@ export interface UserProfile {
   projects?: ProjectItem[];
   educationHistory?: EducationItem[];
   accomplishments?: string | null;
-  resumeRawText?: string | null; // Added to store extracted resume text
+  resumeRawText?: string | null;
 
   createdAt: string;
   interviewsTaken?: number;
@@ -47,6 +47,24 @@ export interface UserProfile {
   isAdmin?: boolean;
   updatedAt?: string;
 }
+
+// This type represents the comprehensive structured data
+// expected from the (hypothetical) external Python resume processing service.
+// It aligns closely with UserProfile fields that can be extracted.
+export interface ExtractedResumeData {
+  name?: string;
+  email?: string;
+  phoneNumber?: string;
+  profileField?: string; // e.g., "Software Engineering"
+  role?: string; // e.g., "Senior Frontend Developer"
+  keySkills?: string[];
+  experiences?: ExperienceItem[];
+  projects?: ProjectItem[];
+  educationHistory?: EducationItem[];
+  accomplishments?: string; // A summary or concatenated list
+  rawText?: string; // The full raw text extracted from the resume
+}
+
 
 export interface InterviewSession {
   id: string;
