@@ -121,7 +121,7 @@ The interview duration is {{{interviewDuration}}} minutes.
 
 {{else}}
   **PRIORITY 2: BASED ON CANDIDATE'S DETAILED PROFILE (NO SPECIFIC JOB DESCRIPTION PROVIDED FOR THIS SESSION)**
-  *   Use the following candidate profile information.
+
   {{#if resumeProcessedText}}
   *   **CRITICAL INSTRUCTION: The resume content provided below is the ABSOLUTE MOST IMPORTANT source for generating questions in this scenario.**
   *   You MUST generate the majority of your domain-specific, technical, and coding questions *directly and deeply* from the content of this resume.
@@ -134,63 +134,66 @@ The interview duration is {{{interviewDuration}}} minutes.
   ---
   *   If this resume content points to a different field/domain than the general {{{profileField}}} and {{{role}}}, questions MUST predominantly reflect this resume's content.
   {{else}}
-  *   No resume text provided. Rely on structured profile data and general role/field as described below.
+  *   **Resume text is not available or is empty.**
+  *   **CRITICAL INSTRUCTION: Since resume text is absent or empty, you MUST NOW PRIORITIZE generating domain-specific and technical questions directly from the candidate's structured profile data: Work Experiences, Projects, and Key Skills, if provided.**
+  *   These structured details (experiences, projects, skills) are the **PRIMARY SOURCE** for questions in this scenario.
+  *   Probe deeply into specific roles, responsibilities, technologies used in projects, and applications of listed skills.
+  *   Mark these questions as type: 'profile_based'.
+  *   Only if this structured profile data (Experiences, Projects, Key Skills) is also sparse or insufficient to meet the question count for the duration should you then consider more general questions based on the overall Profile Field and Role.
+  *   General behavioral or conversational questions should be a **LAST RESORT** if all other specific data sources (resume, experiences, projects, skills) are exhausted.
   {{/if}}
 
-  *   Order of importance if resume is sparse or absent (or as supplementary to a sparse resume):
-      1.  **Structured Experiences, Projects, Key Skills:** Use these to ask specific, experience-based questions. Mark as 'profile_based'.
-      2.  **Education History:** Use for context or relevant academic projects. Mark as 'profile_based'.
-      3.  **General Profile Field & Role:** Use for general domain questions or as a fallback *only if resume and detailed profile are insufficient*.
-
-  Candidate's General Profile:
+  Candidate's General Profile (used as fallback or for context if resume/structured data is sparse):
   - Profile Field: {{{profileField}}}
   - Candidate Role: {{{role}}}
 
   {{#if experiences.length}}
-  - Work Experiences from Profile:
+  - Work Experiences from Profile (Use these if resume text is unavailable/empty):
     {{#each experiences}}
     - Title: {{this.jobTitle}} at {{this.companyName}} ({{this.startDate}} to {{this.endDate}})
       Description: {{this.description}}
     {{/each}}
-  *   Ask about specific roles, responsibilities, challenges, achievements. Mark as 'profile_based'.
+  *   Ask about specific roles, responsibilities, challenges, achievements from these experiences. Mark as 'profile_based'.
   {{/if}}
 
   {{#if projects.length}}
-  - Projects from Profile:
+  - Projects from Profile (Use these if resume text is unavailable/empty):
     {{#each projects}}
     - Title: {{this.title}}
       Description: {{this.description}}
       Tech: {{#if this.technologiesUsed}}{{#each this.technologiesUsed}}{{{this}}}{{#unless @last}}, {{/unless}}{{/each}}{{else}}N/A{{/if}}
       {{#if this.projectUrl}}URL: {{this.projectUrl}}{{/if}}
     {{/each}}
-  *   Inquire about project details, tech used, problems solved. Mark as 'profile_based'.
+  *   Inquire about project details, tech used, problems solved from these projects. Mark as 'profile_based'.
   {{/if}}
 
   {{#if keySkills.length}}
-  - Key Skills from Profile: {{#each keySkills}}{{#each this}}{{{this}}}{{#unless @last}}, {{/unless}}{{/each}}{{/each}}
-  *   Formulate questions to test depth and application, especially if not covered by resume. Mark as 'profile_based'.
+  - Key Skills from Profile (Use these if resume text is unavailable/empty): {{#each keySkills}}{{#each this}}{{{this}}}{{#unless @last}}, {{/unless}}{{/each}}{{/each}}
+  *   Formulate questions to test depth and application of these skills. Mark as 'profile_based'.
   {{/if}}
 
   {{#if educationHistory.length}}
-  - Education History from Profile:
+  - Education History from Profile (Use for context or relevant academic projects, especially if other data is sparse):
     {{#each educationHistory}}
     - Degree: {{this.degree}} from {{this.institution}} ({{this.yearOfCompletion}})
       Details: {{this.details}}
     {{/each}}
-  *   Use for context or relevant academic projects if not in resume. Mark as 'profile_based'.
+  *   Use for context or relevant academic projects. Mark as 'profile_based'.
   {{/if}}
 
   *   **Question Stages & Types (when No JD):**
-      *   Determine if the role (primarily indicated by Resume > Structured Profile > General Profile Field/Role) is technical. Technical role keywords: ${technicalRolesKeywords.join(', ')}.
+      *   Determine if the role (indicated by Resume (if present) > Structured Profile (Experiences, Projects, Skills) > General Profile Field/Role) is technical. Technical role keywords: ${technicalRolesKeywords.join(', ')}.
       *   **For Non-Technical Roles (if no JD):**
           *   All questions 'oral'.
-          *   If resumeProcessedText is available, prioritize 'resume_based' questions. Supplement with 'profile_based' from structured data if needed. Use 'conversational' or 'behavioral' types sparingly only if resume/profile data is insufficient.
+          *   If resumeProcessedText is available and non-empty, prioritize 'resume_based' questions.
+          *   If resumeProcessedText is unavailable/empty, prioritize 'profile_based' questions from structured data (Experiences, Projects, Skills).
+          *   Use 'conversational' or 'behavioral' types sparingly only if resume and structured profile data are insufficient.
           *   Number of questions: 15 mins (6-7 oral), 30 mins (10-12 oral), 45 mins (15-16 oral).
       *   **For Technical Roles (if no JD):**
-          *   **If resumeProcessedText is available, Technical Oral (approx. 45%) and Technical Written (approx. 30%) questions MUST be primarily resume_based.** These questions must be specific, in-depth, and directly relevant to the technologies, projects, and experiences detailed in the resume.
-          *   Generic 'technical' or 'coding' questions (not tied to the resume) should ONLY be used as a last resort if the resume is extremely sparse and does not offer enough specific topics to cover the required number of technical questions for the duration.
-          *   If resumeProcessedText is NOT available, then use 'profile_based' questions derived from structured experiences, projects, and skills for these technical slots. If that data is also sparse, then (and only then) use general 'technical' or 'coding' types.
-          *   Non-Technical Oral (approx. 25% of total): stage 'oral'. If resume/profile data is rich, these can also be 'resume_based' or 'profile_based' (e.g., "Tell me about a time you led a team, based on X project in your resume."). Otherwise, use 'conversational' or 'behavioral'.
+          *   **If resumeProcessedText is available and non-empty, Technical Oral (approx. 45%) and Technical Written (approx. 30%) questions MUST be primarily 'resume_based'.** These questions must be specific, in-depth, and directly relevant to the technologies, projects, and experiences detailed in the resume.
+          *   **If resumeProcessedText is unavailable/empty, Technical Oral (approx. 45%) and Technical Written (approx. 30%) questions MUST be primarily 'profile_based'** drawn from structured Experiences, Projects, and Key Skills.
+          *   Generic 'technical' or 'coding' questions (not tied to the resume or structured profile) should ONLY be used as a last resort if both resume and structured profile data are extremely sparse and do not offer enough specific topics.
+          *   Non-Technical Oral (approx. 25% of total): stage 'oral'. If resume/profile data is rich, these can also be 'resume_based' or 'profile_based' (e.g., "Tell me about a time you led a team, based on X project in your resume/profile."). Otherwise, use 'conversational' or 'behavioral' as a last resort.
           *   Specific counts for Technical Roles (if no JD), ensuring 'oral' questions come before 'technical_written':
               *   15 mins (Total 6-7): Tech Oral: 2-3, Tech Written: 2, Non-Tech Oral: 2
               *   30 mins (Total 10-12): Tech Oral: 4-5, Tech Written: 3-4, Non-Tech Oral: 2-3
@@ -218,14 +221,15 @@ const generateInterviewQuestionsFlow = ai.defineFlow(
       input.role.toLowerCase().includes(keyword) || input.profileField.toLowerCase().includes(keyword)
     );
 
+    // Enhanced logging for resume/profile data presence
     console.log("generateInterviewQuestionsFlow INPUT:", {
         profileField: input.profileField,
         role: input.role,
         interviewDuration: input.interviewDuration,
         jobDescriptionProvided: !!input.jobDescription,
         jobDescriptionSnippet: input.jobDescription ? input.jobDescription.substring(0,100) + "..." : "N/A",
-        resumeProcessedTextProvided: !!input.resumeProcessedText,
-        resumeProcessedTextSnippet: input.resumeProcessedText ? input.resumeProcessedText.substring(0, 100) + "..." : "N/A",
+        resumeProcessedTextProvidedAndNotEmpty: !!(input.resumeProcessedText && input.resumeProcessedText.trim() !== ""),
+        resumeProcessedTextSnippet: input.resumeProcessedText ? (input.resumeProcessedText.trim() === "" ? "[EMPTY STRING]" : input.resumeProcessedText.substring(0, 100) + "...") : "N/A",
         keySkillsProvided: !!(input.keySkills && input.keySkills.length > 0),
         keySkillsCount: input.keySkills?.length || 0,
         experiencesProvided: !!(input.experiences && input.experiences.length > 0),
