@@ -216,7 +216,6 @@ export default function ProfilePage() {
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     
-    // Store current state in case of error, to revert
     const prevSelectedFile = selectedFile;
     const prevFileName = selectedFileName; 
     const prevResumeText = clientSideResumeText;
@@ -269,38 +268,30 @@ export default function ProfilePage() {
         const response = await fetch("/api/extract-resume-text", { method: "POST", body: formData });
 
         if (!response.ok) {
-          let errorMessage = `Server error (${response.status}): ${response.statusText || 'Failed to process file.'}`; // Default/fallback
+          let errorMessageFromServer = `Server responded with ${response.status}: ${response.statusText}.`;
           try {
-            const responseBodyText = await response.text();
-            if (responseBodyText) {
-              try {
-                const jsonData = JSON.parse(responseBodyText);
-                if (jsonData && jsonData.message) {
-                  errorMessage = jsonData.message;
-                } else {
-                  // If JSON is valid but has no message, or not JSON, use a snippet of the text
-                  errorMessage = responseBodyText.substring(0, 200) + (responseBodyText.length > 200 ? "..." : "");
-                  console.warn("Client: Server error response was valid JSON but lacked a 'message' field, or was not JSON. Raw/Truncated text:", errorMessage);
-                }
-              } catch (jsonParseError) {
-                // If parsing as JSON fails, use a snippet of the raw text
-                errorMessage = responseBodyText.substring(0, 200) + (responseBodyText.length > 200 ? "..." : "");
-                console.warn("Client: Server error response was not valid JSON. Raw/Truncated text:", errorMessage);
+              const responseBodyText = await response.text();
+              if (responseBodyText.trim().toLowerCase().startsWith('<!doctype html') || responseBodyText.trim().toLowerCase().startsWith('<html>')) {
+                  errorMessageFromServer = `Server returned an HTML error page (Status: ${response.status}). Please check server logs for details.`;
+              } else {
+                  try {
+                      const jsonData = JSON.parse(responseBodyText);
+                      if (jsonData && jsonData.message) {
+                          errorMessageFromServer = jsonData.message;
+                      } else {
+                          errorMessageFromServer = responseBodyText.length > 200 ? responseBodyText.substring(0, 200) + "..." : responseBodyText;
+                      }
+                  } catch (jsonParseError) {
+                      errorMessageFromServer = responseBodyText.length > 200 ? responseBodyText.substring(0, 200) + "..." : responseBodyText;
+                  }
               }
-            } else {
-               // Response body was empty
-               errorMessage = `Server error (${response.status}): ${response.statusText || 'Failed to process file.'} (Received empty response body).`;
-            }
           } catch (readTextError) {
-            // This means response.text() itself failed, e.g. network issue or connection reset
-            errorMessage = `Failed to read server error response. Status: ${response.status}. Check network and server logs.`;
-            console.error("Client: Critical error reading server response body:", readTextError);
+              errorMessageFromServer = `Failed to read server error response. Status: ${response.status}. Check network and server logs.`;
           }
-          // Revert to previous file state on error
           setSelectedFile(prevSelectedFile);
           setSelectedFileName(prevFileName);
           setClientSideResumeText(prevResumeText);
-          throw new Error(errorMessage); // This will be caught by the outer catch block for toasting
+          throw new Error(errorMessageFromServer);
         }
 
         const data = await response.json();
@@ -317,7 +308,6 @@ export default function ProfilePage() {
       } catch (error: any) {
         console.error("Error processing resume on server:", error);
         toast({ title: "Resume Processing Error", description: error.message || "Could not extract text from file via server.", variant: "destructive" });
-        // Revert to previous file state on any error in the try block
         setSelectedFile(prevSelectedFile);
         setSelectedFileName(prevFileName);
         setClientSideResumeText(prevResumeText);
@@ -510,7 +500,7 @@ export default function ProfilePage() {
                 <AlertTitle className="text-blue-700 dark:text-blue-300">File Format Information</AlertTitle>
                 <AlertDescription className="text-blue-600 dark:text-blue-200">
                   For best AI results, <strong>.txt or .md</strong> files are preferred for instant client-side processing.
-                  <strong>.pdf and .docx</strong> files are also supported and will be processed on our server.
+                  <strong>.pdf and .docx</strong> files are now also supported and will be processed on our server for better text extraction.
                   Other formats may have limited support. Text extraction quality can vary.
                 </AlertDescription>
               </Alert>
