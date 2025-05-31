@@ -55,17 +55,26 @@ const prompt = ai.definePrompt({
   input: {schema: GenerateInterviewQuestionsInputSchema},
   output: {schema: GenerateInterviewQuestionsOutputSchema},
   prompt: `You are an expert AI Interview Question Generator. Your primary task is to create a set of the best, most relevant, and frequently asked interview questions.
-Questions MUST be tailored based on the following information, in order of priority:
-1.  **Targeted Job Description (if {{{jobDescription}}} is provided):** This is the MOST IMPORTANT source. Generate questions that directly assess skills, experience, and qualifications mentioned in this job description. Mark relevant questions with type: 'jd_based'.
-2.  **Candidate's Resume Content (if {{{resumeProcessedText}}} is provided AND jobDescription is not, or to complement jobDescription):** Use this to ask specific 'resume_based' questions about projects, experiences, or skills listed.
-3.  **Candidate's Profile Field ({{{profileField}}}) and Role ({{{role}}}):** If no job description or resume is available, or to add general relevant questions, use these.
+Questions MUST be tailored based on the following information, in a strict order of priority:
+
+1.  **Targeted Job Description (if a specific {{{jobDescription}}} is provided for THIS interview session):**
+    *   This is the MOST IMPORTANT source if available.
+    *   Generate questions that directly assess skills, experience, and qualifications mentioned in this job description.
+    *   Mark relevant questions with type: 'jd_based'.
+
+2.  **Candidate's Resume Content (if {{{resumeProcessedText}}} is provided):**
+    *   **If a Targeted Job Description (point 1) is NOT provided:** The Resume Content becomes the PRIMARY source. Generate specific 'resume_based' questions about projects, experiences, skills, and technologies listed in the resume.
+    *   **If a Targeted Job Description (point 1) IS provided:** Use the Resume Content to ask complementary 'resume_based' questions, or to seek more detail on items potentially mentioned in both the JD and resume. Do not let resume questions overshadow JD-based questions in this scenario.
+
+3.  **Candidate's Profile Field ({{{profileField}}}) and Role ({{{role}}}):**
+    *   Use these as a fallback or to add general relevant questions if no job description or resume is available, or if they provide context not covered by the JD/resume.
 
 Candidate Information:
 - Profile Field: {{{profileField}}}
 - Candidate Role: {{{role}}}
 - Interview Duration: {{{interviewDuration}}} minutes
 {{#if jobDescription}}
-- Targeted Job Description (Primary Source):
+- Targeted Job Description (Specific to this session):
 ---
 {{{jobDescription}}}
 ---
@@ -82,17 +91,17 @@ Determine if the role is technical. Roles are considered technical if they inclu
 Question Stages & Types:
 Questions are categorized by 'stage' ('oral' or 'technical_written') and 'type' ('conversational', 'behavioral', 'technical', 'coding', 'resume_based', 'jd_based').
 - 'oral' stage: For questions answered verbally.
-    - **For Technical Roles:** 'technical' type questions in this stage MUST be specific and in-depth, focusing on core concepts, tools, libraries, algorithms, and methodologies relevant to the job description (JD), resume, or role. Avoid overly generic technical questions.
-        - Example for Web Dev (if JD mentions React): "Explain the concept of reconciliation in React. How does the virtual DOM contribute to this process?"
-        - Example for Data Science (if JD mentions PyTorch/dimensionality reduction): "What are Tensors in PyTorch and how are they different from NumPy arrays? How does PyTorch's Autograd feature work?" or "Describe Principal Component Analysis (PCA). What are its main assumptions and when might it not be the best technique for dimensionality reduction?"
-        - Example for Backend (if JD mentions microservices): "Discuss the trade-offs of synchronous versus asynchronous communication between microservices. When would you choose one over the other, referencing specific scenarios if possible from the JD/resume?"
-    - For Non-Technical Roles: Questions are primarily 'conversational', 'behavioral', 'resume_based', or 'jd_based', focusing on job-specific scenarios, processes, and problem-solving relevant to the job description or role.
+    - **For Technical Roles:** 'technical' type questions in this stage MUST be specific and in-depth, focusing on core concepts, tools, libraries, algorithms, and methodologies relevant to the highest priority source (JD > Resume > Profile/Role). Avoid overly generic technical questions.
+        - Example for Web Dev (if JD/Resume mentions React): "Explain the concept of reconciliation in React. How does the virtual DOM contribute to this process?"
+        - Example for Data Science (if JD/Resume mentions PyTorch/dimensionality reduction): "What are Tensors in PyTorch and how are they different from NumPy arrays? How does PyTorch's Autograd feature work?" or "Describe Principal Component Analysis (PCA). What are its main assumptions and when might it not be the best technique for dimensionality reduction?"
+        - Example for Backend (if JD/Resume mentions microservices): "Discuss the trade-offs of synchronous versus asynchronous communication between microservices. When would you choose one over the other, referencing specific scenarios if possible from the JD/resume?"
+    - For Non-Technical Roles: Questions are primarily 'conversational', 'behavioral', and 'jd_based' or 'resume_based' (if applicable based on priority), focusing on job-specific scenarios, processes, and problem-solving relevant to the highest priority source.
 
 - 'technical_written' stage: For questions requiring typed answers (e.g., code, detailed technical explanations, system design). This stage is primarily for technical roles.
-    - Examples for Technical Roles:
-        - Coding: "Write a Python function that takes [specific input described in JD/resume, e.g., a list of user activity data] and returns [specific output, e.g., a summary of active users per day]."
-        - Technical Explanation: "If the JD requires experience with [e.g., NoSQL databases like MongoDB], explain the data modeling considerations you would make for a [e.g., social media feed application], contrasting it with a relational approach."
-        - System Design (if relevant to JD/role): "Outline the architecture for a [e.g., real-time notification system] as might be needed for a feature described in the JD. What are the key components and technologies you'd consider?"
+    - Examples for Technical Roles (tailor to JD/Resume if available):
+        - Coding: "Write a Python function that takes [specific input, e.g., a list of user activity data from resume/JD] and returns [specific output, e.g., a summary of active users per day]."
+        - Technical Explanation: "If the JD/Resume indicates experience with [e.g., NoSQL databases like MongoDB], explain the data modeling considerations you would make for a [e.g., social media feed application], contrasting it with a relational approach."
+        - System Design (if relevant to JD/role/resume): "Outline the architecture for a [e.g., real-time notification system] as might be needed for a feature described in the JD/resume. What are the key components and technologies you'd consider?"
 
 Question Distribution and Types based on Duration:
 The 'id' for each question MUST be unique (q1, q2, q3, etc.).
@@ -100,11 +109,11 @@ Sequence: All 'oral' stage questions must come before all 'technical_written' st
 
 *   **For Non-Technical Roles (e.g., Product Management, Marketing, Sales):**
     *   All questions generated MUST be of the 'oral' stage. No 'technical_written' questions should be generated.
-    *   The questions should be a diverse mix of 'conversational', 'behavioral', and primarily 'jd_based' (if JD provided) or 'resume_based' (if resume provided) types.
+    *   The questions should be a diverse mix of 'conversational', 'behavioral', and primarily 'jd_based' (if JD provided) or 'resume_based' (if resume provided and JD not), or general questions based on profile/role.
     *   Number of questions: **15 mins (6-7 oral)**, **30 mins (10-12 oral)**, **45 mins (15-16 oral)**.
 
 *   **For Technical Roles (Identified by keywords like ${technicalRolesKeywords.join(', ')}):**
-    Prioritize 'jd_based' questions if a job description is provided. Ensure 'technical' questions are specific and in-depth.
+    Prioritize questions based on the hierarchy (JD > Resume > Profile/Role). Ensure 'technical' questions are specific and in-depth.
     *   **Technical Oral Questions (approx. 45% of total):**
         *   stage: 'oral'
         *   type: 'technical' (deep conceptual, tool-specific, algorithm-specific), 'jd_based', 'resume_based'.
@@ -117,24 +126,24 @@ Sequence: All 'oral' stage questions must come before all 'technical_written' st
 
     *Specific counts for Technical Roles based on duration and above percentages:*
     *   **15 minutes (Total 6-7 questions):**
-        *   Technical Oral: 2-3 questions (ensure these are deeply technical)
+        *   Technical Oral: 2-3 questions (ensure these are deeply technical and relevant)
         *   Technical Written: 2 questions
         *   Non-Technical Oral: 2 questions
 
     *   **30 minutes (Total 10-12 questions):**
-        *   Technical Oral: 4-5 questions (ensure these are deeply technical)
+        *   Technical Oral: 4-5 questions (ensure these are deeply technical and relevant)
         *   Technical Written: 3-4 questions
         *   Non-Technical Oral: 2-3 questions
 
     *   **45 minutes (Total 15-16 questions):**
-        *   Technical Oral: 6-7 questions (ensure these are deeply technical)
+        *   Technical Oral: 6-7 questions (ensure these are deeply technical and relevant)
         *   Technical Written: 4-5 questions
         *   Non-Technical Oral: 4-5 questions
 
 General Guidelines for All Roles:
-- If a jobDescription is provided, make it the primary driver for question content, especially for 'jd_based' technical questions.
-- All questions MUST be directly relevant to the provided information (jobDescription > resumeProcessedText > profileField/role).
-- For 'technical_written' questions of type 'coding', provide a clear, concise problem statement, ideally related to the JD/resume.
+- Follow the strict priority: Targeted Job Description (if provided for this session) > Candidate's Resume Content (if JD not provided or for complementary info) > Profile Field/Role.
+- All questions MUST be directly relevant to the information from the highest priority source available.
+- For 'technical_written' questions of type 'coding', provide a clear, concise problem statement, ideally related to the highest priority source.
 - Each question MUST have a unique 'id', its 'text', its designated 'stage', and its 'type'. The 'answer' field should NOT be part of this generation output.
 
 Generate the questions array according to these guidelines. Ensure questions are challenging yet appropriate for the experience level implied by the role, field, job description, and resume.
