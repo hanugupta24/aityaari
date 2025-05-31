@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import pdf from 'pdf-parse';
 import mammoth from 'mammoth';
 
-const LOG_PREFIX = "API_ROUTE_DEBUG (v3_restored):"; // Keep version for clarity
+const LOG_PREFIX = "API_ROUTE_DEBUG (v_SIMPLIFIED_PARSING):"; 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 
 export async function POST(request: Request) {
@@ -59,50 +59,24 @@ export async function POST(request: Request) {
 
     let extractedText = "";
 
+    // --- PARSING LOGIC TEMPORARILY COMMENTED OUT FOR DEBUGGING ---
+    console.log(`${LOG_PREFIX} Bypassing actual PDF/DOCX parsing for this diagnostic version.`);
     if (file.type === "application/pdf") {
-      console.log(`${LOG_PREFIX} Attempting PDF parsing for ${file.name}... Buffer length: ${fileBuffer.length}`);
-      try {
-        console.log(`${LOG_PREFIX} Calling pdf-parse for ${file.name}...`);
-        const data = await pdf(fileBuffer);
-        console.log(`${LOG_PREFIX} pdf-parse completed for ${file.name}.`);
-        extractedText = data.text?.trim() || "";
-        if (!extractedText) {
-            console.warn(`${LOG_PREFIX} PDF parsing for ${file.name} resulted in empty text. The PDF might be image-based or have no selectable text.`);
-        } else {
-            console.log(`${LOG_PREFIX} PDF parsing successful for ${file.name}. Extracted characters: ${extractedText.length}`);
-        }
-      } catch (pdfError: any) {
-        console.error(`${LOG_PREFIX} Error parsing PDF ${file.name} with pdf-parse:`, pdfError.message, pdfError.stack);
-        return NextResponse.json({ message: `Error processing PDF file ${file.name}: ${pdfError.message}` }, { status: 500 });
-      }
+      extractedText = `Dummy PDF text for ${file.name}. Actual parsing disabled.`;
+      console.log(`${LOG_PREFIX} Pretended to parse PDF: ${file.name}`);
     } else if (file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || file.name.toLowerCase().endsWith('.docx')) {
-      console.log(`${LOG_PREFIX} Attempting DOCX parsing for ${file.name} with mammoth... Buffer length: ${fileBuffer.length}`);
-      try {
-        console.log(`${LOG_PREFIX} Calling mammoth.extractRawText for ${file.name}...`);
-        const result = await mammoth.extractRawText({ buffer: fileBuffer });
-        console.log(`${LOG_PREFIX} mammoth.extractRawText completed for ${file.name}.`);
-        extractedText = result.value?.trim() || "";
-         if (!extractedText) {
-            console.warn(`${LOG_PREFIX} DOCX parsing for ${file.name} resulted in empty text.`);
-        } else {
-            console.log(`${LOG_PREFIX} DOCX parsing successful for ${file.name}. Extracted characters: ${extractedText.length}`);
-        }
-      } catch (docxError: any) {
-        console.error(`${LOG_PREFIX} Error parsing DOCX ${file.name} with mammoth:`, docxError.message, docxError.stack);
-        return NextResponse.json({ message: `Error processing DOCX file ${file.name}: ${docxError.message}` }, { status: 500 });
-      }
+      extractedText = `Dummy DOCX text for ${file.name}. Actual parsing disabled.`;
+      console.log(`${LOG_PREFIX} Pretended to parse DOCX: ${file.name}`);
     } else {
-      console.warn(`${LOG_PREFIX} Unsupported file type: ${file.type} for file ${file.name}. Returning empty text as server cannot process this type.`);
-      // For unsupported types, return empty text rather than an error, client expects a 'text' field.
-      // Alternatively, return status 415 (Unsupported Media Type) but this might break client expectation for 'text' field
-      // extractedText = ""; // This is already the default
+      console.warn(`${LOG_PREFIX} Unsupported file type: ${file.type} for file ${file.name}. Returning placeholder text as server cannot process this type.`);
+      extractedText = `File type ${file.type} is not supported for direct text extraction in this diagnostic version.`;
     }
+    // --- END OF TEMPORARILY COMMENTED OUT PARSING LOGIC ---
     
-    console.log(`${LOG_PREFIX} Successfully processed file ${file.name}. Returning extracted text (length: ${extractedText.length}).`);
+    console.log(`${LOG_PREFIX} Successfully processed file ${file.name} (DIAGNOSTIC - NO ACTUAL PARSING). Returning placeholder text (length: ${extractedText.length}).`);
     return NextResponse.json({ text: extractedText });
 
   } catch (error: any) {
-    // This is the outermost catch block.
     let errorDetails = "Unknown error occurred in API route.";
     let errorStack = error && error.stack ? error.stack : "No stack trace available.";
 
@@ -118,7 +92,6 @@ export async function POST(request: Request) {
         }
     }
     console.error(`${LOG_PREFIX} CRITICAL UNHANDLED ERROR in API route (outermost catch): ${errorDetails}`, errorStack);
-    // Ensure a JSON response is sent even for the most unexpected errors
     return NextResponse.json(
       { message: `Server error during file processing. Please check server logs. Details: ${errorDetails.substring(0, 250)}` },
       { status: 500 }
