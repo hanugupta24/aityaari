@@ -7,9 +7,8 @@ import { z } from "zod";
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
-import { db } from "@/lib/firebase"; // Removed storage import as it's not directly used here for resume upload to Firebase
+import { db } from "@/lib/firebase"; 
 import { doc, setDoc } from "firebase/firestore";
-// import { ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage"; // Firebase Storage part commented out
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -54,9 +53,10 @@ const profileFormSchema = z.object({
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
 const ACCEPTED_MIME_TYPES_FOR_CLIENT_PROCESSING = ['text/plain', 'text/markdown'];
-const ACCEPTED_MIME_TYPES_FOR_SERVER_PROCESSING = ['application/pdf'];
-const ALL_ACCEPTED_MIME_TYPES = [...ACCEPTED_MIME_TYPES_FOR_CLIENT_PROCESSING, ...ACCEPTED_MIME_TYPES_FOR_SERVER_PROCESSING];
-const ACCEPT_FILE_EXTENSIONS = ".txt,.md,.pdf"; //,.doc,.docx removed as server parsing for them is not implemented
+// application/msword for .doc, application/vnd.oasis.opendocument.text for .odt, application/rtf for .rtf
+const SERVER_SIDE_PROCESSING_MIME_TYPES = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']; 
+const ALL_SUPPORTED_MIME_TYPES = [...ACCEPTED_MIME_TYPES_FOR_CLIENT_PROCESSING, ...SERVER_SIDE_PROCESSING_MIME_TYPES];
+const ACCEPT_FILE_EXTENSIONS = ".txt,.md,.pdf,.doc,.docx"; 
 const MAX_FILE_SIZE_MB = 5;
 
 export default function ProfilePage() {
@@ -67,10 +67,10 @@ export default function ProfilePage() {
   const [isFetchingProfile, setIsFetchingProfile] = useState(true);
 
   // State for resume handling
-  const [selectedFile, setSelectedFile] = useState<File | null>(null); // Stores the File object for server upload
-  const [selectedFileName, setSelectedFileName] = useState<string | null>(null); // For display
+  const [selectedFile, setSelectedFile] = useState<File | null>(null); 
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null); 
   const [clientSideResumeText, setClientSideResumeText] = useState<string | null>(null); 
-  const [isProcessingFile, setIsProcessingFile] = useState(false); // Generic file processing state (client or server)
+  const [isProcessingFile, setIsProcessingFile] = useState(false); 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // State for array-based profile sections
@@ -134,7 +134,7 @@ export default function ProfilePage() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       const storedResumeText = localStorage.getItem('tyaariResumeProcessedText');
-      const storedFileName = localStorage.getItem('tyaariResumeFileName'); // Keep for display consistency
+      const storedFileName = localStorage.getItem('tyaariResumeFileName'); 
       if (storedResumeText) setClientSideResumeText(storedResumeText);
       if (storedFileName) setSelectedFileName(storedFileName);
     }
@@ -214,32 +214,28 @@ export default function ProfilePage() {
     const prevFileName = selectedFileName;
     const prevResumeText = clientSideResumeText;
 
-    if (fileInputRef.current) fileInputRef.current.value = ""; // Clear the input for re-selection
+    if (fileInputRef.current) fileInputRef.current.value = ""; 
 
     if (!file) {
-      setSelectedFile(null); // Clear stored file if selection is cancelled
+      setSelectedFile(null); 
       return;
     }
 
     setIsProcessingFile(true);
     setSelectedFile(file);
     setSelectedFileName(file.name);
-    setClientSideResumeText(""); // Clear previous text while processing
+    setClientSideResumeText(""); 
 
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
       toast({ title: "File Too Large", description: `Maximum file size is ${MAX_FILE_SIZE_MB}MB.`, variant: "destructive" });
       setSelectedFile(null); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText);
       setIsProcessingFile(false); return;
     }
-
-    if (!ALL_ACCEPTED_MIME_TYPES.some(type => file.type.startsWith(type)) && !ACCEPT_FILE_EXTENSIONS.split(',').some(ext => file.name.toLowerCase().endsWith(ext))) {
-      toast({ title: "Unsupported File Type", description: `Please upload .txt, .md, or .pdf.`, variant: "destructive" });
-      setSelectedFile(null); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText);
-      setIsProcessingFile(false); return;
-    }
     
-    // Client-side processing for .txt and .md
-    if (ACCEPTED_MIME_TYPES_FOR_CLIENT_PROCESSING.includes(file.type) || file.name.toLowerCase().endsWith('.txt') || file.name.toLowerCase().endsWith('.md')) {
+    const isClientProcessable = ACCEPTED_MIME_TYPES_FOR_CLIENT_PROCESSING.includes(file.type) || file.name.toLowerCase().endsWith('.txt') || file.name.toLowerCase().endsWith('.md');
+    const isServerProcessable = SERVER_SIDE_PROCESSING_MIME_TYPES.includes(file.type) || file.name.toLowerCase().endsWith('.pdf') || file.name.toLowerCase().endsWith('.docx');
+
+    if (isClientProcessable) {
       const reader = new FileReader();
       reader.onload = (e) => {
         const text = e.target?.result as string;
@@ -257,9 +253,7 @@ export default function ProfilePage() {
         setIsProcessingFile(false);
       };
       reader.readAsText(file);
-    } 
-    // Server-side processing for .pdf
-    else if (ACCEPTED_MIME_TYPES_FOR_SERVER_PROCESSING.includes(file.type) || file.name.toLowerCase().endsWith('.pdf')) {
+    } else if (isServerProcessable) {
       const formData = new FormData();
       formData.append("file", file);
       try {
@@ -274,16 +268,18 @@ export default function ProfilePage() {
           localStorage.setItem('tyaariResumeProcessedText', data.text);
           localStorage.setItem('tyaariResumeFileName', file.name);
         }
-        toast({ title: "PDF Resume Processed", description: `Text extracted from ${file.name}. This will be used for AI question generation.` });
+        toast({ title: "Resume Processed", description: `Text extracted from ${file.name} via server. This will be used for AI question generation.` });
       } catch (error: any) {
-        toast({ title: "PDF Processing Error", description: error.message || "Could not extract text from PDF.", variant: "destructive" });
+        toast({ title: "Resume Processing Error", description: error.message || "Could not extract text from file.", variant: "destructive" });
         setSelectedFile(null); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText);
       } finally {
         setIsProcessingFile(false);
       }
     } else {
-      // Fallback for unexpected types, though validation should catch this.
-      toast({ title: "Unsupported File Type", description: "Please upload .txt, .md, or .pdf.", variant: "destructive" });
+      // Fallback for other types (e.g. .doc, .odt, .rtf - if user manages to select them despite stricter accept)
+      // We can try sending them to the server, but the server API currently only handles PDF/DOCX explicitly.
+      // For now, treat other types as "best effort" or potentially "unsupported" by current explicit parsing.
+      toast({ title: "Unsupported File Type", description: `Uploaded ${file.name}. Best extraction for .txt, .md, .pdf, .docx. Other formats may have limited support.`, variant: "default" });
       setSelectedFile(null); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText);
       setIsProcessingFile(false);
     }
@@ -330,8 +326,6 @@ export default function ProfilePage() {
         isPlusSubscriber: userProfile?.isPlusSubscriber || false,
         subscriptionPlan: userProfile?.subscriptionPlan || null,
         isAdmin: userProfile?.isAdmin || false,
-        // Resume data (fileName, URL, processedText) is not saved to Firestore user profile.
-        // Processed text is handled via localStorage for AI flow input.
       };
       const userDocRef = doc(db, "users", user.uid);
       await setDoc(userDocRef, profileDataToSave, { merge: true });
@@ -467,9 +461,9 @@ export default function ProfilePage() {
               </div>
               <Alert variant="default" className="border-blue-500/50 text-blue-700 dark:text-blue-300 dark:border-blue-400/50">
                 <Info className="h-4 w-4 !text-blue-500 dark:!text-blue-400" />
-                <AlertTitle className="text-blue-700 dark:text-blue-300">File Format Recommendation</AlertTitle>
+                <AlertTitle className="text-blue-700 dark:text-blue-300">File Format Information</AlertTitle>
                 <AlertDescription className="text-blue-600 dark:text-blue-200">
-                  For best AI results, <strong>.txt or .md</strong> files are preferred. PDF processing is supported but may be less accurate for complex layouts.
+                  For best AI results, <strong>.txt or .md</strong> files are preferred. <strong>.pdf and .docx</strong> files are also supported for text extraction via our server. Other formats may have limited or no support for text extraction.
                 </AlertDescription>
               </Alert>
               {selectedFileName && (<div className="mt-2 text-sm text-muted-foreground flex items-center justify-between p-2 border rounded-md bg-secondary/50"><div className="flex items-center gap-2 overflow-hidden"><FileText className="h-4 w-4 text-primary shrink-0" /><span className="truncate" title={selectedFileName}>{selectedFileName}</span></div><div className="flex items-center gap-1 shrink-0"><Button type="button" variant="ghost" size="icon" onClick={clearResume} title="Clear resume selection" aria-label="Clear resume" disabled={isSubmitting || isProcessingFile}><XCircle className="h-4 w-4 text-destructive" /></Button></div></div>)}
