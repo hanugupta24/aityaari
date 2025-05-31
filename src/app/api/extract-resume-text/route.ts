@@ -1,9 +1,4 @@
 
-import { NextResponse } from 'next/server';
-import mammoth from 'mammoth';
-// Import pdf.js - try the main entry point first
-import * as pdfjsLib from 'pdfjs-dist';
-
 // Polyfill for Promise.withResolvers if it doesn't exist
 if (typeof Promise.withResolvers !== 'function') {
   Promise.withResolvers = function <T>() {
@@ -18,25 +13,18 @@ if (typeof Promise.withResolvers !== 'function') {
   console.log("API_ROUTE_DEBUG (POLYFILL): Promise.withResolvers polyfill applied.");
 }
 
+import { NextResponse } from 'next/server';
+import mammoth from 'mammoth';
+import * as pdfjsLib from 'pdfjs-dist';
 
-// Set the workerSrc for Node.js environments. This is crucial.
-// The 'pdfjs-dist/build/pdf.worker.js' path should resolve correctly if the package is installed.
+// Set the workerSrc to null in Node.js environments to run on the main thread
+// This can help avoid issues with worker script loading in bundled server environments.
 if (typeof window === 'undefined') { // Check if running in Node.js
-  try {
-    // Attempt to require.resolve to get the absolute path to the worker script
-    const workerSrcPath = require.resolve('pdfjs-dist/build/pdf.worker.js');
-    pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrcPath;
-    console.log(`API_ROUTE_DEBUG (PDFJS_SETUP): pdf.js workerSrc set to: ${workerSrcPath}`);
-  } catch (e) {
-    console.error("API_ROUTE_DEBUG (PDFJS_SETUP): Failed to resolve 'pdfjs-dist/build/pdf.worker.js'. pdf.js might not work correctly on the server.", e);
-    // Fallback or alternative, though less ideal if the above fails:
-    // pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-    // console.warn("API_ROUTE_DEBUG (PDFJS_SETUP): Using CDN fallback for pdf.js worker. This is not ideal for server-side rendering.");
-  }
+  pdfjsLib.GlobalWorkerOptions.workerSrc = null;
+  console.log("API_ROUTE_DEBUG (PDFJS_SETUP): pdf.js workerSrc set to null (running on main thread).");
 }
 
-
-const LOG_PREFIX = "API_ROUTE_DEBUG (v_PDFJS_POLYFILL):";
+const LOG_PREFIX = "API_ROUTE_DEBUG (v_PDFJS_WORKER_NULL):";
 
 export async function POST(request: Request) {
   console.log(`${LOG_PREFIX} POST handler invoked.`);
@@ -87,16 +75,18 @@ export async function POST(request: Request) {
         
         const pageTexts = [];
         for (let i = 1; i <= pdfDoc.numPages; i++) {
-          // console.log(`${LOG_PREFIX} Getting page ${i}...`); // Can be very verbose
           const page = await pdfDoc.getPage(i);
-          // console.log(`${LOG_PREFIX} Page ${i} retrieved. Getting text content...`);
           const textContent = await page.getTextContent();
-          const pageText = textContent.items.map(item => (item as any).str).join(' '); // Type assertion for item.str
+          // Ensure item.str exists and is a string before joining
+          const pageText = textContent.items.map(item => (item as any).str || '').join(' ');
           pageTexts.push(pageText);
-          // console.log(`${LOG_PREFIX} Extracted text from page ${i}/${pdfDoc.numPages}. Length: ${pageText.length}`);
         }
         const extractedText = pageTexts.join('\\n\\n'); 
         console.log(`${LOG_PREFIX} PDF.js parsing successful for: ${identifiedFile.name}. Total extracted text length: ${extractedText.length}`);
+        if (extractedText.trim().length === 0) {
+          console.warn(`${LOG_PREFIX} PDF.js parsing for ${identifiedFile.name} resulted in empty text. File might be image-based or problematic.`);
+          // Consider returning a specific message or allowing empty text through
+        }
         return NextResponse.json({ text: extractedText });
 
       } catch (pdfError: any) {
@@ -107,8 +97,12 @@ export async function POST(request: Request) {
       console.log(`${LOG_PREFIX} DOCX file detected. Proceeding with mammoth.js parsing for: ${identifiedFile.name}`);
       try {
         const result = await mammoth.extractRawText({ arrayBuffer: fileBufferArray });
-        console.log(`${LOG_PREFIX} Mammoth.js parsing successful for: ${identifiedFile.name}. Extracted text length: ${result.value.length}`);
-        return NextResponse.json({ text: result.value });
+        const extractedText = result.value;
+        console.log(`${LOG_PREFIX} Mammoth.js parsing successful for: ${identifiedFile.name}. Extracted text length: ${extractedText.length}`);
+        if (extractedText.trim().length === 0) {
+            console.warn(`${LOG_PREFIX} Mammoth.js parsing for ${identifiedFile.name} resulted in empty text.`);
+        }
+        return NextResponse.json({ text: extractedText });
       } catch (docxError: any) {
         console.error(`${LOG_PREFIX} CRITICAL ERROR during mammoth.js parsing for ${identifiedFile.name}:`, docxError.message, docxError.stack);
         return NextResponse.json({ message: `Failed to parse DOCX content using mammoth.js: ${docxError.message}` }, { status: 500 });
