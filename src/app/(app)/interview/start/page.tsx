@@ -10,7 +10,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Textarea } from "@/components/ui/textarea"; // Added Textarea
+import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Info, Video, Mic, AlertTriangle, UserX, FileText, Briefcase } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { generateInterviewQuestions, type GenerateInterviewQuestionsInput } from "@/ai/flows/generate-interview-questions";
@@ -27,7 +27,7 @@ export default function StartInterviewPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [duration, setDuration] = useState<"15" | "30" | "45">("30");
-  const [jobDescriptionInput, setJobDescriptionInput] = useState(""); // New state for job description
+  const [jobDescriptionInput, setJobDescriptionInput] = useState("");
   const [permissionsGranted, setPermissionsGranted] = useState(false);
   const [agreedToMonitoring, setAgreedToMonitoring] = useState(false);
   const [isStartingSession, setIsStartingSession] = useState(false);
@@ -61,8 +61,13 @@ export default function StartInterviewPage() {
         profileField: userProfile.profileField,
         role: userProfile.role,
         interviewDuration: duration,
+        jobDescription: jobDescriptionInput.trim() || undefined,
         resumeProcessedText: resumeProcessedTextFromLocalStorage || undefined, 
-        jobDescription: jobDescriptionInput.trim() || undefined, // Pass job description
+        // Pass additional profile details
+        keySkills: userProfile.keySkills || [],
+        experiences: userProfile.experiences || [],
+        projects: userProfile.projects || [],
+        educationHistory: userProfile.educationHistory || [],
       };
       const questionGenOutput = await generateInterviewQuestions(questionGenInput);
 
@@ -75,7 +80,7 @@ export default function StartInterviewPage() {
       const newInterviewRef = doc(collection(db, "users", user.uid, "interviews"));
       const interviewId = newInterviewRef.id;
 
-      const initialSessionData: Partial<InterviewSession> = { // Use Partial to build conditionally
+      const initialSessionData: Partial<InterviewSession> = {
         id: interviewId,
         userId: user.uid,
         duration: parseInt(duration) as 15 | 30 | 45,
@@ -89,7 +94,8 @@ export default function StartInterviewPage() {
         initialSessionData.jobDescriptionUsed = trimmedJobDescription;
       }
 
-      await setDoc(newInterviewRef, initialSessionData as InterviewSession); // Cast back to full type
+
+      await setDoc(newInterviewRef, initialSessionData as InterviewSession);
       
       toast({ title: "Interview Ready!", description: "Redirecting to your session..." });
       router.push(`/interview/${interviewId}`);
@@ -142,7 +148,7 @@ export default function StartInterviewPage() {
     isProfileEssentialDataMissing || 
     interviewLimitReached;
   
-  const isLoadingState = authInitialLoading || (authLoading && !userProfile && !initialLoading);
+  const isLoadingState = authInitialLoading || (authLoading && !userProfile && !authInitialLoading);
 
 
   return (
@@ -203,8 +209,8 @@ export default function StartInterviewPage() {
             <AlertTitle>Personalized Questions</AlertTitle>
             <AlertDescription>
               Interview questions will be based on your targeted role and profile field.
-              Uploading your resume in the <Link href="/profile" className="font-semibold underline hover:text-foreground/80">profile section</Link> (text from it will be stored in your browser)
-              and providing a job description below can further tailor questions to your experience and target role.
+              Providing your resume text (via profile page), structured experiences, projects, skills,
+              and a job description below can further tailor questions.
             </AlertDescription>
           </Alert>
 
@@ -220,7 +226,6 @@ export default function StartInterviewPage() {
             </RadioGroup>
           </div>
 
-          {/* New Job Description Textarea */}
           <div>
             <Label htmlFor="jobDescriptionInput" className="text-lg font-semibold mb-2 block flex items-center">
                 <Briefcase className="h-5 w-5 mr-2 text-primary" />
@@ -306,6 +311,3 @@ export default function StartInterviewPage() {
     </div>
   );
 }
-
-
-    
