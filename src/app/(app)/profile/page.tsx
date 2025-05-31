@@ -213,13 +213,21 @@ export default function ProfilePage() {
     toast({ title: "Item Removed", description: "Item removed locally. Save all profile changes to make it permanent." });
   };
 
+  const clearResume = () => {
+    setSelectedFile(null); 
+    setSelectedFileName(null); 
+    setClientSideResumeText(null);
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(LOCAL_STORAGE_RESUME_TEXT_KEY);
+      localStorage.removeItem(LOCAL_STORAGE_RESUME_FILENAME_KEY);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    // No toast here, as it's usually called as part of another action (like failed upload)
+  };
+
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     
-    const prevSelectedFile = selectedFile;
-    const prevFileName = selectedFileName; 
-    const prevResumeText = clientSideResumeText;
-
     if (fileInputRef.current) fileInputRef.current.value = ""; 
 
     if (!file) {
@@ -229,13 +237,14 @@ export default function ProfilePage() {
 
     setIsProcessingFile(true);
     setSelectedFile(file); 
-    setSelectedFileName(file.name); 
-    setClientSideResumeText(""); 
+    setSelectedFileName(file.name); // Optimistically set filename for UI
+    setClientSideResumeText("");   // Clear previous text for UI
 
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
       toast({ title: "File Too Large", description: `Maximum file size is ${MAX_FILE_SIZE_MB}MB.`, variant: "destructive" });
-      setSelectedFile(prevSelectedFile); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText); 
-      setIsProcessingFile(false); return;
+      clearResume(); // Clear everything if file is too large
+      setIsProcessingFile(false); 
+      return;
     }
     
     const isClientProcessable = CLIENT_SIDE_PROCESSING_MIME_TYPES.includes(file.type) || file.name.toLowerCase().endsWith('.txt') || file.name.toLowerCase().endsWith('.md');
@@ -247,17 +256,23 @@ export default function ProfilePage() {
       const reader = new FileReader();
       reader.onload = (e) => {
         const text = e.target?.result as string;
-        setClientSideResumeText(text);
-        if (typeof window !== "undefined") {
-          localStorage.setItem(LOCAL_STORAGE_RESUME_TEXT_KEY, text);
-          localStorage.setItem(LOCAL_STORAGE_RESUME_FILENAME_KEY, file.name);
+        if (text && text.trim().length > 0) {
+          setClientSideResumeText(text);
+          setSelectedFileName(file.name); // Confirm filename
+          if (typeof window !== "undefined") {
+            localStorage.setItem(LOCAL_STORAGE_RESUME_TEXT_KEY, text);
+            localStorage.setItem(LOCAL_STORAGE_RESUME_FILENAME_KEY, file.name);
+          }
+          toast({ title: "Resume Content Loaded", description: `Text extracted from ${file.name}. This will be used for AI question generation.` });
+        } else {
+          toast({ title: "Text Extraction Failed", description: "No text could be extracted from the uploaded file. Please try a different file or format.", variant: "destructive" });
+          clearResume();
         }
-        toast({ title: "Resume Content Loaded", description: `Text extracted from ${file.name}. This will be used for AI question generation.` });
         setIsProcessingFile(false);
       };
       reader.onerror = () => {
         toast({ title: "File Read Error", description: "Could not read plain text resume.", variant: "destructive" });
-        setSelectedFile(prevSelectedFile); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText); 
+        clearResume();
         setIsProcessingFile(false);
       };
       reader.readAsText(file);
@@ -288,48 +303,39 @@ export default function ProfilePage() {
           } catch (readTextError) {
               errorMessageFromServer = `Failed to read server error response. Status: ${response.status}. Check network and server logs.`;
           }
-          setSelectedFile(prevSelectedFile);
-          setSelectedFileName(prevFileName);
-          setClientSideResumeText(prevResumeText);
-          throw new Error(errorMessageFromServer);
+          toast({ title: "Resume Processing Error", description: errorMessageFromServer, variant: "destructive" });
+          clearResume();
+          setIsProcessingFile(false);
+          return; 
         }
 
         const data = await response.json();
-        if (data.text === undefined) { 
-            setSelectedFile(prevSelectedFile); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText);
-            throw new Error("Server did not return extracted text.");
+        if (data.text && data.text.trim().length > 0) {
+          setClientSideResumeText(data.text);
+          setSelectedFileName(file.name); // Confirm filename
+          if (typeof window !== "undefined") {
+            localStorage.setItem(LOCAL_STORAGE_RESUME_TEXT_KEY, data.text);
+            localStorage.setItem(LOCAL_STORAGE_RESUME_FILENAME_KEY, file.name);
+          }
+          toast({ title: "Resume Processed by Server", description: `Text extracted from ${file.name}. This will be used for AI question generation.` });
+        } else {
+           toast({ title: "Text Extraction Failed", description: data.message || "Server processed the file, but no text could be extracted. Please try a different file or format.", variant: "destructive" });
+           clearResume();
         }
-        setClientSideResumeText(data.text);
-        if (typeof window !== "undefined") {
-          localStorage.setItem(LOCAL_STORAGE_RESUME_TEXT_KEY, data.text);
-          localStorage.setItem(LOCAL_STORAGE_RESUME_FILENAME_KEY, file.name);
-        }
-        toast({ title: "Resume Processed by Server", description: `Text extracted from ${file.name}. This will be used for AI question generation.` });
       } catch (error: any) {
         console.error("Error processing resume on server:", error);
         toast({ title: "Resume Processing Error", description: error.message || "Could not extract text from file via server.", variant: "destructive" });
-        setSelectedFile(prevSelectedFile);
-        setSelectedFileName(prevFileName);
-        setClientSideResumeText(prevResumeText);
+        clearResume();
       } finally {
         setIsProcessingFile(false);
       }
     } else {
       toast({ title: "Unsupported File Type", description: `Cannot process '${file.name}'. Please upload .txt, .md, .pdf, or .docx files.`, variant: "destructive" });
-      setSelectedFile(prevSelectedFile); setSelectedFileName(prevFileName); setClientSideResumeText(prevResumeText); 
+      clearResume();
       setIsProcessingFile(false);
     }
   };
 
-  const clearResume = () => {
-    setSelectedFile(null); setSelectedFileName(null); setClientSideResumeText(null);
-    if (typeof window !== "undefined") {
-      localStorage.removeItem(LOCAL_STORAGE_RESUME_TEXT_KEY);
-      localStorage.removeItem(LOCAL_STORAGE_RESUME_FILENAME_KEY);
-    }
-    if (fileInputRef.current) fileInputRef.current.value = "";
-    toast({ title: "Resume Cleared", description: "Resume selection removed from this browser session." });
-  };
 
   const onSubmit = async (values: ProfileFormValues) => {
     if (!user) {
@@ -504,7 +510,7 @@ export default function ProfilePage() {
                   Other formats may have limited support. Text extraction quality can vary.
                 </AlertDescription>
               </Alert>
-              {selectedFileName && (<div className="mt-2 text-sm text-muted-foreground flex items-center justify-between p-2 border rounded-md bg-secondary/50"><div className="flex items-center gap-2 overflow-hidden"><FileText className="h-4 w-4 text-primary shrink-0" /><span className="truncate" title={selectedFileName}>{selectedFileName}</span></div><div className="flex items-center gap-1 shrink-0"><Button type="button" variant="ghost" size="icon" onClick={clearResume} title="Clear resume selection" aria-label="Clear resume" disabled={isSubmitting || isProcessingFile}><XCircle className="h-4 w-4 text-destructive" /></Button></div></div>)}
+              {selectedFileName && (<div className="mt-2 text-sm text-muted-foreground flex items-center justify-between p-2 border rounded-md bg-secondary/50"><div className="flex items-center gap-2 overflow-hidden"><FileText className="h-4 w-4 text-primary shrink-0" /><span className="truncate" title={selectedFileName}>{selectedFileName}</span></div><div className="flex items-center gap-1 shrink-0"><Button type="button" variant="ghost" size="icon" onClick={() => { clearResume(); toast({title: "Resume Cleared", description: "Resume selection removed."}); }} title="Clear resume selection" aria-label="Clear resume" disabled={isSubmitting || isProcessingFile}><XCircle className="h-4 w-4 text-destructive" /></Button></div></div>)}
             </CardContent>
           </Card>
 
