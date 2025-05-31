@@ -38,8 +38,13 @@ import {
   DialogClose
 } from "@/components/ui/dialog";
 import { v4 as uuidv4 } from 'uuid';
+
 import * as pdfjsLib from 'pdfjs-dist';
 import mammoth from 'mammoth';
+
+
+const LOCAL_STORAGE_RESUME_TEXT_KEY = "tyaariResumeProcessedText";
+const LOCAL_STORAGE_RESUME_FILENAME_KEY = "tyaariResumeFileName";
 
 const profileFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }).max(50).optional().nullable(),
@@ -83,14 +88,15 @@ export default function ProfilePage() {
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
+    // Default values will be set by useEffect based on userProfile or Zod schema defaults
   });
-
+  
   useEffect(() => {
     if (typeof window !== 'undefined' && typeof pdfjsLib.GlobalWorkerOptions !== 'undefined') {
       try {
-         // CRITICAL: Ensure public/pdf.worker.mjs exists
-        pdfjsLib.GlobalWorkerOptions.workerSrc = `${window.location.origin}/pdf.worker.mjs`;
-        console.log("ProfilePage: Attempting to set pdf.js workerSrc to:", pdfjsLib.GlobalWorkerOptions.workerSrc, ". Ensure node_modules/pdfjs-dist/build/pdf.worker.mjs is copied to public/pdf.worker.mjs and server restarted.");
+        const workerSrc = `${window.location.origin}/pdf.worker.mjs`;
+        console.log("ProfilePage: Attempting to set pdf.js workerSrc to:", workerSrc, ". CRITICAL: Ensure node_modules/pdfjs-dist/build/pdf.worker.mjs is copied to public/pdf.worker.mjs and server restarted.");
+        pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
       } catch (e) {
         console.error("ProfilePage: Error setting pdfjsLib.GlobalWorkerOptions.workerSrc. pdf.js might not be loaded or an unexpected error occurred.", e);
       }
@@ -100,11 +106,11 @@ export default function ProfilePage() {
   }, []);
   
   useEffect(() => {
-    if (!initialLoading && !authLoading && user) {
-      const initialEmail = user.email || "";
-      const initialPhoneNumber = user.phoneNumber || userProfile?.phoneNumber || "";
+    if (!initialLoading && !authLoading) {
+      const initialEmail = user?.email || "";
+      const initialPhoneNumber = user?.phoneNumber || userProfile?.phoneNumber || "";
 
-      if (userProfile) {
+      if (user && userProfile) {
         form.reset({
           name: userProfile.name || user.displayName || "",
           email: initialEmail,
@@ -121,26 +127,45 @@ export default function ProfilePage() {
         
         if (userProfile.resumeRawText) {
           setClientSideResumeText(userProfile.resumeRawText);
-          setSelectedFileName(userProfile.resumeFileName || "resume_from_profile.txt"); 
+          setSelectedFileName(userProfile.resumeFileName || "resume_from_db.txt"); 
+        } else {
+          setClientSideResumeText(null);
+          setSelectedFileName(null);
         }
 
-      } else { 
-        form.reset({ 
-            name: user.displayName || "", 
-            email: initialEmail, 
-            phoneNumber: initialPhoneNumber, 
-            profileField: "", 
-            role: "", 
-            company: "", 
-            accomplishments:"" 
+      } else if (user && !userProfile) { // User exists but profile is not loaded yet or doesn't exist
+        form.reset({
+          name: user.displayName || "",
+          email: initialEmail,
+          phoneNumber: initialPhoneNumber,
+          profileField: "", 
+          role: "", 
+          company: "",
+          accomplishments: "",
         });
+        setKeySkills([]);
+        setExperiences([]);
+        setProjects([]);
+        setEducationHistory([]);
+        setClientSideResumeText(null);
+        setSelectedFileName(null);
+      } else if (!user) { // No user
+        form.reset(); // Reset to empty form (uses Zod schema defaults if any)
+        setKeySkills([]);
+        setExperiences([]);
+        setProjects([]);
+        setEducationHistory([]);
+        setClientSideResumeText(null);
+        setSelectedFileName(null);
+        // Clear localStorage too if user logs out
+        if (typeof window !== 'undefined') {
+            localStorage.removeItem(LOCAL_STORAGE_RESUME_TEXT_KEY);
+            localStorage.removeItem(LOCAL_STORAGE_RESUME_FILENAME_KEY);
+        }
       }
       setIsFetchingProfile(false);
-    } else if (!initialLoading && !authLoading && !user) { 
-      setIsFetchingProfile(false);
-      form.reset(form.formState.defaultValues); 
     }
-  }, [user, userProfile, authLoading, initialLoading, form.reset, form.formState.defaultValues]);
+  }, [user, userProfile, authLoading, initialLoading, form.reset, setKeySkills, setExperiences, setProjects, setEducationHistory, setClientSideResumeText, setSelectedFileName]);
 
 
   const handleAddSkill = () => {
@@ -210,32 +235,46 @@ export default function ProfilePage() {
     toast({ title: "Item Removed", description: "Item removed locally. Save all profile changes to make it permanent." });
   };
 
-  const clearResumeDisplay = (showToast: boolean = false, toastMessage?: string) => {
+  const clearResumeDisplayAndStorage = (showToast: boolean = false, toastMessage?: string) => {
     setSelectedFileName(null); 
     setClientSideResumeText(null);
+    if (typeof window !== 'undefined') {
+        localStorage.removeItem(LOCAL_STORAGE_RESUME_TEXT_KEY);
+        localStorage.removeItem(LOCAL_STORAGE_RESUME_FILENAME_KEY);
+    }
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (showToast) {
-        toast({ title: "Resume Cleared", description: toastMessage || "Resume selection removed." });
+        toast({ title: "Resume Cleared", description: toastMessage || "Resume selection and extracted text removed." });
     }
   };
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (fileInputRef.current) fileInputRef.current.value = ""; 
-
+    
     if (!file) {
-      clearResumeDisplay(false);
+      // No file selected, clear relevant states if needed, but don't clear existing DB-loaded resume unless user explicitly clears.
+      // If a file was previously selected in this session via input, then this path means it was de-selected.
+      if(fileInputRef.current?.value === "") { // This checks if the input was actually cleared by user.
+          // If selectedFileName was from a *new* upload (not from DB), then clear.
+          // This logic needs refinement if we want to distinguish "clearing a new selection" vs "cancelling an upload when DB data was shown".
+          // For now, if file input is empty, we assume the user wants to clear what was just selected.
+          // clearResumeDisplayAndStorage(false); // Maybe don't show toast if it was just cancelled.
+      }
+      setIsProcessingFile(false); // Ensure processing is false
       return;
     }
     
+    // New file is selected, proceed with processing
     setSelectedFileName(file.name);
+    setClientSideResumeText(null); // Clear previous client-side text
     setIsProcessingFile(true);
-    setClientSideResumeText(null);
     toast({ title: "Processing Resume", description: `Extracting text from ${file.name}...` });
 
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-      toast({ title: "File Too Large", description: `Maximum file size is ${MAX_FILE_SIZE_MB}MB.`, variant: "destructive" });
-      clearResumeDisplay(true, "Previous resume data (if any) cleared due to file size error.");
+      toast({ title: "File Too Large", description: `Maximum file size is ${MAX_FILE_SIZE_MB}MB. Previous resume data (if any from DB) remains.`, variant: "destructive" });
+      setSelectedFileName(userProfile?.resumeFileName || null); // Revert to DB filename if exists
+      setClientSideResumeText(userProfile?.resumeRawText || null); // Revert to DB text
+      if (fileInputRef.current) fileInputRef.current.value = "";
       setIsProcessingFile(false);
       return;
     }
@@ -245,14 +284,22 @@ export default function ProfilePage() {
       const arrayBuffer = await file.arrayBuffer();
 
       if (file.name.toLowerCase().endsWith('.pdf')) {
-        console.log("ProfilePage: CLIENT_SIDE_PARSE - Attempting PDF processing. Worker path:", pdfjsLib.GlobalWorkerOptions.workerSrc);
         if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
-            console.error("ProfilePage: pdf.js workerSrc is not set. PDF processing will likely fail. Ensure public/pdf.worker.mjs exists and the path is correctly set.");
-            toast({ title: "PDF Worker Error", description: "PDF.js worker not configured. Please ensure 'public/pdf.worker.mjs' is in place and refresh. Copy from 'node_modules/pdfjs-dist/build/pdf.worker.mjs'.", variant: "destructive", duration: 10000 });
-            throw new Error("PDF.js workerSrc not configured.");
+          pdfjsLib.GlobalWorkerOptions.workerSrc = `${window.location.origin}/pdf.worker.mjs`;
+          console.warn("ProfilePage: pdf.js workerSrc was not set, attempting to set it now. Ensure public/pdf.worker.mjs exists.");
         }
+        console.log("ProfilePage: CLIENT_SIDE_PARSE - Attempting PDF processing. Worker path:", pdfjsLib.GlobalWorkerOptions.workerSrc);
+        
         const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-        const pdf = await loadingTask.promise;
+        const pdf = await loadingTask.promise.catch(pdfError => {
+            console.error("ProfilePage: Error during pdfjsLib.getDocument().promise:", pdfError);
+            const errorDetail = (pdfError instanceof Error && pdfError.message) ? pdfError.message : "Unknown PDF loading error.";
+            if (errorDetail.includes("worker") || errorDetail.includes("fetch dynamically imported module")) {
+                 throw new Error(`PDF Worker Error: ${errorDetail}. Ensure 'public/pdf.worker.mjs' is copied from 'node_modules/pdfjs-dist/build/pdf.worker.mjs' and server restarted.`);
+            }
+            throw pdfError; // Re-throw other PDF errors
+        });
+
         let textContent = "";
         for (let i = 1; i <= pdf.numPages; i++) {
           const page = await pdf.getPage(i);
@@ -266,26 +313,29 @@ export default function ProfilePage() {
       } else if (file.name.toLowerCase().endsWith('.txt') || file.name.toLowerCase().endsWith('.md')) {
         rawText = new TextDecoder().decode(arrayBuffer);
       } else {
-        toast({ title: "Unsupported File Type", description: `Cannot extract text from ${file.name}. Supported: PDF, DOCX, TXT, MD.`, variant: "destructive" });
-        clearResumeDisplay(true, "Previous resume data (if any) cleared due to unsupported file type.");
+        toast({ title: "Unsupported File Type", description: `Cannot extract text from ${file.name}. Supported: PDF, DOCX, TXT, MD. Previous resume data (if any from DB) remains.`, variant: "destructive" });
+        setSelectedFileName(userProfile?.resumeFileName || null); // Revert to DB filename if exists
+        setClientSideResumeText(userProfile?.resumeRawText || null); // Revert to DB text
+        if (fileInputRef.current) fileInputRef.current.value = "";
         setIsProcessingFile(false);
         return;
       }
       
       setClientSideResumeText(rawText);
-      toast({ title: "Resume Text Extracted", description: `Text from ${file.name} is ready. Remember to save profile changes.` });
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(LOCAL_STORAGE_RESUME_TEXT_KEY, rawText);
+        localStorage.setItem(LOCAL_STORAGE_RESUME_FILENAME_KEY, file.name);
+      }
+      toast({ title: "Resume Text Extracted", description: `Text from ${file.name} is ready to be saved with your profile.` });
 
     } catch (error: any) {
       console.error("ProfilePage: Error processing file client-side:", error);
-      let userMessage = "Could not extract text from the resume.";
-      if (error.message && error.message.includes("workerSrc")) {
-        userMessage = "PDF processing setup error. Ensure 'public/pdf.worker.mjs' is in place. Check console for details. Previous resume data kept if any.";
-         // Don't clear resume if it's a PDF worker issue
-        setSelectedFileName(null); // Clear selection for the new file
-        if (fileInputRef.current) fileInputRef.current.value = "";
-      } else {
-        clearResumeDisplay(true, "Previous resume data (if any) cleared due to an error processing the new file.");
-      }
+      let userMessage = error.message || "Could not extract text from the resume. Previous resume data (if any from DB) remains.";
+       // Keep previously loaded (from DB) resume text if current upload fails
+      setSelectedFileName(userProfile?.resumeFileName || null);
+      setClientSideResumeText(userProfile?.resumeRawText || null);
+      if (fileInputRef.current) fileInputRef.current.value = ""; // Clear the failed upload from input
+
       toast({ title: "Resume Processing Error", description: userMessage, variant: "destructive", duration: 7000 });
     } finally {
       setIsProcessingFile(false);
@@ -318,8 +368,10 @@ export default function ProfilePage() {
         projects: projects || [],
         educationHistory: educationHistory || [],
         accomplishments: values.accomplishments || null,
-        resumeRawText: clientSideResumeText, // Save the extracted raw text
-        resumeFileName: selectedFileName, // Save the file name too
+        
+        resumeRawText: clientSideResumeText, // Save the text from state (which reflects latest upload or DB)
+        resumeFileName: selectedFileName, // Save the corresponding filename from state
+
         createdAt: userProfile?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         interviewsTaken: userProfile?.interviewsTaken || 0,
@@ -329,6 +381,13 @@ export default function ProfilePage() {
       };
       const userDocRef = doc(db, "users", user.uid);
       await setDoc(userDocRef, profileDataToSave, { merge: true });
+      
+      // Clear localStorage after successful save to DB, as DB is now the source of truth
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(LOCAL_STORAGE_RESUME_TEXT_KEY);
+        localStorage.removeItem(LOCAL_STORAGE_RESUME_FILENAME_KEY);
+      }
+
       toast({ title: "Profile Updated", description: "Your profile has been successfully updated." });
       refreshUserProfile(); 
     } catch (error: any) {
@@ -408,7 +467,7 @@ export default function ProfilePage() {
             <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-xl"><UploadCloud className="h-6 w-6 text-primary" /> Upload Resume Text</CardTitle>
                 <CardDescription>
-                    Upload a resume (PDF, DOCX, TXT, MD). Text will be extracted client-side and saved to your profile.
+                    Upload a resume (PDF, DOCX, TXT, MD). Text will be extracted client-side and saved to your profile upon saving all changes.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -422,11 +481,11 @@ export default function ProfilePage() {
                 <Info className="h-4 w-4 !text-blue-500 dark:!text-blue-400" />
                 <AlertTitle className="text-blue-700 dark:text-blue-300">Client-Side Text Extraction</AlertTitle>
                 <AlertDescription className="text-blue-600 dark:text-blue-200">
-                  Raw text will be extracted directly in your browser. For PDF, ensure you have copied `pdf.worker.mjs` to your `public` folder.
+                  Raw text will be extracted directly in your browser. For PDF, ensure you have copied `pdf.worker.mjs` to your `public` folder and restarted the server.
                   Max file size: {MAX_FILE_SIZE_MB}MB.
                 </AlertDescription>
               </Alert>
-              {selectedFileName && (<div className="mt-2 text-sm text-muted-foreground flex items-center justify-between p-2 border rounded-md bg-secondary/50"><div className="flex items-center gap-2 overflow-hidden"><FileText className="h-4 w-4 text-primary shrink-0" /><span className="truncate" title={selectedFileName}>{selectedFileName}</span> ({clientSideResumeText ? `${Math.round(clientSideResumeText.length / 1024)} KB text` : 'Processing...'})</div><div className="flex items-center gap-1 shrink-0"><Button type="button" variant="ghost" size="icon" onClick={() => clearResumeDisplay(true, "Resume selection and extracted text cleared. Save profile to update in database.")} title="Clear resume selection" aria-label="Clear resume" disabled={isSubmitting || isProcessingFile}><XCircle className="h-4 w-4 text-destructive" /></Button></div></div>)}
+              {selectedFileName && (<div className="mt-2 text-sm text-muted-foreground flex items-center justify-between p-2 border rounded-md bg-secondary/50"><div className="flex items-center gap-2 overflow-hidden"><FileText className="h-4 w-4 text-primary shrink-0" /><span className="truncate" title={selectedFileName}>{selectedFileName}</span> ({clientSideResumeText ? `${Math.round(clientSideResumeText.length / 1024)} KB text` : (isProcessingFile ? 'Processing...' : 'Text ready')})</div><div className="flex items-center gap-1 shrink-0"><Button type="button" variant="ghost" size="icon" onClick={() => clearResumeDisplayAndStorage(true, "Resume selection and extracted text cleared. Save profile to update in database.")} title="Clear resume selection" aria-label="Clear resume" disabled={isSubmitting || isProcessingFile}><XCircle className="h-4 w-4 text-destructive" /></Button></div></div>)}
                {clientSideResumeText && (
                 <Textarea
                     value={clientSideResumeText}
@@ -511,3 +570,5 @@ export default function ProfilePage() {
     </div>
   );
 }
+
+    
