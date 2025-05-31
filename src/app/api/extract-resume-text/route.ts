@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import pdf from 'pdf-parse';
 import mammoth from 'mammoth';
 
-const LOG_PREFIX = "API_ROUTE_DEBUG (v_SIMPLIFIED_PARSING):"; 
+const LOG_PREFIX = "API_ROUTE_DEBUG (v_FULL_PARSING_ENABLED):"; 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 
 export async function POST(request: Request) {
@@ -23,8 +23,9 @@ export async function POST(request: Request) {
     const fileEntry = formData.get('file');
 
     if (!fileEntry) {
-      console.warn(`${LOG_PREFIX} No file found in formData. Keys available:`, Array.from(formData.keys()).join(', '));
-      return NextResponse.json({ message: 'No file uploaded under the "file" key.' }, { status: 400 });
+      const availableKeys = Array.from(formData.keys()).join(', ') || 'none';
+      console.warn(`${LOG_PREFIX} No file found in formData under the 'file' key. Available keys: [${availableKeys}]`);
+      return NextResponse.json({ message: `No file uploaded under the "file" key. Keys found: [${availableKeys}]` }, { status: 400 });
     }
 
     if (!(fileEntry instanceof File)) {
@@ -54,26 +55,46 @@ export async function POST(request: Request) {
       console.log(`${LOG_PREFIX} File buffer created successfully for ${file.name}. Buffer size: ${fileBuffer.length}`);
     } catch (bufferError: any) {
       console.error(`${LOG_PREFIX} Error creating buffer from file ${file.name}:`, bufferError.message, bufferError.stack);
-      return NextResponse.json({ message: `Error reading file content for ${file.name}.` }, { status: 500 });
+      return NextResponse.json({ message: `Error reading file content for ${file.name}. Could not create buffer.` }, { status: 500 });
     }
 
     let extractedText = "";
 
-    // --- PARSING LOGIC TEMPORARILY COMMENTED OUT FOR DEBUGGING ---
-    console.log(`${LOG_PREFIX} Bypassing actual PDF/DOCX parsing for this diagnostic version.`);
     if (file.type === "application/pdf") {
-      extractedText = `Dummy PDF text for ${file.name}. Actual parsing disabled.`;
-      console.log(`${LOG_PREFIX} Pretended to parse PDF: ${file.name}`);
+      console.log(`${LOG_PREFIX} Attempting to parse PDF: ${file.name} (Size: ${fileBuffer.length} bytes)`);
+      try {
+        const data = await pdf(fileBuffer);
+        extractedText = data.text ? data.text.trim() : "";
+        console.log(`${LOG_PREFIX} PDF parsing successful for ${file.name}. Text length: ${extractedText.length}`);
+      } catch (pdfError: any) {
+        console.error(`${LOG_PREFIX} Error parsing PDF ${file.name}:`, pdfError.message, pdfError.stack);
+        return NextResponse.json({ message: `Error parsing PDF file '${file.name}'. The file might be corrupted or an unsupported PDF version. Details: ${pdfError.message}` }, { status: 500 });
+      }
     } else if (file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || file.name.toLowerCase().endsWith('.docx')) {
-      extractedText = `Dummy DOCX text for ${file.name}. Actual parsing disabled.`;
-      console.log(`${LOG_PREFIX} Pretended to parse DOCX: ${file.name}`);
+      console.log(`${LOG_PREFIX} Attempting to parse DOCX: ${file.name} (Size: ${fileBuffer.length} bytes)`);
+      try {
+        const result = await mammoth.extractRawText({ buffer: fileBuffer });
+        extractedText = result.value ? result.value.trim() : "";
+        console.log(`${LOG_PREFIX} DOCX parsing successful for ${file.name}. Text length: ${extractedText.length}`);
+      } catch (docxError: any) {
+        console.error(`${LOG_PREFIX} Error parsing DOCX ${file.name}:`, docxError.message, docxError.stack);
+        return NextResponse.json({ message: `Error parsing DOCX file '${file.name}'. The file might be corrupted or an unsupported DOCX format. Details: ${docxError.message}` }, { status: 500 });
+      }
+    } else if (file.type === "text/plain" || file.name.toLowerCase().endsWith('.txt') || file.type === "text/markdown" || file.name.toLowerCase().endsWith('.md')) {
+        console.log(`${LOG_PREFIX} Reading plain text/markdown file: ${file.name}`);
+        try {
+            extractedText = fileBuffer.toString('utf8').trim();
+            console.log(`${LOG_PREFIX} Plain text/markdown reading successful for ${file.name}. Text length: ${extractedText.length}`);
+        } catch (textReadError: any) {
+            console.error(`${LOG_PREFIX} Error reading text file ${file.name}:`, textReadError.message, textReadError.stack);
+            return NextResponse.json({ message: `Error reading text file '${file.name}'. Details: ${textReadError.message}` }, { status: 500 });
+        }
     } else {
-      console.warn(`${LOG_PREFIX} Unsupported file type: ${file.type} for file ${file.name}. Returning placeholder text as server cannot process this type.`);
-      extractedText = `File type ${file.type} is not supported for direct text extraction in this diagnostic version.`;
+      console.warn(`${LOG_PREFIX} Unsupported file type: ${file.type} for file ${file.name}. Client-side should prevent this, but handling server-side too.`);
+      return NextResponse.json({ message: `Unsupported file type: '${file.type}'. Please upload .txt, .md, .pdf, or .docx files.` }, { status: 415 });
     }
-    // --- END OF TEMPORARILY COMMENTED OUT PARSING LOGIC ---
     
-    console.log(`${LOG_PREFIX} Successfully processed file ${file.name} (DIAGNOSTIC - NO ACTUAL PARSING). Returning placeholder text (length: ${extractedText.length}).`);
+    console.log(`${LOG_PREFIX} Successfully processed file ${file.name}. Returning extracted text (length: ${extractedText.length}).`);
     return NextResponse.json({ text: extractedText });
 
   } catch (error: any) {
