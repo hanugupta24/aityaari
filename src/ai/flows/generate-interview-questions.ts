@@ -48,7 +48,7 @@ export async function generateInterviewQuestions(
   return generateInterviewQuestionsFlow(input);
 }
 
-const technicalRolesKeywords = ['developer', 'engineer', 'scientist', 'analyst', 'architect', 'programmer', 'data', 'software', 'backend', 'frontend', 'fullstack', 'flutter', 'devops', 'sre', 'machine learning', 'ai engineer'];
+const technicalRolesKeywords = ['developer', 'engineer', 'scientist', 'analyst', 'architect', 'programmer', 'data', 'software', 'backend', 'frontend', 'fullstack', 'flutter', 'devops', 'sre', 'machine learning', 'ai engineer', 'cybersecurity', 'network', 'database administrator', 'dba'];
 
 const prompt = ai.definePrompt({
   name: 'generateInterviewQuestionsPrompt',
@@ -77,15 +77,22 @@ Candidate Information:
 ---
 {{/if}}
 
-Determine if the role is technical. Roles are considered technical if they include keywords such as: ${technicalRolesKeywords.join(', ')}. Examples: "Software Developer", "Data Scientist", "Flutter Developer". Roles like "Product Manager", "Marketing Manager" are non-technical.
+Determine if the role is technical. Roles are considered technical if they include keywords such as: ${technicalRolesKeywords.join(', ')}. Examples: "Software Developer", "Data Scientist", "AI Engineer". Roles like "Product Manager", "Marketing Manager" are non-technical.
 
 Question Stages & Types:
 Questions are categorized by 'stage' ('oral' or 'technical_written') and 'type' ('conversational', 'behavioral', 'technical', 'coding', 'resume_based', 'jd_based').
 - 'oral' stage: For questions answered verbally.
-    - For Technical Roles: 'technical' type questions in this stage are for conceptual discussions (e.g., "Explain how React hooks work conceptually based on the job description requirement for React expertise", "Discuss the trade-offs of microservices vs. monolithic architecture if relevant to the JD/role", "What are LLMs and how do they generally learn if applying for a Data Science role?").
-    - For Non-Technical Roles: Questions are primarily 'conversational', 'behavioral', 'resume_based', or 'jd_based', focusing on job-specific scenarios, processes, and problem-solving relevant to the job description or role (e.g., "Describe a time you managed a challenging project as outlined in the JD", "How would you approach market research for the new product mentioned in the job description?").
-- 'technical_written' stage: For questions requiring typed answers (e.g., code, detailed technical explanations). This stage is primarily for technical roles.
-    - Examples for Technical Roles: "Write a Python function to solve a problem related to a requirement in the job description.", "Describe the database schema you would design for a system similar to what's described in the JD.", "Explain the CI/CD pipeline for a project that uses technologies listed in the job description."
+    - **For Technical Roles:** 'technical' type questions in this stage MUST be specific and in-depth, focusing on core concepts, tools, libraries, algorithms, and methodologies relevant to the job description (JD), resume, or role. Avoid overly generic technical questions.
+        - Example for Web Dev (if JD mentions React): "Explain the concept of reconciliation in React. How does the virtual DOM contribute to this process?"
+        - Example for Data Science (if JD mentions PyTorch/dimensionality reduction): "What are Tensors in PyTorch and how are they different from NumPy arrays? How does PyTorch's Autograd feature work?" or "Describe Principal Component Analysis (PCA). What are its main assumptions and when might it not be the best technique for dimensionality reduction?"
+        - Example for Backend (if JD mentions microservices): "Discuss the trade-offs of synchronous versus asynchronous communication between microservices. When would you choose one over the other, referencing specific scenarios if possible from the JD/resume?"
+    - For Non-Technical Roles: Questions are primarily 'conversational', 'behavioral', 'resume_based', or 'jd_based', focusing on job-specific scenarios, processes, and problem-solving relevant to the job description or role.
+
+- 'technical_written' stage: For questions requiring typed answers (e.g., code, detailed technical explanations, system design). This stage is primarily for technical roles.
+    - Examples for Technical Roles:
+        - Coding: "Write a Python function that takes [specific input described in JD/resume, e.g., a list of user activity data] and returns [specific output, e.g., a summary of active users per day]."
+        - Technical Explanation: "If the JD requires experience with [e.g., NoSQL databases like MongoDB], explain the data modeling considerations you would make for a [e.g., social media feed application], contrasting it with a relational approach."
+        - System Design (if relevant to JD/role): "Outline the architecture for a [e.g., real-time notification system] as might be needed for a feature described in the JD. What are the key components and technologies you'd consider?"
 
 Question Distribution and Types based on Duration:
 The 'id' for each question MUST be unique (q1, q2, q3, etc.).
@@ -93,54 +100,45 @@ Sequence: All 'oral' stage questions must come before all 'technical_written' st
 
 *   **For Non-Technical Roles (e.g., Product Management, Marketing, Sales):**
     *   All questions generated MUST be of the 'oral' stage. No 'technical_written' questions should be generated.
-    *   The questions should be a diverse mix of 'conversational', 'behavioral', and primarily 'jd_based' (if JD provided) or 'resume_based' (if resume provided) types, focusing on job-specific scenarios, work processes, and how the candidate approaches tasks relevant to their field and the provided job description.
-    *   Ensure the total number of these oral questions aligns with the specified interview duration:
-        *   **15 minutes (Total 6-7 questions):** Generate 6-7 diverse 'oral' questions.
-        *   **30 minutes (Total 10-12 questions):** Generate 10-12 diverse 'oral' questions.
-        *   **45 minutes (Total 15-16 questions):** Generate 15-16 diverse 'oral' questions.
+    *   The questions should be a diverse mix of 'conversational', 'behavioral', and primarily 'jd_based' (if JD provided) or 'resume_based' (if resume provided) types.
+    *   Number of questions: **15 mins (6-7 oral)**, **30 mins (10-12 oral)**, **45 mins (15-16 oral)**.
 
 *   **For Technical Roles (Identified by keywords like ${technicalRolesKeywords.join(', ')}):**
-    The distribution below should be followed within the total question count for the duration. Prioritize 'jd_based' questions if a job description is provided.
-    *   **Technical Oral Questions (approx. 45% of total questions for the duration):**
+    Prioritize 'jd_based' questions if a job description is provided. Ensure 'technical' questions are specific and in-depth.
+    *   **Technical Oral Questions (approx. 45% of total):**
         *   stage: 'oral'
-        *   type: 'technical' (e.g., for a web developer based on JD: "Explain the concept of closures in JavaScript as it relates to asynchronous operations mentioned in the JD requirements", "What is the difference between virtual DOM and shadow DOM if the JD mentions advanced frontend frameworks?"), 'jd_based', or 'resume_based'. These are for verbal discussion of technical topics, understanding of concepts, and problem-solving approaches relevant to the job description or resume.
-    *   **Technical Written Questions (approx. 30% of total questions for the duration):**
+        *   type: 'technical' (deep conceptual, tool-specific, algorithm-specific), 'jd_based', 'resume_based'.
+    *   **Technical Written Questions (approx. 30% of total):**
         *   stage: 'technical_written'
-        *   type: 'technical', 'coding' (e.g., "Write a function to implement a feature described in the job description.", "Solve a coding problem using a language specified in the JD."), or 'jd_based' / 'resume_based'. These require typed, in-depth answers or code.
-    *   **Non-Technical Oral Questions (approx. 25% of total questions for the duration):**
+        *   type: 'technical' (detailed explanations, system design), 'coding', 'jd_based', 'resume_based'.
+    *   **Non-Technical Oral Questions (approx. 25% of total):**
         *   stage: 'oral'
-        *   type: 'conversational', 'behavioral', 'jd_based', or 'resume_based' (focusing on soft skills, teamwork, communication, problem-solving approaches in a general context or related to JD/resume).
+        *   type: 'conversational', 'behavioral', 'jd_based', 'resume_based' (soft skills, teamwork, communication).
 
     *Specific counts for Technical Roles based on duration and above percentages:*
-    *   **15 minutes (Total 6-7 questions for technical roles):**
-        *   Technical Oral: 2-3 questions
+    *   **15 minutes (Total 6-7 questions):**
+        *   Technical Oral: 2-3 questions (ensure these are deeply technical)
         *   Technical Written: 2 questions
         *   Non-Technical Oral: 2 questions
-        (Adjust slightly to meet total 6-7, prioritizing JD/resume-based content)
 
-    *   **30 minutes (Total 10-12 questions for technical roles):**
-        *   Technical Oral: 4-5 questions
+    *   **30 minutes (Total 10-12 questions):**
+        *   Technical Oral: 4-5 questions (ensure these are deeply technical)
         *   Technical Written: 3-4 questions
         *   Non-Technical Oral: 2-3 questions
-        (Adjust slightly to meet total 10-12, prioritizing JD/resume-based content)
 
-    *   **45 minutes (Total 15-16 questions for technical roles):**
-        *   Technical Oral: 6-7 questions
+    *   **45 minutes (Total 15-16 questions):**
+        *   Technical Oral: 6-7 questions (ensure these are deeply technical)
         *   Technical Written: 4-5 questions
         *   Non-Technical Oral: 4-5 questions
-        (Adjust slightly to meet total 15-16, prioritizing JD/resume-based content)
 
 General Guidelines for All Roles:
-- If a jobDescription is provided, make it the primary driver for question content.
+- If a jobDescription is provided, make it the primary driver for question content, especially for 'jd_based' technical questions.
 - All questions MUST be directly relevant to the provided information (jobDescription > resumeProcessedText > profileField/role).
-- 'jd_based' questions should clearly refer to specific requirements or aspects from the job description.
-- 'resume_based' questions should clearly refer to specific information from the resume.
-- For 'technical_written' questions of type 'coding', provide a clear, concise problem statement.
-- 'Oral' questions should be open-ended and designed to encourage spoken, detailed responses.
+- For 'technical_written' questions of type 'coding', provide a clear, concise problem statement, ideally related to the JD/resume.
 - Each question MUST have a unique 'id', its 'text', its designated 'stage', and its 'type'. The 'answer' field should NOT be part of this generation output.
 
 Generate the questions array according to these guidelines. Ensure questions are challenging yet appropriate for the experience level implied by the role, field, job description, and resume.
-If no jobDescription or resumeProcessedText is provided, generate questions based on role and field only, following the same distribution principles.
+If no jobDescription or resumeProcessedText is provided, generate questions based on role and field only, following the same distribution principles, ensuring technical questions are appropriately deep for the role.
 Ensure your entire output is a single JSON object that strictly adheres to the defined output schema.
 `,
 });
@@ -190,3 +188,4 @@ const generateInterviewQuestionsFlow = ai.defineFlow(
     };
   }
 );
+
