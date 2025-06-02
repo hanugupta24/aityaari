@@ -626,8 +626,9 @@ export default function ProfilePage() {
         educationHistory: educationHistory || [],
         accomplishments: values.accomplishments || null,
 
-        resumeRawText: clientSideResumeText, // Save the text from state (which reflects latest upload or DB)
-        resumeFileName: selectedFileName, // Save the corresponding filename from state
+        resumeRawText: clientSideResumeText,
+        resumeRawTextProvidedAndNotEmpty: !!clientSideResumeText,
+        resumeFileName: selectedFileName,
 
         createdAt: userProfile?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
