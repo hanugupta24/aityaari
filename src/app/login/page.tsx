@@ -418,13 +418,12 @@ export default function LoginPage() {
               setOtpSent(false);
               setOtp("");
               setConfirmationResult(null);
-              // No need to manually reset recaptcha states here, useEffect handles it.
             }}
             className="w-full"
           >
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="email">Email & Password</TabsTrigger>
-              <TabsTrigger value="phone">Phone Number</TabsTrigger>
+              {/* <TabsTrigger value="phone">Phone Number</TabsTrigger> */}
             </TabsList>
             <TabsContent value="email" className="pt-4">
               <Form {...emailLoginForm}>
@@ -477,7 +476,7 @@ export default function LoginPage() {
                 </form>
               </Form>
             </TabsContent>
-            <TabsContent value="phone" className="pt-4 space-y-4">
+            {/* <TabsContent value="phone" className="pt-4 space-y-4">
               {authMethod === "phone" && (
                 <div
                   ref={recaptchaContainerRef}
@@ -593,7 +592,7 @@ export default function LoginPage() {
                   </Button>
                 </>
               )}
-            </TabsContent>
+            </TabsContent> */}
           </Tabs>
         </CardContent>
         <CardFooter className="text-center text-sm">
