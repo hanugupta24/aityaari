@@ -476,7 +476,7 @@ export default function LoginPage() {
                 </form>
               </Form>
             </TabsContent>
-            {/* <TabsContent value="phone" className="pt-4 space-y-4">
+            <TabsContent value="phone" className="pt-4 space-y-4">
               {authMethod === "phone" && (
                 <div
                   ref={recaptchaContainerRef}
@@ -592,7 +592,7 @@ export default function LoginPage() {
                   </Button>
                 </>
               )}
-            </TabsContent> */}
+            </TabsContent>
           </Tabs>
         </CardContent>
         <CardFooter className="text-center text-sm">
