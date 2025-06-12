@@ -313,7 +313,7 @@ export default function StudyMaterialsPage() {
           </div>
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto mt-8">
+          {/* <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto mt-8">
             {[
               { icon: BookOpen, label: "Courses", value: "150+" },
               { icon: Users, label: "Students", value: "50K+" },
@@ -336,11 +336,15 @@ export default function StudyMaterialsPage() {
                 </CardContent>
               </Card>
             ))}
-          </div>
+          </div> */}
+        </div>
+
+        <div className="text-3xl flex justify-center items-center h-screen text-justify">
+          Coming soon...
         </div>
 
         {/* Search and Filters */}
-        <Card className="bg-card/80 backdrop-blur-xl border-border/50 shadow-2xl animate-slideUpFadeIn animation-delay-200">
+        <Card className="bg-card/80 backdrop-blur-xl border-border/50 shadow-2xl animate-slideUpFadeIn animation-delay-200 hidden h-0">
           <CardContent className="p-6">
             <div className="space-y-6">
               {/* Search Bar */}
@@ -455,7 +459,7 @@ export default function StudyMaterialsPage() {
         </Card>
 
         {/* Results Summary */}
-        <div className="flex items-center justify-between animate-fadeIn animation-delay-400">
+        {/* <div className="flex items-center justify-between animate-fadeIn animation-delay-400">
           <div className="flex items-center gap-2 text-muted-foreground">
             <Filter className="h-5 w-5" />
             <span>Showing {filteredMaterials.length} results</span>
@@ -470,10 +474,10 @@ export default function StudyMaterialsPage() {
               Sort by Popular
             </Button>
           </div>
-        </div>
+        </div> */}
 
         {/* Study Materials Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 hidden">
           {filteredMaterials.map((material, index) => {
             const TypeIcon = typeIcons[material.type];
             return (
@@ -625,7 +629,7 @@ export default function StudyMaterialsPage() {
         </div>
 
         {/* Empty State */}
-        {filteredMaterials.length === 0 && (
+        {/* {filteredMaterials.length === 0 && (
           <div className="text-center py-16 animate-fadeIn">
             <div className="w-24 h-24 bg-muted/20 rounded-full flex items-center justify-center mx-auto mb-6">
               <Search className="h-12 w-12 text-muted-foreground/50" />
@@ -650,10 +654,10 @@ export default function StudyMaterialsPage() {
               Clear Filters
             </Button>
           </div>
-        )}
+        )} */}
 
         {/* Featured Section */}
-        <Card className="bg-gradient-to-r from-primary/5 via-accent/5 to-primary/5 border-primary/20 animate-slideUpFadeIn animation-delay-600">
+        {/* <Card className="bg-gradient-to-r from-primary/5 via-accent/5 to-primary/5 border-primary/20 animate-slideUpFadeIn animation-delay-600">
           <CardHeader className="text-center pb-6">
             <CardTitle className="text-2xl font-bold flex items-center justify-center gap-3">
               <Sparkles className="h-6 w-6 text-primary" />
@@ -721,7 +725,7 @@ export default function StudyMaterialsPage() {
               ))}
             </div>
           </CardContent>
-        </Card>
+        </Card> */}
       </div>
     </div>
   );

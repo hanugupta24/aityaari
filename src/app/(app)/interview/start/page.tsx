@@ -599,9 +599,9 @@ export default function StartInterviewPage() {
       description: "Personalized based on your profile",
     },
     {
-      icon: Camera,
-      title: "Video Recording",
-      description: "Practice with real interview conditions",
+      icon: FileText,
+      title: "Performance Analysis",
+      description: "feedback on your performance",
     },
     {
       icon: Shield,
@@ -657,7 +657,7 @@ export default function StartInterviewPage() {
           {features.map((feature, index) => (
             <Card
               key={index}
-              className="relative overflow-hidden border-0 shadow-lg card-hover-effect glassmorphism gradient-border"
+              className="relative overflow-hidden border-0 shadow-lg  glassmorphism gradient-border"
               style={{ animationDelay: `${index * 0.1}s` }}
             >
               <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-accent/5 opacity-70"></div>
@@ -789,11 +789,11 @@ export default function StartInterviewPage() {
 
             {/* Personalization Info */}
             <Alert className="animate-slide-in stagger-3 border-blue-300/50 bg-blue-50/30 backdrop-blur-sm">
-              <FileText className="h-5 w-5 text-green-500" />
-              <AlertTitle className="text-lg font-bold text-white-700">
+              <FileText className="h-5 w-5 text-lg" />
+              <AlertTitle className="text-lg font-bold">
                 Personalized Questions
               </AlertTitle>
-              <AlertDescription className="text-base text-green-600">
+              <AlertDescription className="text-base">
                 Questions will be based on your profile (role, field, skills,
                 experiences, projects), your uploaded resume raw text (if any),
                 and the job description you can provide below.
@@ -892,7 +892,7 @@ export default function StartInterviewPage() {
             </div>
 
             {/* Interview Instructions */}
-            <Alert className="animate-slide-in stagger-6 border-purple-300/50 bg-purple-50/30 backdrop-blur-sm">
+            <Alert className="animate-slide-in stagger-6 border-green-300/50 backdrop-blur-sm">
               <Info className="h-5 w-5 text-green-600" />
               <AlertTitle className="text-lg font-bold text-green-600">
                 Interview Instructions

@@ -158,7 +158,7 @@ export default function ClientLayout({
                   src=" ./images/logo_solid.svg"
                   className="h-15 w-80 text-primary rounded-lg"
                   alt="Logo"
-                ></img>
+                />
               </div>
             </Link>
           </SidebarHeader>
