@@ -1,5 +1,7 @@
 "use client";
 
+import type React from "react";
+
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -18,7 +20,6 @@ import {
   FormLabel as ShadcnFormLabel,
 } from "@/components/ui/form";
 import { Label } from "@/components/ui/label";
-
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -27,11 +28,9 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  CardFooter,
 } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Loader2,
   FileText,
   XCircle,
   PlusCircle,
@@ -42,9 +41,10 @@ import {
   GraduationCap,
   Trophy,
   UserCircle2,
-  Info,
-  AlertTriangle,
   UploadCloud,
+  Save,
+  Sparkles,
+  CheckCircle2,
 } from "lucide-react";
 import type {
   UserProfile,
@@ -53,7 +53,6 @@ import type {
   EducationItem,
 } from "@/types";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Dialog,
   DialogContent,
@@ -61,10 +60,8 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-  DialogClose,
 } from "@/components/ui/dialog";
 import { v4 as uuidv4 } from "uuid";
-
 import * as pdfjsLib from "pdfjs-dist";
 import mammoth from "mammoth";
 
@@ -142,7 +139,6 @@ export default function ProfilePage() {
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
-    // Default values will be set by useEffect based on userProfile or Zod schema defaults
   });
 
   useEffect(() => {
@@ -202,7 +198,6 @@ export default function ProfilePage() {
           setSelectedFileName(null);
         }
       } else if (user && !userProfile) {
-        // User exists but profile is not loaded yet or doesn't exist
         form.reset({
           name: user.displayName || "",
           email: initialEmail,
@@ -219,15 +214,13 @@ export default function ProfilePage() {
         setClientSideResumeText(null);
         setSelectedFileName(null);
       } else if (!user) {
-        // No user
-        form.reset(); // Reset to empty form (uses Zod schema defaults if any)
+        form.reset();
         setKeySkills([]);
         setExperiences([]);
         setProjects([]);
         setEducationHistory([]);
         setClientSideResumeText(null);
         setSelectedFileName(null);
-        // Clear localStorage too if user logs out
         if (typeof window !== "undefined") {
           localStorage.removeItem(LOCAL_STORAGE_RESUME_TEXT_KEY);
           localStorage.removeItem(LOCAL_STORAGE_RESUME_FILENAME_KEY);
@@ -430,7 +423,7 @@ export default function ProfilePage() {
   };
 
   const clearResumeDisplayAndStorage = (
-    showToast: boolean = false,
+    showToast = false,
     toastMessage?: string
   ) => {
     setSelectedFileName(null);
@@ -455,22 +448,12 @@ export default function ProfilePage() {
     const file = event.target.files?.[0];
 
     if (!file) {
-      // No file selected, clear relevant states if needed, but don't clear existing DB-loaded resume unless user explicitly clears.
-      // If a file was previously selected in this session via input, then this path means it was de-selected.
-      if (fileInputRef.current?.value === "") {
-        // This checks if the input was actually cleared by user.
-        // If selectedFileName was from a *new* upload (not from DB), then clear.
-        // This logic needs refinement if we want to distinguish "clearing a new selection" vs "cancelling an upload when DB data was shown".
-        // For now, if file input is empty, we assume the user wants to clear what was just selected.
-        // clearResumeDisplayAndStorage(false); // Maybe don't show toast if it was just cancelled.
-      }
-      setIsProcessingFile(false); // Ensure processing is false
+      setIsProcessingFile(false);
       return;
     }
 
-    // New file is selected, proceed with processing
     setSelectedFileName(file.name);
-    setClientSideResumeText(null); // Clear previous client-side text
+    setClientSideResumeText(null);
     setIsProcessingFile(true);
     toast({
       title: "Processing Resume",
@@ -483,8 +466,8 @@ export default function ProfilePage() {
         description: `Maximum file size is ${MAX_FILE_SIZE_MB}MB. Previous resume data (if any from DB) remains.`,
         variant: "destructive",
       });
-      setSelectedFileName(userProfile?.resumeFileName || null); // Revert to DB filename if exists
-      setClientSideResumeText(userProfile?.resumeRawText || null); // Revert to DB text
+      setSelectedFileName(userProfile?.resumeFileName || null);
+      setClientSideResumeText(userProfile?.resumeRawText || null);
       if (fileInputRef.current) fileInputRef.current.value = "";
       setIsProcessingFile(false);
       return;
@@ -524,7 +507,7 @@ export default function ProfilePage() {
               `PDF Worker Error: ${errorDetail}. Ensure 'public/pdf.worker.mjs' is copied from 'node_modules/pdfjs-dist/build/pdf.worker.mjs' and server restarted.`
             );
           }
-          throw pdfError; // Re-throw other PDF errors
+          throw pdfError;
         });
 
         let textContent = "";
@@ -548,8 +531,8 @@ export default function ProfilePage() {
           description: `Cannot extract text from ${file.name}. Supported: PDF, DOCX, TXT, MD. Previous resume data (if any from DB) remains.`,
           variant: "destructive",
         });
-        setSelectedFileName(userProfile?.resumeFileName || null); // Revert to DB filename if exists
-        setClientSideResumeText(userProfile?.resumeRawText || null); // Revert to DB text
+        setSelectedFileName(userProfile?.resumeFileName || null);
+        setClientSideResumeText(userProfile?.resumeRawText || null);
         if (fileInputRef.current) fileInputRef.current.value = "";
         setIsProcessingFile(false);
         return;
@@ -566,13 +549,12 @@ export default function ProfilePage() {
       });
     } catch (error: any) {
       console.error("ProfilePage: Error processing file client-side:", error);
-      let userMessage =
+      const userMessage =
         error.message ||
         "Could not extract text from the resume. Previous resume data (if any from DB) remains.";
-      // Keep previously loaded (from DB) resume text if current upload fails
       setSelectedFileName(userProfile?.resumeFileName || null);
       setClientSideResumeText(userProfile?.resumeRawText || null);
-      if (fileInputRef.current) fileInputRef.current.value = ""; // Clear the failed upload from input
+      if (fileInputRef.current) fileInputRef.current.value = "";
 
       toast({
         title: "Resume Processing Error",
@@ -640,7 +622,6 @@ export default function ProfilePage() {
       const userDocRef = doc(db, "users", user.uid);
       await setDoc(userDocRef, profileDataToSave, { merge: true });
 
-      // Clear localStorage after successful save to DB, as DB is now the source of truth
       if (typeof window !== "undefined") {
         localStorage.removeItem(LOCAL_STORAGE_RESUME_TEXT_KEY);
         localStorage.removeItem(LOCAL_STORAGE_RESUME_FILENAME_KEY);
@@ -671,9 +652,28 @@ export default function ProfilePage() {
     (authLoading && !userProfile && !initialLoading)
   ) {
     return (
-      <div className="flex justify-center items-center h-[calc(100vh-var(--header-height,4rem)-2rem)]">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />{" "}
-        <p className="ml-3">Loading profile...</p>
+      <div className="min-h-screen bg-background flex justify-center items-center relative overflow-hidden">
+        {/* Animated background elements */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-primary/5 rounded-full blur-3xl animate-pulse"></div>
+          <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-accent/5 rounded-full blur-3xl animate-pulse animation-delay-400"></div>
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-primary/3 rounded-full blur-3xl animate-pulse animation-delay-200"></div>
+        </div>
+
+        <div className="text-center space-y-6 z-10">
+          <div className="relative">
+            <div className="w-20 h-20 border-4 border-primary/20 rounded-full animate-spin border-t-primary mx-auto"></div>
+            <div className="absolute inset-0 w-20 h-20 border-4 border-transparent rounded-full animate-ping border-t-primary/40 mx-auto"></div>
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold text-foreground">
+              Loading Profile
+            </h2>
+            <p className="text-muted-foreground">
+              Setting up your personalized experience...
+            </p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -683,50 +683,78 @@ export default function ProfilePage() {
     switch (modalType) {
       case "experience":
         return (
-          <div className="space-y-3">
-            <div>
-              <Label htmlFor="jobTitle">Job Title*</Label>
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <Label
+                htmlFor="jobTitle"
+                className="text-sm font-medium text-foreground"
+              >
+                Job Title*
+              </Label>
               <Input
                 id="jobTitle"
                 name="jobTitle"
                 value={currentItemData.jobTitle || ""}
                 onChange={handleModalFormChange}
+                className="h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
               />
             </div>
-            <div>
-              <Label htmlFor="companyName">Company Name*</Label>
+            <div className="space-y-2">
+              <Label
+                htmlFor="companyName"
+                className="text-sm font-medium text-foreground"
+              >
+                Company Name*
+              </Label>
               <Input
                 id="companyName"
                 name="companyName"
                 value={currentItemData.companyName || ""}
                 onChange={handleModalFormChange}
+                className="h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
               />
             </div>
-            <div>
-              <Label htmlFor="startDate">Start Date* (YYYY-MM)</Label>
-              <Input
-                id="startDate"
-                name="startDate"
-                type="month"
-                value={currentItemData.startDate || ""}
-                onChange={handleModalFormChange}
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label
+                  htmlFor="startDate"
+                  className="text-sm font-medium text-foreground"
+                >
+                  Start Date* (YYYY-MM)
+                </Label>
+                <Input
+                  id="startDate"
+                  name="startDate"
+                  type="month"
+                  value={currentItemData.startDate || ""}
+                  onChange={handleModalFormChange}
+                  className="h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label
+                  htmlFor="endDate"
+                  className="text-sm font-medium text-foreground"
+                >
+                  End Date (YYYY-MM)
+                </Label>
+                <Input
+                  id="endDate"
+                  name="endDate"
+                  type="month"
+                  value={currentItemData.endDate || ""}
+                  onChange={handleModalFormChange}
+                  className="h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
+                  placeholder="Leave blank if current"
+                />
+              </div>
             </div>
-            <div>
-              <Label htmlFor="endDate">
-                End Date (YYYY-MM, leave blank if current)
-              </Label>
-              <Input
-                id="endDate"
-                name="endDate"
-                type="month"
-                value={currentItemData.endDate || ""}
-                onChange={handleModalFormChange}
-              />
-            </div>
-            <div>
-              <Label htmlFor="description">
-                Description (Responsibilities, Achievements)
+            <div className="space-y-2">
+              <Label
+                htmlFor="description"
+                className="text-sm font-medium text-foreground"
+              >
+                Description
               </Label>
               <Textarea
                 id="description"
@@ -734,35 +762,53 @@ export default function ProfilePage() {
                 value={currentItemData.description || ""}
                 onChange={handleModalFormChange}
                 rows={4}
+                className="transition-all duration-200 focus:ring-2 focus:ring-primary/20 resize-none"
+                placeholder="Responsibilities, achievements, key projects..."
               />
             </div>
           </div>
         );
       case "project":
         return (
-          <div className="space-y-3">
-            <div>
-              <Label htmlFor="title">Project Title*</Label>
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <Label
+                htmlFor="title"
+                className="text-sm font-medium text-foreground"
+              >
+                Project Title*
+              </Label>
               <Input
                 id="title"
                 name="title"
                 value={currentItemData.title || ""}
                 onChange={handleModalFormChange}
+                className="h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
               />
             </div>
-            <div>
-              <Label htmlFor="description">Description*</Label>
+            <div className="space-y-2">
+              <Label
+                htmlFor="description"
+                className="text-sm font-medium text-foreground"
+              >
+                Description*
+              </Label>
               <Textarea
                 id="description"
                 name="description"
                 value={currentItemData.description || ""}
                 onChange={handleModalFormChange}
                 rows={4}
+                className="transition-all duration-200 focus:ring-2 focus:ring-primary/20 resize-none"
+                placeholder="What did you build? What problem did it solve?"
               />
             </div>
-            <div>
-              <Label htmlFor="technologiesUsed">
-                Technologies Used (comma-separated)
+            <div className="space-y-2">
+              <Label
+                htmlFor="technologiesUsed"
+                className="text-sm font-medium text-foreground"
+              >
+                Technologies Used
               </Label>
               <Input
                 id="technologiesUsed"
@@ -781,10 +827,17 @@ export default function ProfilePage() {
                       .filter(Boolean),
                   }))
                 }
+                className="h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
+                placeholder="React, Node.js, Python, etc. (comma-separated)"
               />
             </div>
-            <div>
-              <Label htmlFor="projectUrl">Project URL (optional)</Label>
+            <div className="space-y-2">
+              <Label
+                htmlFor="projectUrl"
+                className="text-sm font-medium text-foreground"
+              >
+                Project URL (optional)
+              </Label>
               <Input
                 id="projectUrl"
                 name="projectUrl"
@@ -792,33 +845,51 @@ export default function ProfilePage() {
                 value={currentItemData.projectUrl || ""}
                 onChange={handleModalFormChange}
                 placeholder="https://example.com"
+                className="h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
               />
             </div>
           </div>
         );
       case "education":
         return (
-          <div className="space-y-3">
-            <div>
-              <Label htmlFor="degree">Degree/Certificate*</Label>
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <Label
+                htmlFor="degree"
+                className="text-sm font-medium text-foreground"
+              >
+                Degree/Certificate*
+              </Label>
               <Input
                 id="degree"
                 name="degree"
                 value={currentItemData.degree || ""}
                 onChange={handleModalFormChange}
+                className="h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
+                placeholder="Bachelor of Science, Master of Arts, etc."
               />
             </div>
-            <div>
-              <Label htmlFor="institution">Institution*</Label>
+            <div className="space-y-2">
+              <Label
+                htmlFor="institution"
+                className="text-sm font-medium text-foreground"
+              >
+                Institution*
+              </Label>
               <Input
                 id="institution"
                 name="institution"
                 value={currentItemData.institution || ""}
                 onChange={handleModalFormChange}
+                className="h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
+                placeholder="University name, college, etc."
               />
             </div>
-            <div>
-              <Label htmlFor="yearOfCompletion">
+            <div className="space-y-2">
+              <Label
+                htmlFor="yearOfCompletion"
+                className="text-sm font-medium text-foreground"
+              >
                 Year of Completion (YYYY)*
               </Label>
               <Input
@@ -827,14 +898,18 @@ export default function ProfilePage() {
                 type="text"
                 maxLength={4}
                 pattern="\d{4}"
-                placeholder="YYYY"
+                placeholder="2023"
                 value={currentItemData.yearOfCompletion || ""}
                 onChange={handleModalFormChange}
+                className="h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
               />
             </div>
-            <div>
-              <Label htmlFor="details">
-                Additional Details (e.g., CGPA, Honors - optional)
+            <div className="space-y-2">
+              <Label
+                htmlFor="details"
+                className="text-sm font-medium text-foreground"
+              >
+                Additional Details (optional)
               </Label>
               <Textarea
                 id="details"
@@ -842,6 +917,8 @@ export default function ProfilePage() {
                 value={currentItemData.details || ""}
                 onChange={handleModalFormChange}
                 rows={3}
+                className="transition-all duration-200 focus:ring-2 focus:ring-primary/20 resize-none"
+                placeholder="CGPA, honors, relevant coursework, etc."
               />
             </div>
           </div>
@@ -852,555 +929,765 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6 pb-16">
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          <Card className="shadow-md">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-xl">
-                <UserCircle2 className="h-6 w-6 text-primary" /> Personal
-                Details
-              </CardTitle>
-              <CardDescription>
-                Basic information about you. Profile Field and Target Role are
-                mandatory.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <ShadcnFormLabel>Full Name</ShadcnFormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="e.g., Ada Lovelace"
-                        {...field}
-                        value={field.value ?? ""}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <ShadcnFormLabel>
-                      {isEmailFromAuthProvider
-                        ? "Email (Primary Login ID)"
-                        : "Email"}
-                    </ShadcnFormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder={
-                          isEmailFromAuthProvider
-                            ? "your-login-email@example.com"
-                            : "you@example.com"
-                        }
-                        {...field}
-                        value={field.value ?? ""}
-                        readOnly={isEmailFromAuthProvider}
-                        className={
-                          isEmailFromAuthProvider
-                            ? "bg-muted/50 cursor-not-allowed"
-                            : ""
-                        }
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="phoneNumber"
-                render={({ field }) => (
-                  <FormItem>
-                    <ShadcnFormLabel>
-                      Phone Number{" "}
-                      {user?.phoneNumber ? "(Primary Login ID)" : "(Optional)"}
-                    </ShadcnFormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="e.g., +15551234567"
-                        {...field}
-                        value={field.value ?? ""}
-                        type="tel"
-                        readOnly={!!user?.phoneNumber}
-                        className={
-                          !!user?.phoneNumber
-                            ? "bg-muted/50 cursor-not-allowed"
-                            : ""
-                        }
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="profileField"
-                render={({ field }) => (
-                  <FormItem>
-                    <ShadcnFormLabel>Profile Field / Industry*</ShadcnFormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="e.g., Software Engineering, Data Science"
-                        {...field}
-                        value={field.value ?? ""}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="role"
-                render={({ field }) => (
-                  <FormItem>
-                    <ShadcnFormLabel>Target Role*</ShadcnFormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="e.g., Senior Frontend Developer, Product Manager"
-                        {...field}
-                        value={field.value ?? ""}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="company"
-                render={({ field }) => (
-                  <FormItem>
-                    <ShadcnFormLabel>
-                      Current or Target Company (Optional)
-                    </ShadcnFormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="e.g., Google, Acme Corp"
-                        {...field}
-                        value={field.value ?? ""}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </CardContent>
-          </Card>
+    <div className="min-h-screen bg-background relative overflow-hidden">
+      {/* Animated background elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary/5 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-accent/5 rounded-full blur-3xl animate-pulse animation-delay-600"></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[32rem] h-[32rem] bg-primary/3 rounded-full blur-3xl animate-pulse animation-delay-400"></div>
 
-          <Card className="shadow-md">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-xl">
-                <UploadCloud className="h-6 w-6 text-primary" /> Upload Resume
-                Text
-              </CardTitle>
-              <CardDescription>
-                Upload a resume (PDF, DOCX, TXT, MD). Text will be extracted
-                client-side and saved to your profile upon saving all changes.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center gap-2">
-                <FormControl>
-                  <Input
-                    type="file"
-                    ref={fileInputRef}
-                    accept={ACCEPT_FILE_EXTENSIONS}
-                    onChange={handleFileChange}
-                    className="block w-full text-sm file:mr-4 file:py-0 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
-                    disabled={isProcessingFile || isSubmitting}
+        {/* Floating particles */}
+        <div className="absolute top-1/4 left-1/3 w-2 h-2 bg-primary/20 rounded-full animate-pulse animation-delay-200"></div>
+        <div className="absolute top-3/4 right-1/3 w-3 h-3 bg-accent/20 rounded-full animate-pulse animation-delay-400"></div>
+        <div className="absolute bottom-1/4 left-1/4 w-1 h-1 bg-primary/30 rounded-full animate-pulse animation-delay-600"></div>
+      </div>
+
+      <div className="relative z-10 max-w-5xl mx-auto py-8 px-4 space-y-8 pb-32">
+        {/* Header */}
+        <div className="text-center space-y-6 animate-slideUpFadeIn">
+          <div className="relative inline-block">
+            <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl animate-pulse"></div>
+            <div className="relative w-20 h-20 bg-gradient-to-br from-primary to-accent rounded-full flex items-center justify-center mx-auto shadow-2xl border border-primary/20">
+              <UserCircle2 className="h-10 w-10 text-primary-foreground" />
+            </div>
+          </div>
+          <div className="space-y-3">
+            <h1 className="text-5xl font-bold text-foreground tracking-tight">
+              Profile Settings
+            </h1>
+            <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+              Customize your profile to get personalized interview experiences
+              tailored to your career goals
+            </p>
+          </div>
+        </div>
+
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+            {/* Personal Details */}
+            <Card className="border border-border/50 bg-card/50 backdrop-blur-sm shadow-xl hover:shadow-2xl transition-all duration-500 animate-slideUpFadeIn animation-delay-200">
+              <CardHeader className="pb-6 border-b border-border/30">
+                <CardTitle className="flex items-center gap-4 text-2xl font-bold text-card-foreground">
+                  <div className="w-12 h-12 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center shadow-lg">
+                    <UserCircle2 className="h-6 w-6 text-primary-foreground" />
+                  </div>
+                  Personal Details
+                </CardTitle>
+                <CardDescription className="text-base text-muted-foreground mt-2">
+                  Basic information about you. Profile Field and Target Role are
+                  mandatory fields.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-8 pt-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem className="space-y-3">
+                        <ShadcnFormLabel className="text-sm font-semibold text-foreground">
+                          Full Name
+                        </ShadcnFormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="e.g., Ada Lovelace"
+                            {...field}
+                            value={field.value ?? ""}
+                            className="h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20 hover:border-primary/50"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
                   />
-                </FormControl>
-                {isProcessingFile && (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                )}
-              </div>
-
-              {selectedFileName && (
-                <div className="mt-2 text-sm text-muted-foreground flex items-center justify-between p-2 border rounded-md bg-secondary/50">
-                  <div className="flex items-center gap-2 overflow-hidden">
-                    <FileText className="h-4 w-4 text-primary shrink-0" />
-                    <span className="truncate" title={selectedFileName}>
-                      {selectedFileName}
-                    </span>{" "}
-                    (
-                    {clientSideResumeText
-                      ? `${Math.round(
-                          clientSideResumeText.length / 1024
-                        )} KB text`
-                      : isProcessingFile
-                      ? "Processing..."
-                      : "Text ready"}
-                    )
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() =>
-                        clearResumeDisplayAndStorage(
-                          true,
-                          "Resume selection and extracted text cleared. Save profile to update in database."
-                        )
-                      }
-                      title="Clear resume selection"
-                      aria-label="Clear resume"
-                      disabled={isSubmitting || isProcessingFile}
-                    >
-                      <XCircle className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem className="space-y-3">
+                        <ShadcnFormLabel className="text-sm font-semibold text-foreground">
+                          {isEmailFromAuthProvider
+                            ? "Email (Primary Login ID)"
+                            : "Email"}
+                        </ShadcnFormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder={
+                              isEmailFromAuthProvider
+                                ? "your-login-email@example.com"
+                                : "you@example.com"
+                            }
+                            {...field}
+                            value={field.value ?? ""}
+                            readOnly={isEmailFromAuthProvider}
+                            className={`h-12 transition-all duration-200 ${
+                              isEmailFromAuthProvider
+                                ? "bg-muted/50 cursor-not-allowed"
+                                : "focus:ring-2 focus:ring-primary/20 hover:border-primary/50"
+                            }`}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
-              )}
-              {clientSideResumeText && (
-                <Textarea
-                  value={clientSideResumeText}
-                  readOnly
-                  rows={5}
-                  className="mt-2 text-xs bg-muted/30"
-                  placeholder="Extracted resume text will appear here..."
-                />
-              )}
-            </CardContent>
-          </Card>
 
-          <Card className="shadow-md">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-xl">
-                <Lightbulb className="h-6 w-6 text-primary" /> Key Skills
-              </CardTitle>
-              <CardDescription>
-                Highlight your top professional skills.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex gap-2 items-center">
-                <Input
-                  placeholder="e.g., React, Python, Project Management"
-                  value={currentSkill}
-                  onChange={(e) => setCurrentSkill(e.target.value)}
-                  className="flex-grow"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleAddSkill();
-                    }
-                  }}
-                />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <FormField
+                    control={form.control}
+                    name="phoneNumber"
+                    render={({ field }) => (
+                      <FormItem className="space-y-3">
+                        <ShadcnFormLabel className="text-sm font-semibold text-foreground">
+                          Phone Number{" "}
+                          {user?.phoneNumber
+                            ? "(Primary Login ID)"
+                            : "(Optional)"}
+                        </ShadcnFormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="e.g., +15551234567"
+                            {...field}
+                            value={field.value ?? ""}
+                            type="tel"
+                            readOnly={!!user?.phoneNumber}
+                            className={`h-12 transition-all duration-200 ${
+                              !!user?.phoneNumber
+                                ? "bg-muted/50 cursor-not-allowed"
+                                : "focus:ring-2 focus:ring-primary/20 hover:border-primary/50"
+                            }`}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="company"
+                    render={({ field }) => (
+                      <FormItem className="space-y-3">
+                        <ShadcnFormLabel className="text-sm font-semibold text-foreground">
+                          Current or Target Company (Optional)
+                        </ShadcnFormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="e.g., Google, Acme Corp"
+                            {...field}
+                            value={field.value ?? ""}
+                            className="h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20 hover:border-primary/50"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <FormField
+                    control={form.control}
+                    name="profileField"
+                    render={({ field }) => (
+                      <FormItem className="space-y-3">
+                        <ShadcnFormLabel className="text-sm font-semibold text-foreground flex items-center gap-2">
+                          Profile Field / Industry
+                          <span className="text-destructive text-lg">*</span>
+                        </ShadcnFormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="e.g., Software Engineering, Data Science"
+                            {...field}
+                            value={field.value ?? ""}
+                            className="h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20 hover:border-primary/50"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="role"
+                    render={({ field }) => (
+                      <FormItem className="space-y-3">
+                        <ShadcnFormLabel className="text-sm font-semibold text-foreground flex items-center gap-2">
+                          Target Role
+                          <span className="text-destructive text-lg">*</span>
+                        </ShadcnFormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="e.g., Senior Frontend Developer, Product Manager"
+                            {...field}
+                            value={field.value ?? ""}
+                            className="h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20 hover:border-primary/50"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Resume Upload */}
+            <Card className="border border-border/50 bg-card/50 backdrop-blur-sm shadow-xl hover:shadow-2xl transition-all duration-500 animate-slideUpFadeIn animation-delay-400">
+              <CardHeader className="pb-6 border-b border-border/30">
+                <CardTitle className="flex items-center gap-4 text-2xl font-bold text-card-foreground">
+                  <div className="w-12 h-12 bg-gradient-to-br from-accent to-primary rounded-xl flex items-center justify-center shadow-lg">
+                    <UploadCloud className="h-6 w-6 text-primary-foreground" />
+                  </div>
+                  Upload Resume Text
+                </CardTitle>
+                <CardDescription className="text-base text-muted-foreground mt-2">
+                  Upload a resume (PDF, DOCX, TXT, MD). Text will be extracted
+                  client-side and saved to your profile.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6 pt-6">
+                <div className="flex items-center gap-4">
+                  <FormControl>
+                    <Input
+                      type="file"
+                      ref={fileInputRef}
+                      accept={ACCEPT_FILE_EXTENSIONS}
+                      onChange={handleFileChange}
+                      className="block w-full h-auto text-sm file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 file:transition-colors file:duration-200 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
+                      disabled={isProcessingFile || isSubmitting}
+                    />
+                  </FormControl>
+                  {isProcessingFile && (
+                    <div className="flex items-center gap-3 text-primary animate-fadeIn">
+                      <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin"></div>
+                      <span className="text-sm font-medium">Processing...</span>
+                    </div>
+                  )}
+                </div>
+
+                {selectedFileName && (
+                  <div className="p-6 bg-gradient-to-r from-primary/5 to-accent/5 rounded-xl border border-primary/20 animate-fadeIn">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4 overflow-hidden">
+                        <div className="w-12 h-12 bg-gradient-to-br from-primary to-accent rounded-lg flex items-center justify-center flex-shrink-0 shadow-lg">
+                          <FileText className="h-6 w-6 text-primary-foreground" />
+                        </div>
+                        <div className="overflow-hidden">
+                          <p
+                            className="font-semibold text-foreground truncate text-lg"
+                            title={selectedFileName}
+                          >
+                            {selectedFileName}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {clientSideResumeText
+                              ? `${Math.round(
+                                  clientSideResumeText.length / 1024
+                                )} KB text extracted`
+                              : isProcessingFile
+                              ? "Processing..."
+                              : "Text ready"}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() =>
+                          clearResumeDisplayAndStorage(
+                            true,
+                            "Resume selection and extracted text cleared. Save profile to update in database."
+                          )
+                        }
+                        title="Clear resume selection"
+                        aria-label="Clear resume"
+                        disabled={isSubmitting || isProcessingFile}
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10 flex-shrink-0 h-10 w-10 transition-all duration-200"
+                      >
+                        <XCircle className="h-5 w-5" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {clientSideResumeText && (
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold text-foreground">
+                      Extracted Text Preview
+                    </Label>
+                    <Textarea
+                      value={clientSideResumeText}
+                      readOnly
+                      rows={6}
+                      className="text-xs bg-muted/30 font-mono transition-all duration-200 resize-none"
+                      placeholder="Extracted resume text will appear here..."
+                    />
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Key Skills */}
+            <Card className="border border-border/50 bg-card/50 backdrop-blur-sm shadow-xl hover:shadow-2xl transition-all duration-500 animate-slideUpFadeIn animation-delay-600">
+              <CardHeader className="pb-6 border-b border-border/30">
+                <CardTitle className="flex items-center gap-4 text-2xl font-bold text-card-foreground">
+                  <div className="w-12 h-12 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center shadow-lg">
+                    <Lightbulb className="h-6 w-6 text-primary-foreground" />
+                  </div>
+                  Key Skills
+                </CardTitle>
+                <CardDescription className="text-base text-muted-foreground mt-2">
+                  Highlight your top professional skills and competencies.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6 pt-6">
+                <div className="flex gap-3 items-center">
+                  <Input
+                    placeholder="e.g., React, Python, Project Management"
+                    value={currentSkill}
+                    onChange={(e) => setCurrentSkill(e.target.value)}
+                    className="flex-grow h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20 hover:border-primary/50"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleAddSkill();
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    onClick={handleAddSkill}
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground h-12 px-6 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
+                    aria-label="Add Skill"
+                  >
+                    <PlusCircle className="h-5 w-5 mr-2" />
+                    Add
+                  </Button>
+                </div>
+
+                {keySkills.length > 0 && (
+                  <div className="space-y-4">
+                    <Label className="text-sm font-semibold text-foreground">
+                      Your Skills
+                    </Label>
+                    <div className="flex flex-wrap gap-3">
+                      {keySkills.map((skill, index) => (
+                        <Badge
+                          key={skill}
+                          variant="secondary"
+                          className="text-sm py-2 px-4 rounded-full bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-all duration-300 animate-fadeIn hover:scale-105 cursor-default"
+                          style={{ animationDelay: `${index * 50}ms` }}
+                        >
+                          {skill}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSkill(skill)}
+                            className="ml-2 text-primary hover:text-destructive transition-colors duration-200"
+                            aria-label={`Remove skill ${skill}`}
+                          >
+                            <XCircle className="h-4 w-4" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {keySkills.length === 0 && (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <Lightbulb className="h-16 w-16 mx-auto mb-4 opacity-50" />
+                    <p className="text-lg mb-2">No skills added yet</p>
+                    <p className="text-sm">
+                      Add your first skill above to get started!
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Work Experience */}
+            <Card className="border border-border/50 bg-card/50 backdrop-blur-sm shadow-xl hover:shadow-2xl transition-all duration-500 animate-slideUpFadeIn">
+              <CardHeader className="pb-6 border-b border-border/30">
+                <CardTitle className="flex items-center gap-4 text-2xl font-bold text-card-foreground">
+                  <div className="w-12 h-12 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center shadow-lg">
+                    <Briefcase className="h-6 w-6 text-primary-foreground" />
+                  </div>
+                  Work Experience
+                </CardTitle>
+                <CardDescription className="text-base text-muted-foreground mt-2">
+                  Detail your professional journey and career milestones.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6 pt-6">
+                {experiences.length === 0 && (
+                  <div className="text-center py-16 text-muted-foreground">
+                    <Briefcase className="h-20 w-20 mx-auto mb-6 opacity-50" />
+                    <p className="text-xl mb-3 font-semibold">
+                      No work experience added yet
+                    </p>
+                    <p className="text-sm max-w-md mx-auto leading-relaxed">
+                      Add your professional experience to showcase your career
+                      journey and achievements
+                    </p>
+                  </div>
+                )}
+
+                {experiences.map((exp, index) => (
+                  <Card
+                    key={exp.id}
+                    className="bg-gradient-to-r from-card to-primary/5 border border-primary/20 hover:shadow-lg hover:border-primary/30 transition-all duration-300 animate-fadeIn hover:scale-[1.02]"
+                    style={{ animationDelay: `${index * 100}ms` }}
+                  >
+                    <CardHeader className="pb-4">
+                      <div className="flex justify-between items-start">
+                        <div className="space-y-2">
+                          <CardTitle className="text-xl font-bold text-card-foreground">
+                            {exp.jobTitle}
+                          </CardTitle>
+                          <CardDescription className="text-lg font-semibold text-primary">
+                            {exp.companyName}
+                          </CardDescription>
+                          <CardDescription className="text-sm text-muted-foreground">
+                            {exp.startDate || "N/A"} -{" "}
+                            {exp.endDate || "Present"}
+                          </CardDescription>
+                        </div>
+                        <div className="flex gap-2 flex-shrink-0">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => openModal("experience", exp)}
+                            aria-label={`Edit experience ${exp.jobTitle}`}
+                            className="text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all duration-200"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() =>
+                              handleDeleteItem("experience", exp.id)
+                            }
+                            aria-label={`Delete experience ${exp.jobTitle}`}
+                            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-200"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    {exp.description && (
+                      <CardContent className="pt-0">
+                        <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                          {exp.description}
+                        </p>
+                      </CardContent>
+                    )}
+                  </Card>
+                ))}
+
                 <Button
                   type="button"
-                  onClick={handleAddSkill}
                   variant="outline"
-                  size="icon"
-                  aria-label="Add Skill"
+                  className="w-full h-16 border-2 border-dashed border-primary/30 hover:border-primary hover:bg-primary/5 text-muted-foreground hover:text-primary transition-all duration-300 group"
+                  onClick={() => openModal("experience")}
                 >
-                  <PlusCircle className="h-5 w-5" />
+                  <PlusCircle className="mr-3 h-6 w-6 group-hover:scale-110 transition-transform duration-200" />
+                  <span className="text-lg font-medium">
+                    Add Work Experience
+                  </span>
                 </Button>
-              </div>
-              {keySkills.length > 0 && (
-                <div className="flex flex-wrap gap-2 pt-2">
-                  {keySkills.map((skill) => (
-                    <Badge
-                      key={skill}
-                      variant="secondary"
-                      className="text-sm py-1 px-3 rounded-md shadow-sm"
-                    >
-                      {skill}
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveSkill(skill)}
-                        className="ml-2 text-muted-foreground hover:text-destructive"
-                        aria-label={`Remove skill ${skill}`}
-                      >
-                        <XCircle className="h-4 w-4" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              )}
-              {keySkills.length === 0 && (
-                <p className="text-sm text-muted-foreground">
-                  No skills added yet.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          <Card className="shadow-md">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-xl">
-                <Briefcase className="h-6 w-6 text-primary" /> Work Experience
-              </CardTitle>
-              <CardDescription>
-                Detail your professional journey. (Manually entered)
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {experiences.length === 0 && (
-                <p className="text-sm text-muted-foreground">
-                  No work experience added yet.
-                </p>
-              )}
-              {experiences.map((exp) => (
-                <Card
-                  key={exp.id}
-                  className="bg-muted/30 p-4 shadow-sm rounded-md"
-                >
-                  <CardHeader className="p-0 pb-2 flex flex-row justify-between items-start">
-                    <div>
-                      <CardTitle className="text-md font-semibold">
-                        {exp.jobTitle} at {exp.companyName}
-                      </CardTitle>
-                      <CardDescription className="text-xs">
-                        {exp.startDate || "N/A"} - {exp.endDate || "Present"}
-                      </CardDescription>
-                    </div>
-                    <div className="flex gap-1 shrink-0">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openModal("experience", exp)}
-                        aria-label={`Edit experience ${exp.jobTitle}`}
-                      >
-                        <Edit3 className="h-4 w-4 text-muted-foreground hover:text-primary" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDeleteItem("experience", exp.id)}
-                        aria-label={`Delete experience ${exp.jobTitle}`}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive hover:text-destructive/80" />
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-0 text-sm text-muted-foreground">
-                    <p className="whitespace-pre-wrap">
-                      {exp.description || "No description provided."}
+            {/* Projects */}
+            <Card className="border border-border/50 bg-card/50 backdrop-blur-sm shadow-xl hover:shadow-2xl transition-all duration-500 animate-slideUpFadeIn">
+              <CardHeader className="pb-6 border-b border-border/30">
+                <CardTitle className="flex items-center gap-4 text-2xl font-bold text-card-foreground">
+                  <div className="w-12 h-12 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center shadow-lg">
+                    <Sparkles className="h-6 w-6 text-primary-foreground" />
+                  </div>
+                  Projects
+                </CardTitle>
+                <CardDescription className="text-base text-muted-foreground mt-2">
+                  Showcase your personal and professional projects that
+                  demonstrate your skills.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6 pt-6">
+                {projects.length === 0 && (
+                  <div className="text-center py-16 text-muted-foreground">
+                    <Sparkles className="h-20 w-20 mx-auto mb-6 opacity-50" />
+                    <p className="text-xl mb-3 font-semibold">
+                      No projects added yet
                     </p>
-                  </CardContent>
-                </Card>
-              ))}
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full mt-2 border-dashed hover:border-primary hover:text-primary"
-                onClick={() => openModal("experience")}
-              >
-                <PlusCircle className="mr-2 h-4 w-4" /> Add Experience Manually
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-md">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-xl">
-                <Lightbulb className="h-6 w-6 text-primary" /> Projects
-              </CardTitle>
-              <CardDescription>
-                Showcase your personal or professional projects. (Manually
-                entered)
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {projects.length === 0 && (
-                <p className="text-sm text-muted-foreground">
-                  No projects added yet.
-                </p>
-              )}
-              {projects.map((proj) => (
-                <Card
-                  key={proj.id}
-                  className="bg-muted/30 p-4 shadow-sm rounded-md"
-                >
-                  <CardHeader className="p-0 pb-2 flex flex-row justify-between items-start">
-                    <div>
-                      <CardTitle className="text-md font-semibold">
-                        {proj.title}
-                      </CardTitle>
-                    </div>
-                    <div className="flex gap-1 shrink-0">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openModal("project", proj)}
-                        aria-label={`Edit project ${proj.title}`}
-                      >
-                        <Edit3 className="h-4 w-4 text-muted-foreground hover:text-primary" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDeleteItem("project", proj.id)}
-                        aria-label={`Delete project ${proj.title}`}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive hover:text-destructive/80" />
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-0 text-sm text-muted-foreground">
-                    <p className="whitespace-pre-wrap">{proj.description}</p>
-                    {proj.technologiesUsed &&
-                      proj.technologiesUsed.length > 0 && (
-                        <p className="mt-1 text-xs">
-                          Tech: {proj.technologiesUsed.join(", ")}
-                        </p>
-                      )}
-                    {proj.projectUrl && (
-                      <a
-                        href={proj.projectUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary hover:underline text-xs block mt-1 break-all"
-                      >
-                        View Project
-                      </a>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full mt-2 border-dashed hover:border-primary hover:text-primary"
-                onClick={() => openModal("project")}
-              >
-                <PlusCircle className="mr-2 h-4 w-4" /> Add Project Manually
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-md">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-xl">
-                <GraduationCap className="h-6 w-6 text-primary" /> Education
-                History
-              </CardTitle>
-              <CardDescription>
-                List your educational qualifications. (Manually entered)
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {educationHistory.length === 0 && (
-                <p className="text-sm text-muted-foreground">
-                  No education history added yet.
-                </p>
-              )}
-              {educationHistory.map((edu) => (
-                <Card
-                  key={edu.id}
-                  className="bg-muted/30 p-4 shadow-sm rounded-md"
-                >
-                  <CardHeader className="p-0 pb-2 flex flex-row justify-between items-start">
-                    <div>
-                      <CardTitle className="text-md font-semibold">
-                        {edu.degree} from {edu.institution}
-                      </CardTitle>
-                      <CardDescription className="text-xs">
-                        Completed: {edu.yearOfCompletion}
-                      </CardDescription>
-                    </div>
-                    <div className="flex gap-1 shrink-0">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openModal("education", edu)}
-                        aria-label={`Edit education ${edu.degree}`}
-                      >
-                        <Edit3 className="h-4 w-4 text-muted-foreground hover:text-primary" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDeleteItem("education", edu.id)}
-                        aria-label={`Delete education ${edu.degree}`}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive hover:text-destructive/80" />
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-0 text-sm text-muted-foreground">
-                    <p className="whitespace-pre-wrap">
-                      {edu.details || "No additional details."}
+                    <p className="text-sm max-w-md mx-auto leading-relaxed">
+                      Showcase your creative work and technical projects to
+                      highlight your capabilities
                     </p>
-                  </CardContent>
-                </Card>
-              ))}
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full mt-2 border-dashed hover:border-primary hover:text-primary"
-                onClick={() => openModal("education")}
-              >
-                <PlusCircle className="mr-2 h-4 w-4" /> Add Education
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-md">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-xl">
-                <Trophy className="h-6 w-6 text-primary" /> Accomplishments
-              </CardTitle>
-              <CardDescription>
-                Share your significant achievements, awards, or recognitions
-                (optional).
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <FormField
-                control={form.control}
-                name="accomplishments"
-                render={({ field }) => (
-                  <FormItem>
-                    <ShadcnFormLabel>Accomplishments</ShadcnFormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="e.g., 'Led a team to successfully launch Product X...' or 'Published research paper Y...'"
-                        {...field}
-                        value={field.value ?? ""}
-                        rows={5}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
+                  </div>
                 )}
-              />
-            </CardContent>
-          </Card>
 
-          <div className="fixed bottom-0 left-0 right-0 md:relative bg-background/80 backdrop-blur-sm md:bg-transparent md:backdrop-blur-none p-4 border-t md:border-none md:p-0">
+                {projects.map((proj, index) => (
+                  <Card
+                    key={proj.id}
+                    className="bg-gradient-to-r from-card to-accent/5 border border-accent/20 hover:shadow-lg hover:border-accent/30 transition-all duration-300 animate-fadeIn hover:scale-[1.02]"
+                    style={{ animationDelay: `${index * 100}ms` }}
+                  >
+                    <CardHeader className="pb-4">
+                      <div className="flex justify-between items-start">
+                        <div className="space-y-3">
+                          <CardTitle className="text-xl font-bold text-card-foreground">
+                            {proj.title}
+                          </CardTitle>
+                          {proj.projectUrl && (
+                            <a
+                              href={proj.projectUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-2 text-sm text-accent hover:text-accent/80 hover:underline transition-colors duration-200 font-medium"
+                            >
+                              <span>View Project</span>
+                              <svg
+                                className="h-4 w-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                                />
+                              </svg>
+                            </a>
+                          )}
+                        </div>
+                        <div className="flex gap-2 flex-shrink-0">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => openModal("project", proj)}
+                            aria-label={`Edit project ${proj.title}`}
+                            className="text-muted-foreground hover:text-accent hover:bg-accent/10 transition-all duration-200"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteItem("project", proj.id)}
+                            aria-label={`Delete project ${proj.title}`}
+                            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-200"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="pt-0 space-y-4">
+                      <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                        {proj.description}
+                      </p>
+                      {proj.technologiesUsed &&
+                        proj.technologiesUsed.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {proj.technologiesUsed.map((tech, techIndex) => (
+                              <Badge
+                                key={techIndex}
+                                variant="outline"
+                                className="text-xs bg-accent/10 text-accent border-accent/30 hover:bg-accent/20 transition-colors duration-200"
+                              >
+                                {tech}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                    </CardContent>
+                  </Card>
+                ))}
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full h-16 border-2 border-dashed border-accent/30 hover:border-accent hover:bg-accent/5 text-muted-foreground hover:text-accent transition-all duration-300 group"
+                  onClick={() => openModal("project")}
+                >
+                  <PlusCircle className="mr-3 h-6 w-6 group-hover:scale-110 transition-transform duration-200" />
+                  <span className="text-lg font-medium">Add Project</span>
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Education */}
+            <Card className="border border-border/50 bg-card/50 backdrop-blur-sm shadow-xl hover:shadow-2xl transition-all duration-500 animate-slideUpFadeIn">
+              <CardHeader className="pb-6 border-b border-border/30">
+                <CardTitle className="flex items-center gap-4 text-2xl font-bold text-card-foreground">
+                  <div className="w-12 h-12 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center shadow-lg">
+                    <GraduationCap className="h-6 w-6 text-primary-foreground" />
+                  </div>
+                  Education History
+                </CardTitle>
+                <CardDescription className="text-base text-muted-foreground mt-2">
+                  List your educational qualifications and academic
+                  achievements.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6 pt-6">
+                {educationHistory.length === 0 && (
+                  <div className="text-center py-16 text-muted-foreground">
+                    <GraduationCap className="h-20 w-20 mx-auto mb-6 opacity-50" />
+                    <p className="text-xl mb-3 font-semibold">
+                      No education history added yet
+                    </p>
+                    <p className="text-sm max-w-md mx-auto leading-relaxed">
+                      Add your academic background and qualifications to
+                      complete your profile
+                    </p>
+                  </div>
+                )}
+
+                {educationHistory.map((edu, index) => (
+                  <Card
+                    key={edu.id}
+                    className="bg-gradient-to-r from-card to-primary/5 border border-primary/20 hover:shadow-lg hover:border-primary/30 transition-all duration-300 animate-fadeIn hover:scale-[1.02]"
+                    style={{ animationDelay: `${index * 100}ms` }}
+                  >
+                    <CardHeader className="pb-4">
+                      <div className="flex justify-between items-start">
+                        <div className="space-y-2">
+                          <CardTitle className="text-xl font-bold text-card-foreground">
+                            {edu.degree}
+                          </CardTitle>
+                          <CardDescription className="text-lg font-semibold text-primary">
+                            {edu.institution}
+                          </CardDescription>
+                          <CardDescription className="text-sm text-muted-foreground">
+                            Completed: {edu.yearOfCompletion}
+                          </CardDescription>
+                        </div>
+                        <div className="flex gap-2 flex-shrink-0">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => openModal("education", edu)}
+                            aria-label={`Edit education ${edu.degree}`}
+                            className="text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all duration-200"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() =>
+                              handleDeleteItem("education", edu.id)
+                            }
+                            aria-label={`Delete education ${edu.degree}`}
+                            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-200"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    {edu.details && (
+                      <CardContent className="pt-0">
+                        <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                          {edu.details}
+                        </p>
+                      </CardContent>
+                    )}
+                  </Card>
+                ))}
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full h-16 border-2 border-dashed border-primary/30 hover:border-primary hover:bg-primary/5 text-muted-foreground hover:text-primary transition-all duration-300 group"
+                  onClick={() => openModal("education")}
+                >
+                  <PlusCircle className="mr-3 h-6 w-6 group-hover:scale-110 transition-transform duration-200" />
+                  <span className="text-lg font-medium">Add Education</span>
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Accomplishments */}
+            <Card className="border border-border/50 bg-card/50 backdrop-blur-sm shadow-xl hover:shadow-2xl transition-all duration-500 animate-slideUpFadeIn">
+              <CardHeader className="pb-6 border-b border-border/30">
+                <CardTitle className="flex items-center gap-4 text-2xl font-bold text-card-foreground">
+                  <div className="w-12 h-12 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center shadow-lg">
+                    <Trophy className="h-6 w-6 text-primary-foreground" />
+                  </div>
+                  Accomplishments
+                </CardTitle>
+                <CardDescription className="text-base text-muted-foreground mt-2">
+                  Share your significant achievements, awards, or recognitions
+                  that set you apart.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <FormField
+                  control={form.control}
+                  name="accomplishments"
+                  render={({ field }) => (
+                    <FormItem className="space-y-3">
+                      <ShadcnFormLabel className="text-sm font-semibold text-foreground">
+                        Accomplishments
+                      </ShadcnFormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="e.g., 'Led a team to successfully launch Product X, resulting in 40% increase in user engagement...' or 'Published research paper on AI in top-tier conference...'"
+                          {...field}
+                          value={field.value ?? ""}
+                          rows={8}
+                          className="transition-all duration-200 focus:ring-2 focus:ring-primary/20 resize-none hover:border-primary/50"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </CardContent>
+            </Card>
+          </form>
+        </Form>
+
+        {/* Fixed Save Button */}
+        <div className="fixed bottom-0 left-0 right-0 md:relative bg-background/95 backdrop-blur-xl md:bg-transparent md:backdrop-blur-none p-6 border-t border-border/50 md:border-none md:p-0 z-50 shadow-2xl md:shadow-none">
+          <div className="max-w-5xl mx-auto">
             <Button
               type="submit"
               disabled={!canSubmit}
-              className="w-full md:w-auto text-lg py-3 px-6 shadow-lg"
+              onClick={form.handleSubmit(onSubmit)}
+              className="w-full md:w-auto bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 text-primary-foreground text-lg py-6 px-12 shadow-2xl hover:shadow-3xl transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none font-semibold"
             >
-              {isSubmitting && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              {isSubmitting ? (
+                <div className="flex items-center gap-3">
+                  <div className="w-6 h-6 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin"></div>
+                  Saving Profile...
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <Save className="h-6 w-6" />
+                  Save All Profile Changes
+                </div>
               )}
-              {isSubmitting ? "Saving Profile..." : "Save All Profile Changes"}
             </Button>
           </div>
-        </form>
-      </Form>
+        </div>
+      </div>
 
+      {/* Modal */}
       <Dialog
         open={isModalOpen}
         onOpenChange={(open) => {
@@ -1411,20 +1698,19 @@ export default function ProfilePage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-[525px] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-lg">
+        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto bg-card/95 backdrop-blur-xl border border-border/50 shadow-2xl">
+          <DialogHeader className="space-y-4 pb-6 border-b border-border/30">
+            <DialogTitle className="text-3xl font-bold text-card-foreground">
               {editingItem ? "Edit " : "Add New "}{" "}
               {modalType?.charAt(0).toUpperCase() + (modalType?.slice(1) || "")}
             </DialogTitle>
-            <ShadcnDialogDescription>
+            <ShadcnDialogDescription className="text-muted-foreground text-base leading-relaxed">
               Please fill in the details for your {modalType}. Click save when
-              you&apos;re done. Fields marked with * are required. For dates,
-              use YYYY-MM.
+              you're done. Fields marked with * are required.
             </ShadcnDialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">{renderModalContent()}</div>
-          <DialogFooter>
+          <div className="py-6">{renderModalContent()}</div>
+          <DialogFooter className="gap-4 pt-6 border-t border-border/30">
             <Button
               type="button"
               variant="outline"
@@ -1433,10 +1719,16 @@ export default function ProfilePage() {
                 setEditingItem(null);
                 setCurrentItemData({});
               }}
+              className="px-6 py-3 transition-all duration-200 hover:bg-muted/50"
             >
               Cancel
             </Button>
-            <Button type="button" onClick={handleSaveItem}>
+            <Button
+              type="button"
+              onClick={handleSaveItem}
+              className="bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 text-primary-foreground px-6 py-3 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
+            >
+              <CheckCircle2 className="h-5 w-5 mr-2" />
               Save{" "}
               {modalType?.charAt(0).toUpperCase() + (modalType?.slice(1) || "")}
             </Button>

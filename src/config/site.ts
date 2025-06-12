@@ -1,10 +1,10 @@
-
 export type NavItem = {
   title: string;
   href: string;
   icon?: React.ComponentType<{ className?: string }>;
   disabled?: boolean;
   external?: boolean;
+  description?: string;
 };
 
 export const siteConfig = {
@@ -26,9 +26,9 @@ export const siteConfig = {
     },
   ] satisfies NavItem[],
   adminNav: [
-     {
+    {
       title: "Admin Dashboard",
       href: "/admin",
     },
-  ] satisfies NavItem[]
+  ] satisfies NavItem[],
 };
