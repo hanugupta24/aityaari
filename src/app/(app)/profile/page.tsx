@@ -683,7 +683,7 @@ export default function ProfilePage() {
     switch (modalType) {
       case "experience":
         return (
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             <div className="space-y-2">
               <Label
                 htmlFor="jobTitle"
@@ -696,7 +696,7 @@ export default function ProfilePage() {
                 name="jobTitle"
                 value={currentItemData.jobTitle || ""}
                 onChange={handleModalFormChange}
-                className="h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
+                className="h-10 sm:h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
               />
             </div>
             <div className="space-y-2">
@@ -711,7 +711,7 @@ export default function ProfilePage() {
                 name="companyName"
                 value={currentItemData.companyName || ""}
                 onChange={handleModalFormChange}
-                className="h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
+                className="h-10 sm:h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
               />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -728,7 +728,7 @@ export default function ProfilePage() {
                   type="month"
                   value={currentItemData.startDate || ""}
                   onChange={handleModalFormChange}
-                  className="h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
+                  className="h-10 sm:h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
                 />
               </div>
               <div className="space-y-2">
@@ -744,7 +744,7 @@ export default function ProfilePage() {
                   type="month"
                   value={currentItemData.endDate || ""}
                   onChange={handleModalFormChange}
-                  className="h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
+                  className="h-10 sm:h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
                   placeholder="Leave blank if current"
                 />
               </div>
@@ -770,7 +770,7 @@ export default function ProfilePage() {
         );
       case "project":
         return (
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             <div className="space-y-2">
               <Label
                 htmlFor="title"
@@ -783,7 +783,7 @@ export default function ProfilePage() {
                 name="title"
                 value={currentItemData.title || ""}
                 onChange={handleModalFormChange}
-                className="h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
+                className="h-10 sm:h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
               />
             </div>
             <div className="space-y-2">
@@ -827,7 +827,7 @@ export default function ProfilePage() {
                       .filter(Boolean),
                   }))
                 }
-                className="h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
+                className="h-10 sm:h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
                 placeholder="React, Node.js, Python, etc. (comma-separated)"
               />
             </div>
@@ -845,14 +845,14 @@ export default function ProfilePage() {
                 value={currentItemData.projectUrl || ""}
                 onChange={handleModalFormChange}
                 placeholder="https://example.com"
-                className="h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
+                className="h-10 sm:h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
               />
             </div>
           </div>
         );
       case "education":
         return (
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             <div className="space-y-2">
               <Label
                 htmlFor="degree"
@@ -865,7 +865,7 @@ export default function ProfilePage() {
                 name="degree"
                 value={currentItemData.degree || ""}
                 onChange={handleModalFormChange}
-                className="h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
+                className="h-10 sm:h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
                 placeholder="Bachelor of Science, Master of Arts, etc."
               />
             </div>
@@ -881,7 +881,7 @@ export default function ProfilePage() {
                 name="institution"
                 value={currentItemData.institution || ""}
                 onChange={handleModalFormChange}
-                className="h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
+                className="h-10 sm:h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
                 placeholder="University name, college, etc."
               />
             </div>
@@ -901,7 +901,7 @@ export default function ProfilePage() {
                 placeholder="2023"
                 value={currentItemData.yearOfCompletion || ""}
                 onChange={handleModalFormChange}
-                className="h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
+                className="h-10 sm:h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
               />
             </div>
             <div className="space-y-2">
@@ -929,7 +929,7 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden">
+    <div className="min-h-screen bg-background relative overflow-x-hidden">
       {/* Animated background elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary/5 rounded-full blur-3xl animate-pulse"></div>
@@ -942,20 +942,20 @@ export default function ProfilePage() {
         <div className="absolute bottom-1/4 left-1/4 w-1 h-1 bg-primary/30 rounded-full animate-pulse animation-delay-600"></div>
       </div>
 
-      <div className="relative z-10 max-w-5xl mx-auto py-8 px-4 space-y-8 pb-32">
+      <div className="relative z-10 w-full max-w-5xl mx-auto py-4 sm:py-8 px-3 sm:px-4 space-y-6 sm:space-y-8 pb-24 sm:pb-32">
         {/* Header */}
-        <div className="text-center space-y-6 animate-slideUpFadeIn">
+        <div className="text-center space-y-4 sm:space-y-6 animate-slideUpFadeIn">
           <div className="relative inline-block">
             <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl animate-pulse"></div>
-            <div className="relative w-20 h-20 bg-gradient-to-br from-primary to-accent rounded-full flex items-center justify-center mx-auto shadow-2xl border border-primary/20">
-              <UserCircle2 className="h-10 w-10 text-primary-foreground" />
+            <div className="relative w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-primary to-accent rounded-full flex items-center justify-center mx-auto shadow-2xl border border-primary/20">
+              <UserCircle2 className="h-8 w-8 sm:h-10 sm:w-10 text-primary-foreground" />
             </div>
           </div>
-          <div className="space-y-3">
-            <h1 className="text-5xl font-bold text-foreground tracking-tight">
+          <div className="space-y-2 sm:space-y-3">
+            <h1 className="text-3xl sm:text-5xl font-bold text-foreground tracking-tight">
               Profile Settings
             </h1>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+            <p className="text-base sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
               Customize your profile to get personalized interview experiences
               tailored to your career goals
             </p>
@@ -963,28 +963,31 @@ export default function ProfilePage() {
         </div>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="space-y-6 sm:space-y-8"
+          >
             {/* Personal Details */}
             <Card className="border border-border/50 bg-card/50 backdrop-blur-sm shadow-xl hover:shadow-2xl transition-all duration-500 animate-slideUpFadeIn animation-delay-200">
-              <CardHeader className="pb-6 border-b border-border/30">
-                <CardTitle className="flex items-center gap-4 text-2xl font-bold text-card-foreground">
-                  <div className="w-12 h-12 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center shadow-lg">
-                    <UserCircle2 className="h-6 w-6 text-primary-foreground" />
+              <CardHeader className="pb-4 sm:pb-6 border-b border-border/30">
+                <CardTitle className="flex items-center gap-2 sm:gap-4 text-xl sm:text-2xl font-bold text-card-foreground">
+                  <div className="w-8 h-8 sm:w-12 sm:h-12 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center shadow-lg">
+                    <UserCircle2 className="h-4 w-4 sm:h-6 sm:w-6 text-primary-foreground" />
                   </div>
                   Personal Details
                 </CardTitle>
-                <CardDescription className="text-base text-muted-foreground mt-2">
+                <CardDescription className="text-sm sm:text-base text-muted-foreground mt-2">
                   Basic information about you. Profile Field and Target Role are
                   mandatory fields.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-8 pt-6">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <CardContent className="space-y-6 sm:space-y-8 pt-4 sm:pt-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                   <FormField
                     control={form.control}
                     name="name"
                     render={({ field }) => (
-                      <FormItem className="space-y-3">
+                      <FormItem className="space-y-2 sm:space-y-3">
                         <ShadcnFormLabel className="text-sm font-semibold text-foreground">
                           Full Name
                         </ShadcnFormLabel>
@@ -993,7 +996,7 @@ export default function ProfilePage() {
                             placeholder="e.g., Ada Lovelace"
                             {...field}
                             value={field.value ?? ""}
-                            className="h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20 hover:border-primary/50"
+                            className="h-10 sm:h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20 hover:border-primary/50"
                           />
                         </FormControl>
                         <FormMessage />
@@ -1004,7 +1007,7 @@ export default function ProfilePage() {
                     control={form.control}
                     name="email"
                     render={({ field }) => (
-                      <FormItem className="space-y-3">
+                      <FormItem className="space-y-2 sm:space-y-3">
                         <ShadcnFormLabel className="text-sm font-semibold text-foreground">
                           {isEmailFromAuthProvider
                             ? "Email (Primary Login ID)"
@@ -1020,7 +1023,7 @@ export default function ProfilePage() {
                             {...field}
                             value={field.value ?? ""}
                             readOnly={isEmailFromAuthProvider}
-                            className={`h-12 transition-all duration-200 ${
+                            className={`h-10 sm:h-12 transition-all duration-200 ${
                               isEmailFromAuthProvider
                                 ? "bg-muted/50 cursor-not-allowed"
                                 : "focus:ring-2 focus:ring-primary/20 hover:border-primary/50"
@@ -1033,12 +1036,12 @@ export default function ProfilePage() {
                   />
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                   <FormField
                     control={form.control}
                     name="phoneNumber"
                     render={({ field }) => (
-                      <FormItem className="space-y-3">
+                      <FormItem className="space-y-2 sm:space-y-3">
                         <ShadcnFormLabel className="text-sm font-semibold text-foreground">
                           Phone Number{" "}
                           {user?.phoneNumber
@@ -1052,7 +1055,7 @@ export default function ProfilePage() {
                             value={field.value ?? ""}
                             type="tel"
                             readOnly={!!user?.phoneNumber}
-                            className={`h-12 transition-all duration-200 ${
+                            className={`h-10 sm:h-12 transition-all duration-200 ${
                               !!user?.phoneNumber
                                 ? "bg-muted/50 cursor-not-allowed"
                                 : "focus:ring-2 focus:ring-primary/20 hover:border-primary/50"
@@ -1067,7 +1070,7 @@ export default function ProfilePage() {
                     control={form.control}
                     name="company"
                     render={({ field }) => (
-                      <FormItem className="space-y-3">
+                      <FormItem className="space-y-2 sm:space-y-3">
                         <ShadcnFormLabel className="text-sm font-semibold text-foreground">
                           Current or Target Company (Optional)
                         </ShadcnFormLabel>
@@ -1076,7 +1079,7 @@ export default function ProfilePage() {
                             placeholder="e.g., Google, Acme Corp"
                             {...field}
                             value={field.value ?? ""}
-                            className="h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20 hover:border-primary/50"
+                            className="h-10 sm:h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20 hover:border-primary/50"
                           />
                         </FormControl>
                         <FormMessage />
@@ -1085,12 +1088,12 @@ export default function ProfilePage() {
                   />
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                   <FormField
                     control={form.control}
                     name="profileField"
                     render={({ field }) => (
-                      <FormItem className="space-y-3">
+                      <FormItem className="space-y-2 sm:space-y-3">
                         <ShadcnFormLabel className="text-sm font-semibold text-foreground flex items-center gap-2">
                           Profile Field / Industry
                           <span className="text-destructive text-lg">*</span>
@@ -1100,7 +1103,7 @@ export default function ProfilePage() {
                             placeholder="e.g., Software Engineering, Data Science"
                             {...field}
                             value={field.value ?? ""}
-                            className="h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20 hover:border-primary/50"
+                            className="h-10 sm:h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20 hover:border-primary/50"
                           />
                         </FormControl>
                         <FormMessage />
@@ -1111,7 +1114,7 @@ export default function ProfilePage() {
                     control={form.control}
                     name="role"
                     render={({ field }) => (
-                      <FormItem className="space-y-3">
+                      <FormItem className="space-y-2 sm:space-y-3">
                         <ShadcnFormLabel className="text-sm font-semibold text-foreground flex items-center gap-2">
                           Target Role
                           <span className="text-destructive text-lg">*</span>
@@ -1121,7 +1124,7 @@ export default function ProfilePage() {
                             placeholder="e.g., Senior Frontend Developer, Product Manager"
                             {...field}
                             value={field.value ?? ""}
-                            className="h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20 hover:border-primary/50"
+                            className="h-10 sm:h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20 hover:border-primary/50"
                           />
                         </FormControl>
                         <FormMessage />
@@ -1134,19 +1137,19 @@ export default function ProfilePage() {
 
             {/* Resume Upload */}
             <Card className="border border-border/50 bg-card/50 backdrop-blur-sm shadow-xl hover:shadow-2xl transition-all duration-500 animate-slideUpFadeIn animation-delay-400">
-              <CardHeader className="pb-6 border-b border-border/30">
-                <CardTitle className="flex items-center gap-4 text-2xl font-bold text-card-foreground">
-                  <div className="w-12 h-12 bg-gradient-to-br from-accent to-primary rounded-xl flex items-center justify-center shadow-lg">
-                    <UploadCloud className="h-6 w-6 text-primary-foreground" />
+              <CardHeader className="pb-4 sm:pb-6 border-b border-border/30">
+                <CardTitle className="flex items-center gap-2 sm:gap-4 text-xl sm:text-2xl font-bold text-card-foreground">
+                  <div className="w-8 h-8 sm:w-12 sm:h-12 bg-gradient-to-br from-accent to-primary rounded-xl flex items-center justify-center shadow-lg">
+                    <UploadCloud className="h-4 w-4 sm:h-6 sm:w-6 text-primary-foreground" />
                   </div>
                   Upload Resume Text
                 </CardTitle>
-                <CardDescription className="text-base text-muted-foreground mt-2">
+                <CardDescription className="text-sm sm:text-base text-muted-foreground mt-2">
                   Upload a resume (PDF, DOCX, TXT, MD). Text will be extracted
                   client-side and saved to your profile.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6 pt-6">
+              <CardContent className="space-y-4 sm:space-y-6 pt-4 sm:pt-6">
                 <div className="flex items-center gap-4">
                   <FormControl>
                     <Input
@@ -1154,33 +1157,35 @@ export default function ProfilePage() {
                       ref={fileInputRef}
                       accept={ACCEPT_FILE_EXTENSIONS}
                       onChange={handleFileChange}
-                      className="block w-full h-auto text-sm file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 file:transition-colors file:duration-200 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
+                      className="block w-full h-auto text-xs sm:text-sm file:mr-2 sm:file:mr-4 file:py-2 sm:file:py-3 file:px-3 sm:file:px-6 file:rounded-full file:border-0 file:text-xs sm:file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 file:transition-colors file:duration-200 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
                       disabled={isProcessingFile || isSubmitting}
                     />
                   </FormControl>
                   {isProcessingFile && (
-                    <div className="flex items-center gap-3 text-primary animate-fadeIn">
-                      <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin"></div>
-                      <span className="text-sm font-medium">Processing...</span>
+                    <div className="flex items-center gap-2 sm:gap-3 text-primary animate-fadeIn">
+                      <div className="w-4 h-4 sm:w-6 sm:h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin"></div>
+                      <span className="text-xs sm:text-sm font-medium">
+                        Processing...
+                      </span>
                     </div>
                   )}
                 </div>
 
                 {selectedFileName && (
-                  <div className="p-6 bg-gradient-to-r from-primary/5 to-accent/5 rounded-xl border border-primary/20 animate-fadeIn">
+                  <div className="p-3 sm:p-6 bg-gradient-to-r from-primary/5 to-accent/5 rounded-xl border border-primary/20 animate-fadeIn">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4 overflow-hidden">
-                        <div className="w-12 h-12 bg-gradient-to-br from-primary to-accent rounded-lg flex items-center justify-center flex-shrink-0 shadow-lg">
-                          <FileText className="h-6 w-6 text-primary-foreground" />
+                      <div className="flex items-center gap-2 sm:gap-4 overflow-hidden">
+                        <div className="w-8 h-8 sm:w-12 sm:h-12 bg-gradient-to-br from-primary to-accent rounded-lg flex items-center justify-center flex-shrink-0 shadow-lg">
+                          <FileText className="h-4 w-4 sm:h-6 sm:w-6 text-primary-foreground" />
                         </div>
                         <div className="overflow-hidden">
                           <p
-                            className="font-semibold text-foreground truncate text-lg"
+                            className="font-semibold text-foreground truncate text-sm sm:text-lg"
                             title={selectedFileName}
                           >
                             {selectedFileName}
                           </p>
-                          <p className="text-sm text-muted-foreground">
+                          <p className="text-xs sm:text-sm text-muted-foreground">
                             {clientSideResumeText
                               ? `${Math.round(
                                   clientSideResumeText.length / 1024
@@ -1204,23 +1209,23 @@ export default function ProfilePage() {
                         title="Clear resume selection"
                         aria-label="Clear resume"
                         disabled={isSubmitting || isProcessingFile}
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10 flex-shrink-0 h-10 w-10 transition-all duration-200"
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10 flex-shrink-0 h-8 w-8 sm:h-10 sm:w-10 transition-all duration-200"
                       >
-                        <XCircle className="h-5 w-5" />
+                        <XCircle className="h-4 w-4 sm:h-5 sm:w-5" />
                       </Button>
                     </div>
                   </div>
                 )}
 
                 {clientSideResumeText && (
-                  <div className="space-y-3">
+                  <div className="space-y-2 sm:space-y-3">
                     <Label className="text-sm font-semibold text-foreground">
                       Extracted Text Preview
                     </Label>
                     <Textarea
                       value={clientSideResumeText}
                       readOnly
-                      rows={6}
+                      rows={4}
                       className="text-xs bg-muted/30 font-mono transition-all duration-200 resize-none"
                       placeholder="Extracted resume text will appear here..."
                     />
@@ -1231,24 +1236,24 @@ export default function ProfilePage() {
 
             {/* Key Skills */}
             <Card className="border border-border/50 bg-card/50 backdrop-blur-sm shadow-xl hover:shadow-2xl transition-all duration-500 animate-slideUpFadeIn animation-delay-600">
-              <CardHeader className="pb-6 border-b border-border/30">
-                <CardTitle className="flex items-center gap-4 text-2xl font-bold text-card-foreground">
-                  <div className="w-12 h-12 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center shadow-lg">
-                    <Lightbulb className="h-6 w-6 text-primary-foreground" />
+              <CardHeader className="pb-4 sm:pb-6 border-b border-border/30">
+                <CardTitle className="flex items-center gap-2 sm:gap-4 text-xl sm:text-2xl font-bold text-card-foreground">
+                  <div className="w-8 h-8 sm:w-12 sm:h-12 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center shadow-lg">
+                    <Lightbulb className="h-4 w-4 sm:h-6 sm:w-6 text-primary-foreground" />
                   </div>
                   Key Skills
                 </CardTitle>
-                <CardDescription className="text-base text-muted-foreground mt-2">
+                <CardDescription className="text-sm sm:text-base text-muted-foreground mt-2">
                   Highlight your top professional skills and competencies.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6 pt-6">
-                <div className="flex gap-3 items-center">
+              <CardContent className="space-y-4 sm:space-y-6 pt-4 sm:pt-6">
+                <div className="flex gap-2 sm:gap-3 items-center">
                   <Input
                     placeholder="e.g., React, Python, Project Management"
                     value={currentSkill}
                     onChange={(e) => setCurrentSkill(e.target.value)}
-                    className="flex-grow h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20 hover:border-primary/50"
+                    className="flex-grow h-10 sm:h-12 transition-all duration-200 focus:ring-2 focus:ring-primary/20 hover:border-primary/50"
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault();
@@ -1259,35 +1264,35 @@ export default function ProfilePage() {
                   <Button
                     type="button"
                     onClick={handleAddSkill}
-                    className="bg-primary hover:bg-primary/90 text-primary-foreground h-12 px-6 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground h-10 sm:h-12 px-3 sm:px-6 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
                     aria-label="Add Skill"
                   >
-                    <PlusCircle className="h-5 w-5 mr-2" />
-                    Add
+                    <PlusCircle className="h-4 w-4 sm:h-5 sm:w-5 mr-1 sm:mr-2" />
+                    <span className="text-xs sm:text-base">Add</span>
                   </Button>
                 </div>
 
                 {keySkills.length > 0 && (
-                  <div className="space-y-4">
+                  <div className="space-y-3 sm:space-y-4">
                     <Label className="text-sm font-semibold text-foreground">
                       Your Skills
                     </Label>
-                    <div className="flex flex-wrap gap-3">
+                    <div className="flex flex-wrap gap-2 sm:gap-3">
                       {keySkills.map((skill, index) => (
                         <Badge
                           key={skill}
                           variant="secondary"
-                          className="text-sm py-2 px-4 rounded-full bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-all duration-300 animate-fadeIn hover:scale-105 cursor-default"
+                          className="text-xs sm:text-sm py-1 sm:py-2 px-2 sm:px-4 rounded-full bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-all duration-300 animate-fadeIn hover:scale-105 cursor-default"
                           style={{ animationDelay: `${index * 50}ms` }}
                         >
                           {skill}
                           <button
                             type="button"
                             onClick={() => handleRemoveSkill(skill)}
-                            className="ml-2 text-primary hover:text-destructive transition-colors duration-200"
+                            className="ml-1 sm:ml-2 text-primary hover:text-destructive transition-colors duration-200"
                             aria-label={`Remove skill ${skill}`}
                           >
-                            <XCircle className="h-4 w-4" />
+                            <XCircle className="h-3 w-3 sm:h-4 sm:w-4" />
                           </button>
                         </Badge>
                       ))}
@@ -1296,10 +1301,12 @@ export default function ProfilePage() {
                 )}
 
                 {keySkills.length === 0 && (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <Lightbulb className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                    <p className="text-lg mb-2">No skills added yet</p>
-                    <p className="text-sm">
+                  <div className="text-center py-6 sm:py-12 text-muted-foreground">
+                    <Lightbulb className="h-10 w-10 sm:h-16 sm:w-16 mx-auto mb-3 sm:mb-4 opacity-50" />
+                    <p className="text-base sm:text-lg mb-1 sm:mb-2">
+                      No skills added yet
+                    </p>
+                    <p className="text-xs sm:text-sm">
                       Add your first skill above to get started!
                     </p>
                   </div>
@@ -1309,25 +1316,25 @@ export default function ProfilePage() {
 
             {/* Work Experience */}
             <Card className="border border-border/50 bg-card/50 backdrop-blur-sm shadow-xl hover:shadow-2xl transition-all duration-500 animate-slideUpFadeIn">
-              <CardHeader className="pb-6 border-b border-border/30">
-                <CardTitle className="flex items-center gap-4 text-2xl font-bold text-card-foreground">
-                  <div className="w-12 h-12 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center shadow-lg">
-                    <Briefcase className="h-6 w-6 text-primary-foreground" />
+              <CardHeader className="pb-4 sm:pb-6 border-b border-border/30">
+                <CardTitle className="flex items-center gap-2 sm:gap-4 text-xl sm:text-2xl font-bold text-card-foreground">
+                  <div className="w-8 h-8 sm:w-12 sm:h-12 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center shadow-lg">
+                    <Briefcase className="h-4 w-4 sm:h-6 sm:w-6 text-primary-foreground" />
                   </div>
                   Work Experience
                 </CardTitle>
-                <CardDescription className="text-base text-muted-foreground mt-2">
+                <CardDescription className="text-sm sm:text-base text-muted-foreground mt-2">
                   Detail your professional journey and career milestones.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6 pt-6">
+              <CardContent className="space-y-4 sm:space-y-6 pt-4 sm:pt-6">
                 {experiences.length === 0 && (
-                  <div className="text-center py-16 text-muted-foreground">
-                    <Briefcase className="h-20 w-20 mx-auto mb-6 opacity-50" />
-                    <p className="text-xl mb-3 font-semibold">
+                  <div className="text-center py-8 sm:py-16 text-muted-foreground">
+                    <Briefcase className="h-12 w-12 sm:h-20 sm:w-20 mx-auto mb-4 sm:mb-6 opacity-50" />
+                    <p className="text-lg sm:text-xl mb-2 sm:mb-3 font-semibold">
                       No work experience added yet
                     </p>
-                    <p className="text-sm max-w-md mx-auto leading-relaxed">
+                    <p className="text-xs sm:text-sm max-w-md mx-auto leading-relaxed">
                       Add your professional experience to showcase your career
                       journey and achievements
                     </p>
@@ -1340,30 +1347,30 @@ export default function ProfilePage() {
                     className="bg-gradient-to-r from-card to-primary/5 border border-primary/20 hover:shadow-lg hover:border-primary/30 transition-all duration-300 animate-fadeIn hover:scale-[1.02]"
                     style={{ animationDelay: `${index * 100}ms` }}
                   >
-                    <CardHeader className="pb-4">
+                    <CardHeader className="pb-3 sm:pb-4">
                       <div className="flex justify-between items-start">
-                        <div className="space-y-2">
-                          <CardTitle className="text-xl font-bold text-card-foreground">
+                        <div className="space-y-1 sm:space-y-2">
+                          <CardTitle className="text-base sm:text-xl font-bold text-card-foreground">
                             {exp.jobTitle}
                           </CardTitle>
-                          <CardDescription className="text-lg font-semibold text-primary">
+                          <CardDescription className="text-sm sm:text-lg font-semibold text-primary">
                             {exp.companyName}
                           </CardDescription>
-                          <CardDescription className="text-sm text-muted-foreground">
+                          <CardDescription className="text-xs sm:text-sm text-muted-foreground">
                             {exp.startDate || "N/A"} -{" "}
                             {exp.endDate || "Present"}
                           </CardDescription>
                         </div>
-                        <div className="flex gap-2 flex-shrink-0">
+                        <div className="flex gap-1 sm:gap-2 flex-shrink-0">
                           <Button
                             type="button"
                             variant="ghost"
                             size="icon"
                             onClick={() => openModal("experience", exp)}
                             aria-label={`Edit experience ${exp.jobTitle}`}
-                            className="text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all duration-200"
+                            className="text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all duration-200 h-7 w-7 sm:h-9 sm:w-9"
                           >
-                            <Edit3 className="h-4 w-4" />
+                            <Edit3 className="h-3 w-3 sm:h-4 sm:w-4" />
                           </Button>
                           <Button
                             type="button"
@@ -1373,16 +1380,16 @@ export default function ProfilePage() {
                               handleDeleteItem("experience", exp.id)
                             }
                             aria-label={`Delete experience ${exp.jobTitle}`}
-                            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-200"
+                            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-200 h-7 w-7 sm:h-9 sm:w-9"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
                           </Button>
                         </div>
                       </div>
                     </CardHeader>
                     {exp.description && (
                       <CardContent className="pt-0">
-                        <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                        <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
                           {exp.description}
                         </p>
                       </CardContent>
@@ -1393,11 +1400,11 @@ export default function ProfilePage() {
                 <Button
                   type="button"
                   variant="outline"
-                  className="w-full h-16 border-2 border-dashed border-primary/30 hover:border-primary hover:bg-primary/5 text-muted-foreground hover:text-primary transition-all duration-300 group"
+                  className="w-full h-12 sm:h-16 border-2 border-dashed border-primary/30 hover:border-primary hover:bg-primary/5 text-muted-foreground hover:text-primary transition-all duration-300 group"
                   onClick={() => openModal("experience")}
                 >
-                  <PlusCircle className="mr-3 h-6 w-6 group-hover:scale-110 transition-transform duration-200" />
-                  <span className="text-lg font-medium">
+                  <PlusCircle className="mr-2 sm:mr-3 h-4 w-4 sm:h-6 sm:w-6 group-hover:scale-110 transition-transform duration-200" />
+                  <span className="text-sm sm:text-lg font-medium">
                     Add Work Experience
                   </span>
                 </Button>
@@ -1406,26 +1413,26 @@ export default function ProfilePage() {
 
             {/* Projects */}
             <Card className="border border-border/50 bg-card/50 backdrop-blur-sm shadow-xl hover:shadow-2xl transition-all duration-500 animate-slideUpFadeIn">
-              <CardHeader className="pb-6 border-b border-border/30">
-                <CardTitle className="flex items-center gap-4 text-2xl font-bold text-card-foreground">
-                  <div className="w-12 h-12 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center shadow-lg">
-                    <Sparkles className="h-6 w-6 text-primary-foreground" />
+              <CardHeader className="pb-4 sm:pb-6 border-b border-border/30">
+                <CardTitle className="flex items-center gap-2 sm:gap-4 text-xl sm:text-2xl font-bold text-card-foreground">
+                  <div className="w-8 h-8 sm:w-12 sm:h-12 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center shadow-lg">
+                    <Sparkles className="h-4 w-4 sm:h-6 sm:w-6 text-primary-foreground" />
                   </div>
                   Projects
                 </CardTitle>
-                <CardDescription className="text-base text-muted-foreground mt-2">
+                <CardDescription className="text-sm sm:text-base text-muted-foreground mt-2">
                   Showcase your personal and professional projects that
                   demonstrate your skills.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6 pt-6">
+              <CardContent className="space-y-4 sm:space-y-6 pt-4 sm:pt-6">
                 {projects.length === 0 && (
-                  <div className="text-center py-16 text-muted-foreground">
-                    <Sparkles className="h-20 w-20 mx-auto mb-6 opacity-50" />
-                    <p className="text-xl mb-3 font-semibold">
+                  <div className="text-center py-8 sm:py-16 text-muted-foreground">
+                    <Sparkles className="h-12 w-12 sm:h-20 sm:w-20 mx-auto mb-4 sm:mb-6 opacity-50" />
+                    <p className="text-lg sm:text-xl mb-2 sm:mb-3 font-semibold">
                       No projects added yet
                     </p>
-                    <p className="text-sm max-w-md mx-auto leading-relaxed">
+                    <p className="text-xs sm:text-sm max-w-md mx-auto leading-relaxed">
                       Showcase your creative work and technical projects to
                       highlight your capabilities
                     </p>
@@ -1438,10 +1445,10 @@ export default function ProfilePage() {
                     className="bg-gradient-to-r from-card to-accent/5 border border-accent/20 hover:shadow-lg hover:border-accent/30 transition-all duration-300 animate-fadeIn hover:scale-[1.02]"
                     style={{ animationDelay: `${index * 100}ms` }}
                   >
-                    <CardHeader className="pb-4">
+                    <CardHeader className="pb-3 sm:pb-4">
                       <div className="flex justify-between items-start">
-                        <div className="space-y-3">
-                          <CardTitle className="text-xl font-bold text-card-foreground">
+                        <div className="space-y-2 sm:space-y-3">
+                          <CardTitle className="text-base sm:text-xl font-bold text-card-foreground">
                             {proj.title}
                           </CardTitle>
                           {proj.projectUrl && (
@@ -1449,11 +1456,11 @@ export default function ProfilePage() {
                               href={proj.projectUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-2 text-sm text-accent hover:text-accent/80 hover:underline transition-colors duration-200 font-medium"
+                              className="inline-flex items-center gap-1 sm:gap-2 text-xs sm:text-sm text-accent hover:text-accent/80 hover:underline transition-colors duration-200 font-medium"
                             >
                               <span>View Project</span>
                               <svg
-                                className="h-4 w-4"
+                                className="h-3 w-3 sm:h-4 sm:w-4"
                                 fill="none"
                                 stroke="currentColor"
                                 viewBox="0 0 24 24"
@@ -1468,16 +1475,16 @@ export default function ProfilePage() {
                             </a>
                           )}
                         </div>
-                        <div className="flex gap-2 flex-shrink-0">
+                        <div className="flex gap-1 sm:gap-2 flex-shrink-0">
                           <Button
                             type="button"
                             variant="ghost"
                             size="icon"
                             onClick={() => openModal("project", proj)}
                             aria-label={`Edit project ${proj.title}`}
-                            className="text-muted-foreground hover:text-accent hover:bg-accent/10 transition-all duration-200"
+                            className="text-muted-foreground hover:text-accent hover:bg-accent/10 transition-all duration-200 h-7 w-7 sm:h-9 sm:w-9"
                           >
-                            <Edit3 className="h-4 w-4" />
+                            <Edit3 className="h-3 w-3 sm:h-4 sm:w-4" />
                           </Button>
                           <Button
                             type="button"
@@ -1485,25 +1492,25 @@ export default function ProfilePage() {
                             size="icon"
                             onClick={() => handleDeleteItem("project", proj.id)}
                             aria-label={`Delete project ${proj.title}`}
-                            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-200"
+                            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-200 h-7 w-7 sm:h-9 sm:w-9"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
                           </Button>
                         </div>
                       </div>
                     </CardHeader>
-                    <CardContent className="pt-0 space-y-4">
-                      <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                    <CardContent className="pt-0 space-y-3 sm:space-y-4">
+                      <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
                         {proj.description}
                       </p>
                       {proj.technologiesUsed &&
                         proj.technologiesUsed.length > 0 && (
-                          <div className="flex flex-wrap gap-2">
+                          <div className="flex flex-wrap gap-1 sm:gap-2">
                             {proj.technologiesUsed.map((tech, techIndex) => (
                               <Badge
                                 key={techIndex}
                                 variant="outline"
-                                className="text-xs bg-accent/10 text-accent border-accent/30 hover:bg-accent/20 transition-colors duration-200"
+                                className="text-[10px] sm:text-xs bg-accent/10 text-accent border-accent/30 hover:bg-accent/20 transition-colors duration-200 py-0.5 px-1.5 sm:py-1 sm:px-2"
                               >
                                 {tech}
                               </Badge>
@@ -1517,37 +1524,39 @@ export default function ProfilePage() {
                 <Button
                   type="button"
                   variant="outline"
-                  className="w-full h-16 border-2 border-dashed border-accent/30 hover:border-accent hover:bg-accent/5 text-muted-foreground hover:text-accent transition-all duration-300 group"
+                  className="w-full h-12 sm:h-16 border-2 border-dashed border-accent/30 hover:border-accent hover:bg-accent/5 text-muted-foreground hover:text-accent transition-all duration-300 group"
                   onClick={() => openModal("project")}
                 >
-                  <PlusCircle className="mr-3 h-6 w-6 group-hover:scale-110 transition-transform duration-200" />
-                  <span className="text-lg font-medium">Add Project</span>
+                  <PlusCircle className="mr-2 sm:mr-3 h-4 w-4 sm:h-6 sm:w-6 group-hover:scale-110 transition-transform duration-200" />
+                  <span className="text-sm sm:text-lg font-medium">
+                    Add Project
+                  </span>
                 </Button>
               </CardContent>
             </Card>
 
             {/* Education */}
             <Card className="border border-border/50 bg-card/50 backdrop-blur-sm shadow-xl hover:shadow-2xl transition-all duration-500 animate-slideUpFadeIn">
-              <CardHeader className="pb-6 border-b border-border/30">
-                <CardTitle className="flex items-center gap-4 text-2xl font-bold text-card-foreground">
-                  <div className="w-12 h-12 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center shadow-lg">
-                    <GraduationCap className="h-6 w-6 text-primary-foreground" />
+              <CardHeader className="pb-4 sm:pb-6 border-b border-border/30">
+                <CardTitle className="flex items-center gap-2 sm:gap-4 text-xl sm:text-2xl font-bold text-card-foreground">
+                  <div className="w-8 h-8 sm:w-12 sm:h-12 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center shadow-lg">
+                    <GraduationCap className="h-4 w-4 sm:h-6 sm:w-6 text-primary-foreground" />
                   </div>
                   Education History
                 </CardTitle>
-                <CardDescription className="text-base text-muted-foreground mt-2">
+                <CardDescription className="text-sm sm:text-base text-muted-foreground mt-2">
                   List your educational qualifications and academic
                   achievements.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6 pt-6">
+              <CardContent className="space-y-4 sm:space-y-6 pt-4 sm:pt-6">
                 {educationHistory.length === 0 && (
-                  <div className="text-center py-16 text-muted-foreground">
-                    <GraduationCap className="h-20 w-20 mx-auto mb-6 opacity-50" />
-                    <p className="text-xl mb-3 font-semibold">
+                  <div className="text-center py-8 sm:py-16 text-muted-foreground">
+                    <GraduationCap className="h-12 w-12 sm:h-20 sm:w-20 mx-auto mb-4 sm:mb-6 opacity-50" />
+                    <p className="text-lg sm:text-xl mb-2 sm:mb-3 font-semibold">
                       No education history added yet
                     </p>
-                    <p className="text-sm max-w-md mx-auto leading-relaxed">
+                    <p className="text-xs sm:text-sm max-w-md mx-auto leading-relaxed">
                       Add your academic background and qualifications to
                       complete your profile
                     </p>
@@ -1560,29 +1569,29 @@ export default function ProfilePage() {
                     className="bg-gradient-to-r from-card to-primary/5 border border-primary/20 hover:shadow-lg hover:border-primary/30 transition-all duration-300 animate-fadeIn hover:scale-[1.02]"
                     style={{ animationDelay: `${index * 100}ms` }}
                   >
-                    <CardHeader className="pb-4">
+                    <CardHeader className="pb-3 sm:pb-4">
                       <div className="flex justify-between items-start">
-                        <div className="space-y-2">
-                          <CardTitle className="text-xl font-bold text-card-foreground">
+                        <div className="space-y-1 sm:space-y-2">
+                          <CardTitle className="text-base sm:text-xl font-bold text-card-foreground">
                             {edu.degree}
                           </CardTitle>
-                          <CardDescription className="text-lg font-semibold text-primary">
+                          <CardDescription className="text-sm sm:text-lg font-semibold text-primary">
                             {edu.institution}
                           </CardDescription>
-                          <CardDescription className="text-sm text-muted-foreground">
+                          <CardDescription className="text-xs sm:text-sm text-muted-foreground">
                             Completed: {edu.yearOfCompletion}
                           </CardDescription>
                         </div>
-                        <div className="flex gap-2 flex-shrink-0">
+                        <div className="flex gap-1 sm:gap-2 flex-shrink-0">
                           <Button
                             type="button"
                             variant="ghost"
                             size="icon"
                             onClick={() => openModal("education", edu)}
                             aria-label={`Edit education ${edu.degree}`}
-                            className="text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all duration-200"
+                            className="text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all duration-200 h-7 w-7 sm:h-9 sm:w-9"
                           >
-                            <Edit3 className="h-4 w-4" />
+                            <Edit3 className="h-3 w-3 sm:h-4 sm:w-4" />
                           </Button>
                           <Button
                             type="button"
@@ -1592,16 +1601,16 @@ export default function ProfilePage() {
                               handleDeleteItem("education", edu.id)
                             }
                             aria-label={`Delete education ${edu.degree}`}
-                            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-200"
+                            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-200 h-7 w-7 sm:h-9 sm:w-9"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
                           </Button>
                         </div>
                       </div>
                     </CardHeader>
                     {edu.details && (
                       <CardContent className="pt-0">
-                        <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                        <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
                           {edu.details}
                         </p>
                       </CardContent>
@@ -1612,35 +1621,37 @@ export default function ProfilePage() {
                 <Button
                   type="button"
                   variant="outline"
-                  className="w-full h-16 border-2 border-dashed border-primary/30 hover:border-primary hover:bg-primary/5 text-muted-foreground hover:text-primary transition-all duration-300 group"
+                  className="w-full h-12 sm:h-16 border-2 border-dashed border-primary/30 hover:border-primary hover:bg-primary/5 text-muted-foreground hover:text-primary transition-all duration-300 group"
                   onClick={() => openModal("education")}
                 >
-                  <PlusCircle className="mr-3 h-6 w-6 group-hover:scale-110 transition-transform duration-200" />
-                  <span className="text-lg font-medium">Add Education</span>
+                  <PlusCircle className="mr-2 sm:mr-3 h-4 w-4 sm:h-6 sm:w-6 group-hover:scale-110 transition-transform duration-200" />
+                  <span className="text-sm sm:text-lg font-medium">
+                    Add Education
+                  </span>
                 </Button>
               </CardContent>
             </Card>
 
             {/* Accomplishments */}
             <Card className="border border-border/50 bg-card/50 backdrop-blur-sm shadow-xl hover:shadow-2xl transition-all duration-500 animate-slideUpFadeIn">
-              <CardHeader className="pb-6 border-b border-border/30">
-                <CardTitle className="flex items-center gap-4 text-2xl font-bold text-card-foreground">
-                  <div className="w-12 h-12 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center shadow-lg">
-                    <Trophy className="h-6 w-6 text-primary-foreground" />
+              <CardHeader className="pb-4 sm:pb-6 border-b border-border/30">
+                <CardTitle className="flex items-center gap-2 sm:gap-4 text-xl sm:text-2xl font-bold text-card-foreground">
+                  <div className="w-8 h-8 sm:w-12 sm:h-12 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center shadow-lg">
+                    <Trophy className="h-4 w-4 sm:h-6 sm:w-6 text-primary-foreground" />
                   </div>
                   Accomplishments
                 </CardTitle>
-                <CardDescription className="text-base text-muted-foreground mt-2">
+                <CardDescription className="text-sm sm:text-base text-muted-foreground mt-2">
                   Share your significant achievements, awards, or recognitions
                   that set you apart.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="pt-6">
+              <CardContent className="pt-4 sm:pt-6">
                 <FormField
                   control={form.control}
                   name="accomplishments"
                   render={({ field }) => (
-                    <FormItem className="space-y-3">
+                    <FormItem className="space-y-2 sm:space-y-3">
                       <ShadcnFormLabel className="text-sm font-semibold text-foreground">
                         Accomplishments
                       </ShadcnFormLabel>
@@ -1649,7 +1660,7 @@ export default function ProfilePage() {
                           placeholder="e.g., 'Led a team to successfully launch Product X, resulting in 40% increase in user engagement...' or 'Published research paper on AI in top-tier conference...'"
                           {...field}
                           value={field.value ?? ""}
-                          rows={8}
+                          rows={6}
                           className="transition-all duration-200 focus:ring-2 focus:ring-primary/20 resize-none hover:border-primary/50"
                         />
                       </FormControl>
@@ -1663,23 +1674,27 @@ export default function ProfilePage() {
         </Form>
 
         {/* Fixed Save Button */}
-        <div className="fixed bottom-0 left-0 right-0 md:relative bg-background/95 backdrop-blur-xl md:bg-transparent md:backdrop-blur-none p-6 border-t border-border/50 md:border-none md:p-0 z-50 shadow-2xl md:shadow-none">
+        <div className="fixed bottom-0 left-0 right-0 md:relative bg-background/95 backdrop-blur-xl md:bg-transparent md:backdrop-blur-none p-4 sm:p-6 border-t border-border/50 md:border-none md:p-0 z-50 shadow-2xl md:shadow-none">
           <div className="max-w-5xl mx-auto">
             <Button
               type="submit"
               disabled={!canSubmit}
               onClick={form.handleSubmit(onSubmit)}
-              className="w-full md:w-auto bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 text-primary-foreground text-lg py-6 px-12 shadow-2xl hover:shadow-3xl transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none font-semibold"
+              className="w-full md:w-auto bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 text-primary-foreground text-sm sm:text-lg py-4 sm:py-6 px-6 sm:px-12 shadow-2xl hover:shadow-3xl transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none font-semibold"
             >
               {isSubmitting ? (
-                <div className="flex items-center gap-3">
-                  <div className="w-6 h-6 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin"></div>
-                  Saving Profile...
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <div className="w-4 h-4 sm:w-6 sm:h-6 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin"></div>
+                  <span className="text-sm sm:text-base">
+                    Saving Profile...
+                  </span>
                 </div>
               ) : (
-                <div className="flex items-center gap-3">
-                  <Save className="h-6 w-6" />
-                  Save All Profile Changes
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <Save className="h-4 w-4 sm:h-6 sm:w-6" />
+                  <span className="text-sm sm:text-base">
+                    Save All Profile Changes
+                  </span>
                 </div>
               )}
             </Button>
@@ -1698,19 +1713,19 @@ export default function ProfilePage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto bg-card/95 backdrop-blur-xl border border-border/50 shadow-2xl">
-          <DialogHeader className="space-y-4 pb-6 border-b border-border/30">
-            <DialogTitle className="text-3xl font-bold text-card-foreground">
+        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto bg-card/95 backdrop-blur-xl border border-border/50 shadow-2xl w-[95vw]">
+          <DialogHeader className="space-y-2 sm:space-y-4 pb-4 sm:pb-6 border-b border-border/30">
+            <DialogTitle className="text-xl sm:text-3xl font-bold text-card-foreground">
               {editingItem ? "Edit " : "Add New "}{" "}
               {modalType?.charAt(0).toUpperCase() + (modalType?.slice(1) || "")}
             </DialogTitle>
-            <ShadcnDialogDescription className="text-muted-foreground text-base leading-relaxed">
+            <ShadcnDialogDescription className="text-muted-foreground text-sm sm:text-base leading-relaxed">
               Please fill in the details for your {modalType}. Click save when
               you're done. Fields marked with * are required.
             </ShadcnDialogDescription>
           </DialogHeader>
-          <div className="py-6">{renderModalContent()}</div>
-          <DialogFooter className="gap-4 pt-6 border-t border-border/30">
+          <div className="py-4 sm:py-6">{renderModalContent()}</div>
+          <DialogFooter className="gap-3 sm:gap-4 pt-4 sm:pt-6 border-t border-border/30 flex flex-col sm:flex-row">
             <Button
               type="button"
               variant="outline"
@@ -1719,16 +1734,16 @@ export default function ProfilePage() {
                 setEditingItem(null);
                 setCurrentItemData({});
               }}
-              className="px-6 py-3 transition-all duration-200 hover:bg-muted/50"
+              className="px-4 sm:px-6 py-2 sm:py-3 transition-all duration-200 hover:bg-muted/50 w-full sm:w-auto"
             >
               Cancel
             </Button>
             <Button
               type="button"
               onClick={handleSaveItem}
-              className="bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 text-primary-foreground px-6 py-3 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
+              className="bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 text-primary-foreground px-4 sm:px-6 py-2 sm:py-3 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 w-full sm:w-auto"
             >
-              <CheckCircle2 className="h-5 w-5 mr-2" />
+              <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5 mr-1 sm:mr-2" />
               Save{" "}
               {modalType?.charAt(0).toUpperCase() + (modalType?.slice(1) || "")}
             </Button>
