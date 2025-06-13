@@ -682,7 +682,7 @@ export default function PerformancePage() {
 
         {/* Time Range Filter */}
         <div className="flex justify-center animate-slide-in stagger-1">
-          <Card className="relative overflow-hidden border-0 shadow-lg glassmorphism gradient-border">
+          <Card className="relative overflow-hidden border-0 shadow-lg glassmorphism gradient-border w-full max-w-xs sm:max-w-md">
             <CardContent className="p-4">
               <div className="flex items-center space-x-4">
                 <Calendar className="h-5 w-5 text-primary" />
@@ -690,7 +690,7 @@ export default function PerformancePage() {
                   value={selectedTimeRange}
                   onValueChange={setSelectedTimeRange}
                 >
-                  <SelectTrigger className="w-48 bg-background/50 backdrop-blur-sm border-primary/20">
+                  <SelectTrigger className="w-full bg-background/50 backdrop-blur-sm border-primary/20">
                     <SelectValue placeholder="Select time range" />
                   </SelectTrigger>
                   <SelectContent>
@@ -869,7 +869,7 @@ export default function PerformancePage() {
               defaultValue="progress"
               className="animate-slide-in stagger-3"
             >
-              <TabsList className="grid w-full grid-cols-1 md:grid-cols-4 bg-background/50 backdrop-blur-sm">
+              <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 bg-background/50 backdrop-blur-sm">
                 <TabsTrigger
                   value="progress"
                   className="flex items-center gap-2"
@@ -905,7 +905,7 @@ export default function PerformancePage() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="h-80">
+                    <div className="h-[300px] sm:h-80">
                       <ResponsiveContainer width="100%" height="100%">
                         <RechartsLineChart
                           data={performanceMetrics.progressOverTime}
@@ -971,7 +971,7 @@ export default function PerformancePage() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="h-80">
+                    <div className="h-[300px] sm:h-80">
                       <ResponsiveContainer width="100%" height="100%">
                         <RechartsPieChart>
                           <Pie
@@ -1053,7 +1053,7 @@ export default function PerformancePage() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="h-80">
+                    <div className="h-[300px] sm:h-80">
                       <ResponsiveContainer width="100%" height="100%">
                         <RechartsBarChart
                           data={performanceMetrics.statusDistribution}
@@ -1183,7 +1183,7 @@ export default function PerformancePage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="relative z-10">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
                     <div className="flex items-center gap-3 mb-2">
                       <BookOpen className="h-5 w-5 text-blue-500" />
@@ -1219,7 +1219,7 @@ export default function PerformancePage() {
             <Card className="relative overflow-hidden border-0 shadow-lg glassmorphism gradient-border animate-slide-in stagger-6">
               <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-accent/5"></div>
               <CardContent className="relative z-10 p-6">
-                <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                   <div>
                     <h3 className="text-xl font-bold gradient-text">
                       Keep improving your skills
@@ -1228,15 +1228,15 @@ export default function PerformancePage() {
                       Take another interview or explore your detailed history
                     </p>
                   </div>
-                  <div className="flex space-x-4">
-                    <Link href="/interview/start">
-                      <Button size="lg" className="animate-shimmer">
+                  <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 w-full sm:w-auto">
+                    <Link href="/interview/start" className="w-full sm:w-auto">
+                      <Button size="lg" className="animate-shimmer w-full">
                         <Target className="mr-2 h-5 w-5" />
                         Start New Interview
                       </Button>
                     </Link>
-                    <Link href="/history">
-                      <Button variant="outline" size="lg">
+                    <Link href="/history" className="w-full sm:w-auto">
+                      <Button variant="outline" size="lg" className="w-full">
                         <Clock className="mr-2 h-5 w-5" />
                         View History
                       </Button>

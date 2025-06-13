@@ -630,7 +630,7 @@ export default function HistoryPage() {
   return (
     <div
       ref={pageRef}
-      className="min-h-screen history-bg relative overflow-hidden"
+      className="min-h-screen history-bg relative overflow-x-hidden"
     >
       <style>{styles}</style>
 
@@ -647,7 +647,7 @@ export default function HistoryPage() {
         ></div>
       </div>
 
-      <div className="relative z-10 max-w-7xl mx-auto px-4 py-8 space-y-8">
+      <div className="relative z-10 w-full max-w-7xl mx-auto px-3 sm:px-4 py-6 sm:py-8 space-y-6 sm:space-y-8">
         {/* Header */}
         <div className="text-center space-y-6 animate-slide-in">
           <div className="relative inline-block">
@@ -668,21 +668,21 @@ export default function HistoryPage() {
         </div>
 
         {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-slide-in stagger-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 animate-slide-in stagger-1">
           <Card className="stat-card relative overflow-hidden border-0 shadow-lg glassmorphism gradient-border">
             <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-blue-500/5"></div>
-            <CardContent className="relative z-10 p-6">
+            <CardContent className="relative z-10 p-4 sm:p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
                     Total Interviews
                   </p>
-                  <p className="text-3xl font-bold gradient-text">
+                  <p className="text-2xl sm:text-3xl font-bold gradient-text">
                     {stats.totalInterviews}
                   </p>
                 </div>
-                <div className="bg-gradient-to-br from-blue-500/20 to-blue-500/10 p-3 rounded-full">
-                  <FileText className="h-6 w-6 text-blue-500" />
+                <div className="bg-gradient-to-br from-blue-500/20 to-blue-500/10 p-2 sm:p-3 rounded-full">
+                  <FileText className="h-5 w-5 sm:h-6 sm:w-6 text-blue-500" />
                 </div>
               </div>
             </CardContent>
@@ -690,18 +690,18 @@ export default function HistoryPage() {
 
           <Card className="stat-card relative overflow-hidden border-0 shadow-lg glassmorphism gradient-border">
             <div className="absolute inset-0 bg-gradient-to-br from-green-500/10 to-green-500/5"></div>
-            <CardContent className="relative z-10 p-6">
+            <CardContent className="relative z-10 p-4 sm:p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
                     Completed
                   </p>
-                  <p className="text-3xl font-bold gradient-text">
+                  <p className="text-2xl sm:text-3xl font-bold gradient-text">
                     {stats.completedInterviews}
                   </p>
                 </div>
-                <div className="bg-gradient-to-br from-green-500/20 to-green-500/10 p-3 rounded-full">
-                  <CheckCircle className="h-6 w-6 text-green-500" />
+                <div className="bg-gradient-to-br from-green-500/20 to-green-500/10 p-2 sm:p-3 rounded-full">
+                  <CheckCircle className="h-5 w-5 sm:h-6 sm:w-6 text-green-500" />
                 </div>
               </div>
             </CardContent>
@@ -709,22 +709,22 @@ export default function HistoryPage() {
 
           <Card className="stat-card relative overflow-hidden border-0 shadow-lg glassmorphism gradient-border">
             <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-purple-500/5"></div>
-            <CardContent className="relative z-10 p-6">
+            <CardContent className="relative z-10 p-4 sm:p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
                     Average Score
                   </p>
                   <p
-                    className={`text-3xl font-bold ${getScoreColor(
+                    className={`text-2xl sm:text-3xl font-bold ${getScoreColor(
                       stats.averageScore
                     )}`}
                   >
                     {stats.averageScore}%
                   </p>
                 </div>
-                <div className="bg-gradient-to-br from-purple-500/20 to-purple-500/10 p-3 rounded-full">
-                  <Award className="h-6 w-6 text-purple-500" />
+                <div className="bg-gradient-to-br from-purple-500/20 to-purple-500/10 p-2 sm:p-3 rounded-full">
+                  <Award className="h-5 w-5 sm:h-6 sm:w-6 text-purple-500" />
                 </div>
               </div>
             </CardContent>
@@ -732,18 +732,18 @@ export default function HistoryPage() {
 
           <Card className="stat-card relative overflow-hidden border-0 shadow-lg glassmorphism gradient-border">
             <div className="absolute inset-0 bg-gradient-to-br from-orange-500/10 to-orange-500/5"></div>
-            <CardContent className="relative z-10 p-6">
+            <CardContent className="relative z-10 p-4 sm:p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
                     Total Time
                   </p>
-                  <p className="text-3xl font-bold gradient-text">
+                  <p className="text-2xl sm:text-3xl font-bold gradient-text">
                     {Math.round(stats.totalTime / 60)}h
                   </p>
                 </div>
-                <div className="bg-gradient-to-br from-orange-500/20 to-orange-500/10 p-3 rounded-full">
-                  <Timer className="h-6 w-6 text-orange-500" />
+                <div className="bg-gradient-to-br from-orange-500/20 to-orange-500/10 p-2 sm:p-3 rounded-full">
+                  <Timer className="h-5 w-5 sm:h-6 sm:w-6 text-orange-500" />
                 </div>
               </div>
             </CardContent>
@@ -754,15 +754,15 @@ export default function HistoryPage() {
         {stats.completedInterviews >= 2 && (
           <Card className="relative overflow-hidden border-0 shadow-lg glassmorphism gradient-border animate-slide-in stagger-2">
             <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-accent/5"></div>
-            <CardContent className="relative z-10 p-6">
-              <div className="flex items-center justify-center space-x-4">
-                <div className="flex items-center space-x-2">
+            <CardContent className="relative z-10 p-4 sm:p-6">
+              <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-4">
+                <div className="flex items-center gap-2">
                   {stats.improvementTrend > 0 ? (
-                    <TrendingUp className="h-6 w-6 text-green-500" />
+                    <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-green-500" />
                   ) : (
-                    <TrendingDown className="h-6 w-6 text-red-500" />
+                    <TrendingDown className="h-5 w-5 sm:h-6 sm:w-6 text-red-500" />
                   )}
-                  <span className="text-lg font-semibold">
+                  <span className="text-base sm:text-lg font-semibold">
                     {stats.improvementTrend > 0 ? "Improving" : "Declining"}{" "}
                     Performance
                   </span>
@@ -784,16 +784,16 @@ export default function HistoryPage() {
         {/* Filters and Search */}
         <Card className="relative overflow-hidden border-0 shadow-lg glassmorphism gradient-border animate-slide-in stagger-3">
           <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-accent/5"></div>
-          <CardHeader className="relative z-10">
-            <CardTitle className="text-2xl gradient-text">
+          <CardHeader className="relative z-10 p-4 sm:p-6">
+            <CardTitle className="text-xl sm:text-2xl gradient-text">
               Filter & Search
             </CardTitle>
             <CardDescription>
               Find specific interviews or filter by criteria
             </CardDescription>
           </CardHeader>
-          <CardContent className="relative z-10 space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <CardContent className="relative z-10 p-4 sm:p-6 pt-0 sm:pt-0 space-y-4 sm:space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
               {/* Search */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -876,14 +876,14 @@ export default function HistoryPage() {
         </Card>
 
         {/* Interview List */}
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           {loading && (
-            <div className="flex flex-col justify-center items-center py-16 animate-slide-in">
+            <div className="flex flex-col justify-center items-center py-12 sm:py-16 animate-slide-in">
               <div className="relative mb-6">
                 <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl animate-pulse-custom"></div>
-                <Loader2 className="relative h-12 w-12 animate-spin text-primary" />
+                <Loader2 className="relative h-10 w-10 sm:h-12 sm:w-12 animate-spin text-primary" />
               </div>
-              <p className="text-lg text-muted-foreground animate-pulse-custom">
+              <p className="text-base sm:text-lg text-muted-foreground animate-pulse-custom">
                 Loading your interview history...
               </p>
             </div>
@@ -892,16 +892,16 @@ export default function HistoryPage() {
           {!loading && error && <InterviewsErrorAlert error={error} />}
 
           {!loading && !error && interviews.length === 0 && (
-            <div className="text-center py-16 space-y-6 animate-slide-in">
-              <div className="relative mx-auto w-20 h-20">
+            <div className="text-center py-12 sm:py-16 space-y-4 sm:space-y-6 animate-slide-in">
+              <div className="relative mx-auto w-16 h-16 sm:w-20 sm:h-20">
                 <div className="absolute inset-0 bg-muted/20 rounded-full blur-xl animate-pulse-custom"></div>
-                <DatabaseZap className="relative mx-auto h-20 w-20 text-muted-foreground/60 animate-float" />
+                <DatabaseZap className="relative mx-auto h-16 w-16 sm:h-20 sm:w-20 text-muted-foreground/60 animate-float" />
               </div>
-              <div className="space-y-3">
-                <p className="text-xl font-medium text-muted-foreground">
+              <div className="space-y-2 sm:space-y-3">
+                <p className="text-lg sm:text-xl font-medium text-muted-foreground">
                   No interviews yet
                 </p>
-                <p className="text-base text-muted-foreground">
+                <p className="text-sm sm:text-base text-muted-foreground">
                   Start your first interview to see your history here
                 </p>
               </div>
@@ -918,16 +918,16 @@ export default function HistoryPage() {
             !error &&
             filteredAndSortedInterviews.length === 0 &&
             interviews.length > 0 && (
-              <div className="text-center py-16 space-y-4 animate-slide-in">
-                <div className="relative mx-auto w-20 h-20">
+              <div className="text-center py-12 sm:py-16 space-y-4 animate-slide-in">
+                <div className="relative mx-auto w-16 h-16 sm:w-20 sm:h-20">
                   <div className="absolute inset-0 bg-muted/20 rounded-full blur-xl animate-pulse-custom"></div>
-                  <Search className="relative mx-auto h-20 w-20 text-muted-foreground/60 animate-float" />
+                  <Search className="relative mx-auto h-16 w-16 sm:h-20 sm:w-20 text-muted-foreground/60 animate-float" />
                 </div>
                 <div className="space-y-2">
-                  <p className="text-xl font-medium text-muted-foreground">
+                  <p className="text-lg sm:text-xl font-medium text-muted-foreground">
                     No interviews match your filters
                   </p>
-                  <p className="text-base text-muted-foreground">
+                  <p className="text-sm sm:text-base text-muted-foreground">
                     Try adjusting your search criteria or filters
                   </p>
                 </div>
@@ -957,21 +957,21 @@ export default function HistoryPage() {
                 >
                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/5 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-500"></div>
 
-                  <CardContent className="relative z-10 p-6">
-                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                  <CardContent className="relative z-10 p-3 sm:p-4 md:p-6">
+                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 sm:gap-4">
                       {/* Interview Info */}
-                      <div className="flex items-start space-x-4 flex-1">
-                        <div className="relative">
-                          <div className="bg-primary/10 p-3 rounded-full border border-primary/20">
-                            <FileText className="h-5 w-5 text-primary" />
+                      <div className="flex items-start space-x-2 sm:space-x-4 flex-1">
+                        <div className="relative hidden sm:block">
+                          <div className="bg-primary/10 p-2 sm:p-3 rounded-full border border-primary/20">
+                            <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
                           </div>
                         </div>
                         <div className="flex-1 min-w-0 space-y-2">
-                          <div className="flex items-center space-x-3">
-                            <h3 className="text-lg font-semibold">
+                          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                            <h3 className="text-base sm:text-lg font-semibold">
                               Interview Session
                             </h3>
-                            <div className="flex items-center space-x-1">
+                            <div className="flex items-center gap-1">
                               {getStatusIcon(interview.status)}
                               <Badge
                                 variant="secondary"
@@ -981,7 +981,7 @@ export default function HistoryPage() {
                               </Badge>
                             </div>
                           </div>
-                          <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                          <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-muted-foreground">
                             <span className="flex items-center">
                               <Calendar className="h-3 w-3 mr-1" />
                               {new Date(interview.createdAt).toLocaleDateString(
@@ -1005,7 +1005,7 @@ export default function HistoryPage() {
                             )}
                           </div>
                           {interview.feedback?.overallFeedback && (
-                            <p className="text-sm text-muted-foreground line-clamp-2">
+                            <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2">
                               {interview.feedback.overallFeedback.substring(
                                 0,
                                 150
@@ -1019,13 +1019,13 @@ export default function HistoryPage() {
                       </div>
 
                       {/* Score and Actions */}
-                      <div className="flex items-center space-x-4">
+                      <div className="flex items-center space-x-2 sm:space-x-4 mt-2 lg:mt-0">
                         {interview.feedback?.overallScore !== undefined &&
                           interview.feedback.overallScore !== null && (
                             <div className="text-center">
-                              <div className="score-circle w-16 h-16 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 backdrop-blur-sm border border-primary/30 shadow-md">
+                              <div className="score-circle w-10 h-10 sm:w-12 sm:h-12 md:w-16 md:h-16 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 backdrop-blur-sm border border-primary/30 shadow-md">
                                 <div
-                                  className={`text-lg font-bold ${getScoreColor(
+                                  className={`text-base sm:text-lg font-bold ${getScoreColor(
                                     interview.feedback.overallScore
                                   )}`}
                                 >
@@ -1070,25 +1070,25 @@ export default function HistoryPage() {
         {/* Quick Actions */}
         <Card className="relative overflow-hidden border-0 shadow-lg glassmorphism gradient-border animate-slide-in stagger-6">
           <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-accent/5"></div>
-          <CardContent className="relative z-10 p-6">
-            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+          <CardContent className="relative z-10 p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
               <div>
-                <h3 className="text-xl font-bold gradient-text">
+                <h3 className="text-lg sm:text-xl font-bold gradient-text">
                   Ready for your next interview?
                 </h3>
-                <p className="text-muted-foreground">
+                <p className="text-sm sm:text-base text-muted-foreground">
                   Continue improving your skills with AI-powered practice
                 </p>
               </div>
-              <div className="flex space-x-4">
-                <Link href="/interview/start">
-                  <Button size="lg" className="animate-shimmer">
+              <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 w-full sm:w-auto">
+                <Link href="/interview/start" className="w-full sm:w-auto">
+                  <Button size="lg" className="animate-shimmer w-full">
                     <PlayCircle className="mr-2 h-5 w-5" />
                     Start New Interview
                   </Button>
                 </Link>
-                <Link href="/performance">
-                  <Button variant="outline" size="lg">
+                <Link href="/performance" className="w-full sm:w-auto">
+                  <Button variant="outline" size="lg" className="w-full">
                     <BarChart3 className="mr-2 h-5 w-5" />
                     View Performance
                   </Button>
