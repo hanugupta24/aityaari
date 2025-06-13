@@ -217,7 +217,7 @@ export default function ClientLayout({
                         ? "Subscriptions"
                         : "Welcome"}
                     </h1>
-                    <p className="text-xs font-medium text-muted-foreground/80 tracking-wide">
+                    <p className="text-xs font-medium text-muted-foreground/80 tracking-wide md:hidden">
                       Welcome back to your interview preparation
                     </p>
                   </div>
