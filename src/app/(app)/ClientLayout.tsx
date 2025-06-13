@@ -110,6 +110,10 @@ export default function ClientLayout({
   const pathname = usePathname();
   const { user, initialLoading, loading: authLoading } = useAuth();
   const router = useRouter();
+  const logoPath =
+    pathname === "/interview/start"
+      ? ".././images/logo_solid.svg"
+      : "./images/logo_solid.svg";
 
   useEffect(() => {
     if (!initialLoading && !user) {
@@ -155,7 +159,7 @@ export default function ClientLayout({
                   </p>
                 </div> */}
                 <img
-                  src=" ./images/logo_solid.svg"
+                  src={logoPath}
                   className="h-15 w-80 text-primary rounded-lg"
                   alt="Logo"
                 />
@@ -163,7 +167,7 @@ export default function ClientLayout({
             </Link>
           </SidebarHeader>
 
-          <SidebarContent className="px-4">
+          <SidebarContent className="px-4 lg:px-0 md:px-0">
             <SidebarNav />
           </SidebarContent>
 
@@ -182,7 +186,7 @@ export default function ClientLayout({
         <SidebarInset>
           <header className="sticky top-0 z-30 header-gradient backdrop-blur-xl border-b border-border/30">
             <div className="flex h-16 items-center gap-4 px-6">
-              <SidebarTrigger className="block lg:hidden md:hidden hover:bg-primary/10 transition-colors rounded-lg" />
+              <SidebarTrigger className="block hover:bg-primary/10 transition-colors rounded-lg" />
 
               <div className="flex-1">
                 <div className="flex items-center space-x-4">
