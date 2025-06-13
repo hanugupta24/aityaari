@@ -616,7 +616,7 @@ export default function StartInterviewPage() {
   ];
 
   return (
-    <div className="min-h-screen interview-bg relative overflow-hidden">
+    <div className="min-h-screen interview-bg relative overflow-x-hidden">
       <style>{styles}</style>
 
       {/* Animated Background Elements */}
@@ -632,20 +632,20 @@ export default function StartInterviewPage() {
         ></div>
       </div>
 
-      <div className="relative z-10 max-w-4xl mx-auto px-4 py-8 space-y-8">
+      <div className="relative z-10 w-full max-w-4xl mx-auto px-2 sm:px-4 py-4 sm:py-8 space-y-4 sm:space-y-8">
         {/* Hero Section */}
-        <div className="text-center space-y-6 animate-slide-in">
+        <div className="text-center space-y-3 sm:space-y-6 animate-slide-in">
           <div className="relative inline-block">
             <div className="absolute inset-0 bg-gradient-to-r from-primary/30 to-accent/30 rounded-full blur-2xl animate-pulse-custom"></div>
-            <div className="relative bg-gradient-to-br from-primary/20 to-accent/20 p-4 rounded-full border border-primary/30 shadow-lg backdrop-blur-sm">
-              <Play className="h-12 w-12 text-primary animate-float" />
+            <div className="relative bg-gradient-to-br from-primary/20 to-accent/20 p-3 sm:p-4 rounded-full border border-primary/30 shadow-lg backdrop-blur-sm">
+              <Play className="h-8 w-8 sm:h-12 sm:w-12 text-primary animate-float" />
             </div>
           </div>
-          <div className="space-y-4">
-            <h1 className="text-4xl md:text-6xl font-bold gradient-text glow-text">
+          <div className="space-y-2 sm:space-y-4">
+            <h1 className="text-2xl sm:text-4xl md:text-6xl font-bold gradient-text glow-text">
               Start Your Interview
             </h1>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+            <p className="text-sm sm:text-xl text-muted-foreground max-w-2xl mx-auto">
               Experience AI-powered interview practice with personalized
               questions and expert feedback
             </p>
@@ -653,24 +653,26 @@ export default function StartInterviewPage() {
         </div>
 
         {/* Features Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-slide-in stagger-1">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-6 animate-slide-in stagger-1">
           {features.map((feature, index) => (
             <Card
               key={index}
-              className="relative overflow-hidden border-0 shadow-lg  glassmorphism gradient-border"
+              className="relative overflow-hidden border-0 shadow-lg glassmorphism gradient-border"
               style={{ animationDelay: `${index * 0.1}s` }}
             >
               <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-accent/5 opacity-70"></div>
-              <CardContent className="relative z-10 p-6 text-center space-y-4">
+              <CardContent className="relative z-10 p-2 sm:p-6 text-center space-y-1 sm:space-y-4">
                 <div
-                  className="feature-icon mx-auto animate-float"
+                  className="feature-icon mx-auto animate-float w-6 h-6 sm:w-12 sm:h-12"
                   style={{ animationDelay: `${index * 0.5}s` }}
                 >
-                  <feature.icon className="h-6 w-6 text-primary" />
+                  <feature.icon className="h-3 w-3 sm:h-6 sm:w-6 text-primary" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-lg">{feature.title}</h3>
-                  <p className="text-sm text-muted-foreground">
+                  <h3 className="font-semibold text-xs sm:text-lg">
+                    {feature.title}
+                  </h3>
+                  <p className="text-[10px] sm:text-sm text-muted-foreground">
                     {feature.description}
                   </p>
                 </div>
@@ -684,28 +686,28 @@ export default function StartInterviewPage() {
           <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-accent/10 opacity-70 animate-rotate-gradient"></div>
           <div className="absolute top-0 right-0 w-32 h-32 bg-primary/20 rounded-full blur-3xl animate-pulse-custom"></div>
 
-          <CardHeader className="relative z-10 text-center space-y-4 p-8">
-            <CardTitle className="text-3xl font-bold gradient-text">
+          <CardHeader className="relative z-10 text-center space-y-2 sm:space-y-4 p-3 sm:p-8">
+            <CardTitle className="text-xl sm:text-3xl font-bold gradient-text">
               Configure Your Session
             </CardTitle>
-            <CardDescription className="text-lg">
+            <CardDescription className="text-sm sm:text-lg">
               Customize your interview experience for optimal preparation
             </CardDescription>
           </CardHeader>
 
-          <CardContent className="relative z-10 space-y-8 p-8">
+          <CardContent className="relative z-10 space-y-4 sm:space-y-8 p-3 sm:p-8">
             {/* Loading State */}
             {isLoadingState && (
-              <div className="flex items-center justify-center p-8 animate-bounce-in">
+              <div className="flex items-center justify-center p-4 sm:p-8 animate-bounce-in">
                 <div className="relative">
                   <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl animate-pulse-custom"></div>
-                  <Loader2 className="relative h-12 w-12 animate-spin text-primary" />
+                  <Loader2 className="relative h-8 w-8 sm:h-12 sm:w-12 animate-spin text-primary" />
                 </div>
                 <div className="ml-4 space-y-2">
-                  <p className="text-lg font-medium">
+                  <p className="text-base sm:text-lg font-medium">
                     Loading your information...
                   </p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-xs sm:text-sm text-muted-foreground">
                     Preparing your personalized experience
                   </p>
                 </div>
@@ -721,10 +723,10 @@ export default function StartInterviewPage() {
                   className="animate-slide-in border-red-300/50 bg-red-50/30 backdrop-blur-sm"
                 >
                   <UserX className="h-5 w-5" />
-                  <AlertTitle className="text-lg font-bold">
+                  <AlertTitle className="text-base sm:text-lg font-bold">
                     Profile Not Loaded
                   </AlertTitle>
-                  <AlertDescription className="text-base">
+                  <AlertDescription className="text-sm sm:text-base">
                     We couldn't load your profile data. Please ensure you have
                     created or completed your profile.
                     <Link
@@ -742,10 +744,10 @@ export default function StartInterviewPage() {
               isProfileEssentialDataMissing && (
                 <Alert className="animate-slide-in border-yellow-500/50 bg-yellow-50/30 backdrop-blur-sm">
                   <Info className="h-5 w-5 text-yellow-500" />
-                  <AlertTitle className="text-lg font-bold text-yellow-700">
+                  <AlertTitle className="text-base sm:text-lg font-bold text-yellow-700">
                     Profile Incomplete
                   </AlertTitle>
-                  <AlertDescription className="text-base text-yellow-600">
+                  <AlertDescription className="text-sm sm:text-base text-yellow-600">
                     Your profile is missing key information like your 'Role' or
                     'Profile Field'. This is needed for tailored questions.
                     Please{" "}
@@ -769,10 +771,10 @@ export default function StartInterviewPage() {
                   className="animate-slide-in border-red-300/50 bg-red-50/30 backdrop-blur-sm"
                 >
                   <UserX className="h-5 w-5" />
-                  <AlertTitle className="text-lg font-bold">
+                  <AlertTitle className="text-base sm:text-lg font-bold">
                     User Profile Not Found
                   </AlertTitle>
-                  <AlertDescription className="text-base">
+                  <AlertDescription className="text-sm sm:text-base">
                     It seems you haven't created a profile yet, or we couldn't
                     load it. Please
                     <Link
@@ -789,11 +791,11 @@ export default function StartInterviewPage() {
 
             {/* Personalization Info */}
             <Alert className="animate-slide-in stagger-3 border-blue-300/50 bg-blue-50/30 backdrop-blur-sm">
-              <FileText className="h-5 w-5 text-lg" />
-              <AlertTitle className="text-lg font-bold">
+              <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-lg" />
+              <AlertTitle className="text-base sm:text-lg font-bold">
                 Personalized Questions
               </AlertTitle>
-              <AlertDescription className="text-base">
+              <AlertDescription className="text-xs sm:text-base">
                 Questions will be based on your profile (role, field, skills,
                 experiences, projects), your uploaded resume raw text (if any),
                 and the job description you can provide below.
@@ -801,22 +803,22 @@ export default function StartInterviewPage() {
             </Alert>
 
             {/* Duration Selection */}
-            <div className="space-y-6 animate-slide-in stagger-4">
+            <div className="space-y-4 sm:space-y-6 animate-slide-in stagger-4">
               <div className="text-center space-y-2">
-                <h3 className="text-2xl font-bold gradient-text flex items-center justify-center gap-2">
-                  <Clock className="h-6 w-6 text-primary" />
+                <h3 className="text-xl sm:text-2xl font-bold gradient-text flex items-center justify-center gap-2">
+                  <Clock className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
                   Select Interview Duration
                 </h3>
-                <p className="text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   Choose the length that fits your preparation goals
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 sm:gap-4">
                 {durationOptions.map((option, index) => (
                   <div
                     key={option.value}
-                    className={`duration-card p-6 rounded-xl border-2 transition-all duration-300 cursor-pointer ${
+                    className={`duration-card p-2 sm:p-6 rounded-xl border-2 transition-all duration-300 cursor-pointer ${
                       duration === option.value
                         ? "selected"
                         : "border-border hover:border-primary/50"
@@ -826,18 +828,20 @@ export default function StartInterviewPage() {
                     }
                     style={{ animationDelay: `${index * 0.1}s` }}
                   >
-                    <div className="text-center space-y-4">
+                    <div className="text-center space-y-1 sm:space-y-4">
                       <div
-                        className={`feature-icon mx-auto bg-gradient-to-br ${option.color}`}
+                        className={`feature-icon mx-auto bg-gradient-to-br ${option.color} w-6 h-6 sm:w-12 sm:h-12`}
                       >
-                        <option.icon className="h-6 w-6 text-primary" />
+                        <option.icon className="h-3 w-3 sm:h-6 sm:w-6 text-primary" />
                       </div>
                       <div>
-                        <h4 className="font-bold text-lg">{option.label}</h4>
-                        <p className="text-2xl font-bold gradient-text">
+                        <h4 className="font-bold text-xs sm:text-lg">
+                          {option.label}
+                        </h4>
+                        <p className="text-lg sm:text-2xl font-bold gradient-text">
                           {option.value} minutes
                         </p>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-[10px] sm:text-sm text-muted-foreground">
                           {option.description}
                         </p>
                       </div>
@@ -860,30 +864,30 @@ export default function StartInterviewPage() {
             </div>
 
             {/* Job Description Input */}
-            <div className="space-y-4 animate-slide-in stagger-5">
-              <div className="text-center space-y-2">
-                <h3 className="text-2xl font-bold gradient-text flex items-center justify-center gap-2">
-                  <Briefcase className="h-6 w-6 text-primary" />
+            <div className="space-y-2 sm:space-y-4 animate-slide-in stagger-5">
+              <div className="text-center space-y-1 sm:space-y-2">
+                <h3 className="text-lg sm:text-2xl font-bold gradient-text flex items-center justify-center gap-2">
+                  <Briefcase className="h-4 w-4 sm:h-6 sm:w-6 text-primary" />
                   Targeted Job Description
                 </h3>
-                <p className="text-muted-foreground">
+                <p className="text-xs sm:text-sm text-muted-foreground">
                   Optional: Paste a job description for more relevant questions
                 </p>
               </div>
 
               <Card className="relative overflow-hidden border border-primary/20 bg-gradient-to-br from-background/50 to-primary/5 backdrop-blur-sm">
-                <CardContent className="p-6">
+                <CardContent className="p-2 sm:p-6">
                   <Textarea
                     id="jobDescriptionInput"
                     placeholder="Paste the job description here to get more aligned questions..."
                     value={jobDescriptionInput}
                     onChange={(e) => setJobDescriptionInput(e.target.value)}
-                    rows={6}
-                    className="text-sm bg-background/50 backdrop-blur-sm border-primary/20 focus:border-primary/40 transition-colors resize-none"
+                    rows={3}
+                    className="text-xs sm:text-sm bg-background/50 backdrop-blur-sm border-primary/20 focus:border-primary/40 transition-colors resize-none"
                     disabled={isStartingSession || isLoadingState}
                   />
-                  <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-                    <Sparkles className="h-3 w-3" />
+                  <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 sm:mt-2 flex items-center gap-1">
+                    <Sparkles className="h-2 w-2 sm:h-3 sm:w-3" />
                     Providing a job description helps generate highly relevant
                     questions.
                   </p>
@@ -892,38 +896,38 @@ export default function StartInterviewPage() {
             </div>
 
             {/* Interview Instructions */}
-            <Alert className="animate-slide-in stagger-6 border-green-300/50 backdrop-blur-sm">
-              <Info className="h-5 w-5 text-green-600" />
-              <AlertTitle className="text-lg font-bold text-green-600">
+            <Alert className="animate-slide-in stagger-6 border-green-300/50 backdrop-blur-sm p-2 sm:p-4">
+              <Info className="h-3 w-3 sm:h-5 sm:w-5 text-green-600" />
+              <AlertTitle className="text-sm sm:text-lg font-bold text-green-600">
                 Interview Instructions
               </AlertTitle>
-              <AlertDescription className="text-base text-green-600">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                  <ul className="space-y-2 text-sm">
-                    <li className="flex items-start gap-2">
-                      <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+              <AlertDescription className="text-xs sm:text-base text-green-600">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-1 sm:gap-4 mt-1 sm:mt-4">
+                  <ul className="space-y-1 sm:space-y-2 text-[10px] sm:text-sm">
+                    <li className="flex items-start gap-1 sm:gap-2">
+                      <CheckCircle className="h-2 w-2 sm:h-4 sm:w-4 text-green-500 mt-0.5 flex-shrink-0" />
                       Ensure quiet environment with stable internet
                     </li>
-                    <li className="flex items-start gap-2">
-                      <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                    <li className="flex items-start gap-1 sm:gap-2">
+                      <CheckCircle className="h-2 w-2 sm:h-4 sm:w-4 text-green-500 mt-0.5 flex-shrink-0" />
                       Interview will be recorded for feedback purposes
                     </li>
-                    <li className="flex items-start gap-2">
-                      <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                    <li className="flex items-start gap-1 sm:gap-2">
+                      <CheckCircle className="h-2 w-2 sm:h-4 sm:w-4 text-green-500 mt-0.5 flex-shrink-0" />
                       Technical roles include oral + written sections
                     </li>
                   </ul>
-                  <ul className="space-y-2 text-sm">
-                    <li className="flex items-start gap-2">
-                      <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                  <ul className="space-y-1 sm:space-y-2 text-[10px] sm:text-sm">
+                    <li className="flex items-start gap-1 sm:gap-2">
+                      <CheckCircle className="h-2 w-2 sm:h-4 sm:w-4 text-green-500 mt-0.5 flex-shrink-0" />
                       Speak clearly for accurate transcription
                     </li>
-                    <li className="flex items-start gap-2">
-                      <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                    <li className="flex items-start gap-1 sm:gap-2">
+                      <CheckCircle className="h-2 w-2 sm:h-4 sm:w-4 text-green-500 mt-0.5 flex-shrink-0" />
                       Keep face visible and stay engaged
                     </li>
-                    <li className="flex items-start gap-2">
-                      <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                    <li className="flex items-start gap-1 sm:gap-2">
+                      <CheckCircle className="h-2 w-2 sm:h-4 sm:w-4 text-green-500 mt-0.5 flex-shrink-0" />
                       Avoid switching tabs during session
                     </li>
                   </ul>
@@ -932,45 +936,45 @@ export default function StartInterviewPage() {
             </Alert>
 
             {/* Permissions & Agreements */}
-            <div className="space-y-6 animate-slide-in stagger-7">
-              <div className="text-center space-y-2">
-                <h3 className="text-2xl font-bold gradient-text flex items-center justify-center gap-2">
-                  <Shield className="h-6 w-6 text-primary" />
+            <div className="space-y-3 sm:space-y-6 animate-slide-in stagger-7">
+              <div className="text-center space-y-1 sm:space-y-2">
+                <h3 className="text-lg sm:text-2xl font-bold gradient-text flex items-center justify-center gap-2">
+                  <Shield className="h-4 w-4 sm:h-6 sm:w-6 text-primary" />
                   Permissions & Agreements
                 </h3>
-                <p className="text-muted-foreground">
+                <p className="text-xs sm:text-sm text-muted-foreground">
                   Required for a secure and effective interview experience
                 </p>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-2 sm:space-y-4">
                 {/* Camera & Microphone Permissions */}
                 <Card
                   className={`permission-card border-2 transition-all duration-300 ${
                     permissionsGranted ? "granted" : "denied"
                   }`}
                 >
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
+                  <CardContent className="p-2 sm:p-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0">
+                      <div className="flex items-center space-x-2 sm:space-x-4">
                         <div
-                          className={`feature-icon ${
+                          className={`feature-icon w-6 h-6 sm:w-12 sm:h-12 ${
                             permissionsGranted
                               ? "bg-gradient-to-br from-green-500/20 to-emerald-500/20 border-green-500/30"
                               : "bg-gradient-to-br from-red-500/20 to-pink-500/20 border-red-500/30"
                           }`}
                         >
                           {permissionsGranted ? (
-                            <CheckCircle className="h-6 w-6 text-green-500" />
+                            <CheckCircle className="h-3 w-3 sm:h-6 sm:w-6 text-green-500" />
                           ) : (
-                            <Video className="h-6 w-6 text-red-500" />
+                            <Video className="h-3 w-3 sm:h-6 sm:w-6 text-red-500" />
                           )}
                         </div>
                         <div>
-                          <h4 className="font-semibold text-lg">
+                          <h4 className="font-semibold text-xs sm:text-lg">
                             Camera & Microphone Access
                           </h4>
-                          <p className="text-sm text-muted-foreground">
+                          <p className="text-[10px] sm:text-sm text-muted-foreground">
                             Required for video recording and oral answers
                           </p>
                         </div>
@@ -980,16 +984,18 @@ export default function StartInterviewPage() {
                           variant="outline"
                           onClick={requestPermissions}
                           disabled={isStartingSession || isLoadingState}
-                          className="hover:scale-105 transition-transform"
+                          className="hover:scale-105 transition-transform text-xs sm:text-sm h-8 sm:h-10"
                         >
-                          <Camera className="h-4 w-4 mr-2" />
+                          <Camera className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                           Grant Access
                         </Button>
                       )}
                       {permissionsGranted && (
-                        <div className="flex items-center gap-2 text-green-600">
-                          <CheckCircle className="h-5 w-5" />
-                          <span className="font-medium">Granted</span>
+                        <div className="flex items-center gap-1 sm:gap-2 text-green-600">
+                          <CheckCircle className="h-3 w-3 sm:h-5 sm:w-5" />
+                          <span className="font-medium text-xs sm:text-base">
+                            Granted
+                          </span>
                         </div>
                       )}
                     </div>
@@ -998,8 +1004,8 @@ export default function StartInterviewPage() {
 
                 {/* Monitoring Agreement */}
                 <Card className="border-2 border-border hover:border-primary/50 transition-colors">
-                  <CardContent className="p-6">
-                    <div className="flex items-start space-x-4">
+                  <CardContent className="p-2 sm:p-6">
+                    <div className="flex items-start space-x-2 sm:space-x-4">
                       <Checkbox
                         id="terms"
                         checked={agreedToMonitoring}
@@ -1009,15 +1015,15 @@ export default function StartInterviewPage() {
                         disabled={isStartingSession || isLoadingState}
                         className="mt-1"
                       />
-                      <div className="space-y-2">
+                      <div className="space-y-1 sm:space-y-2">
                         <Label
                           htmlFor="terms"
-                          className="text-lg font-semibold cursor-pointer"
+                          className="text-xs sm:text-lg font-semibold cursor-pointer"
                         >
                           I agree to the interview monitoring terms and
                           conditions
                         </Label>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-[10px] sm:text-sm text-muted-foreground">
                           This includes recording for quality assurance,
                           feedback generation, and proctoring. Your data is
                           handled securely according to our privacy policy.
@@ -1035,11 +1041,11 @@ export default function StartInterviewPage() {
                 variant="destructive"
                 className="animate-slide-in stagger-8 border-red-300/50 bg-red-50/30 backdrop-blur-sm"
               >
-                <AlertTriangle className="h-5 w-5" />
-                <AlertTitle className="text-lg font-bold">
+                <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5" />
+                <AlertTitle className="text-base sm:text-lg font-bold">
                   Free Interview Limit Reached
                 </AlertTitle>
-                <AlertDescription className="text-base">
+                <AlertDescription className="text-xs sm:text-base">
                   You have used all {userProfile.interviewsTaken || 0} of your{" "}
                   {FREE_INTERVIEW_LIMIT} free interviews. Please{" "}
                   <Button
@@ -1055,10 +1061,10 @@ export default function StartInterviewPage() {
             )}
           </CardContent>
 
-          <CardFooter className="relative z-10 p-8">
+          <CardFooter className="relative z-10 p-3 sm:p-8">
             <Button
-              size="lg"
-              className={`w-full h-14 text-lg font-semibold start-button ${
+              size="default"
+              className={`w-full h-9 sm:h-14 text-sm sm:text-lg font-semibold start-button ${
                 isButtonDisabled ? "opacity-60" : ""
               } transition-all duration-300`}
               onClick={handleStartInterview}
@@ -1068,21 +1074,21 @@ export default function StartInterviewPage() {
               }`}
             >
               {(isStartingSession || isLoadingState) && (
-                <Loader2 className="mr-3 h-5 w-5 animate-spin" />
+                <Loader2 className="mr-1 sm:mr-3 h-3 w-3 sm:h-5 sm:w-5 animate-spin" />
               )}
               {isLoadingState ? (
                 <>
-                  <Brain className="mr-3 h-5 w-5" />
+                  <Brain className="mr-1 sm:mr-3 h-3 w-3 sm:h-5 sm:w-5" />
                   Loading Profile...
                 </>
               ) : isStartingSession ? (
                 <>
-                  <Sparkles className="mr-3 h-5 w-5" />
+                  <Sparkles className="mr-1 sm:mr-3 h-3 w-3 sm:h-5 sm:w-5" />
                   Starting Session...
                 </>
               ) : (
                 <>
-                  <Play className="mr-3 h-5 w-5" />
+                  <Play className="mr-1 sm:mr-3 h-3 w-3 sm:h-5 sm:w-5" />
                   Start {duration}-Minute Interview
                 </>
               )}
