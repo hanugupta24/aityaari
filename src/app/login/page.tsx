@@ -252,6 +252,7 @@ export default function LoginPage() {
         title: "Login Successful",
         description: "Redirecting to dashboard...",
       });
+      window.location.reload();
     } catch (error: any) {
       console.error("Login error:", error);
       toast({

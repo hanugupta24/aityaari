@@ -59,8 +59,8 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "EDIT_STUDY_MATERIALS",
     "UPLOAD_STUDY_MATERIALS",
     "APPROVE_STUDY_MATERIALS",
+    "VIEW_FINANCIALS",
     "SYSTEM_SETTINGS",
-    "MANAGE_CONTENT",
   ],
   CTO: [
     "VIEW_ADMIN_DASHBOARD",
@@ -68,6 +68,8 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "UPLOAD_STUDY_MATERIALS",
     "EDIT_STUDY_MATERIALS",
     "APPROVE_STUDY_MATERIALS",
+    "MANAGE_CONTENT",
+    "VIEW_FINANCIALS",
     "SYSTEM_SETTINGS",
   ],
   CBO: [
@@ -84,7 +86,13 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "EDIT_STUDY_MATERIALS",
     "MANAGE_CONTENT",
   ],
-  CFO: ["VIEW_ADMIN_DASHBOARD", "VIEW_ANALYTICS", "VIEW_FINANCIALS"],
+  CFO: [
+    "VIEW_ADMIN_DASHBOARD",
+    "VIEW_ANALYTICS",
+    "VIEW_FINANCIALS",
+    "UPLOAD_STUDY_MATERIALS",
+    "EDIT_STUDY_MATERIALS",
+  ],
   MANAGER: [
     "VIEW_ADMIN_DASHBOARD",
     "UPLOAD_STUDY_MATERIALS",

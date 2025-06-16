@@ -183,6 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsAdmin(false);
     setLoading(false);
     setInitialLoading(false);
+    localStorage.removeItem("ui-theme");
     console.log("AuthContext: SignOut complete.");
   };
 
