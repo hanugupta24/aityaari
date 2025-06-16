@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -11,14 +11,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import {
   BookOpen,
   Search,
   Filter,
-  Download,
-  Play,
   Clock,
   Star,
   Users,
@@ -28,163 +26,43 @@ import {
   Headphones,
   Code,
   Brain,
-  Target,
   Award,
   ChevronRight,
   Bookmark,
-  Share2,
   Eye,
-  Calendar,
   Tag,
   Zap,
-  Globe,
-  CheckCircle2,
   ArrowRight,
   Sparkles,
-  GraduationCap,
   Library,
-  PlusCircle,
-  Heart,
-  MessageSquare,
   BarChart3,
+  Upload,
+  RefreshCw,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "../../../contexts/AuthContext";
+import { usePermissions } from "@/hooks/usePermissions";
+import { db } from "@/lib/firebase";
+import {
+  collection,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  updateDoc,
+  doc,
+} from "firebase/firestore";
+import type { StudyMaterial } from "@/types";
+import { RoleBadge } from "../../../components/role-badge";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useToast } from "@/hooks/use-toast";
 
-interface StudyMaterial {
-  id: string;
-  title: string;
-  description: string;
-  type: "video" | "article" | "course" | "quiz" | "podcast" | "code";
-  category: string;
-  difficulty: "beginner" | "intermediate" | "advanced";
-  duration: string;
-  rating: number;
-  views: number;
-  author: string;
-  thumbnail: string;
-  tags: string[];
-  isBookmarked: boolean;
-  progress?: number;
-  isPremium?: boolean;
-}
-
-const studyMaterials: StudyMaterial[] = [
-  {
-    id: "1",
-    title: "Complete React.js Fundamentals",
-    description:
-      "Master the fundamentals of React.js with hands-on projects and real-world examples. Learn components, hooks, state management, and more.",
-    type: "course",
-    category: "Frontend Development",
-    difficulty: "beginner",
-    duration: "8h 30m",
-    rating: 4.8,
-    views: 15420,
-    author: "Sarah Chen",
-    thumbnail:
-      "https://images.pexels.com/photos/11035380/pexels-photo-11035380.jpeg?auto=compress&cs=tinysrgb&w=400",
-    tags: ["React", "JavaScript", "Frontend", "Components"],
-    isBookmarked: true,
-    progress: 65,
-  },
-  {
-    id: "2",
-    title: "Advanced Node.js Performance Optimization",
-    description:
-      "Deep dive into Node.js performance optimization techniques, memory management, and scalability patterns for production applications.",
-    type: "video",
-    category: "Backend Development",
-    difficulty: "advanced",
-    duration: "2h 15m",
-    rating: 4.9,
-    views: 8750,
-    author: "Michael Rodriguez",
-    thumbnail:
-      "https://images.pexels.com/photos/1181671/pexels-photo-1181671.jpeg?auto=compress&cs=tinysrgb&w=400",
-    tags: ["Node.js", "Performance", "Backend", "Optimization"],
-    isBookmarked: false,
-    isPremium: true,
-  },
-  {
-    id: "3",
-    title: "System Design Interview Preparation",
-    description:
-      "Comprehensive guide to system design interviews with real examples from FAANG companies. Learn scalability, databases, and architecture patterns.",
-    type: "article",
-    category: "System Design",
-    difficulty: "intermediate",
-    duration: "45m read",
-    rating: 4.7,
-    views: 23100,
-    author: "Alex Thompson",
-    thumbnail:
-      "https://images.pexels.com/photos/3861969/pexels-photo-3861969.jpeg?auto=compress&cs=tinysrgb&w=400",
-    tags: ["System Design", "Interview", "Architecture", "Scalability"],
-    isBookmarked: true,
-  },
-  {
-    id: "4",
-    title: "Machine Learning Algorithms Quiz",
-    description:
-      "Test your knowledge of machine learning algorithms with this comprehensive quiz covering supervised, unsupervised, and reinforcement learning.",
-    type: "quiz",
-    category: "Machine Learning",
-    difficulty: "intermediate",
-    duration: "30m",
-    rating: 4.6,
-    views: 12300,
-    author: "Dr. Emily Watson",
-    thumbnail:
-      "https://images.pexels.com/photos/8386440/pexels-photo-8386440.jpeg?auto=compress&cs=tinysrgb&w=400",
-    tags: ["ML", "Algorithms", "Quiz", "AI"],
-    isBookmarked: false,
-  },
-  {
-    id: "5",
-    title: "Tech Career Growth Podcast",
-    description:
-      "Weekly discussions with industry leaders about career growth, technical skills, and navigating the tech industry landscape.",
-    type: "podcast",
-    category: "Career Development",
-    difficulty: "beginner",
-    duration: "45m",
-    rating: 4.5,
-    views: 18900,
-    author: "Tech Leaders Network",
-    thumbnail:
-      "https://images.pexels.com/photos/7688336/pexels-photo-7688336.jpeg?auto=compress&cs=tinysrgb&w=400",
-    tags: ["Career", "Podcast", "Leadership", "Growth"],
-    isBookmarked: true,
-  },
-  {
-    id: "6",
-    title: "Python Data Structures Implementation",
-    description:
-      "Hands-on coding exercises for implementing common data structures in Python. Includes arrays, linked lists, trees, and graphs.",
-    type: "code",
-    category: "Data Structures",
-    difficulty: "intermediate",
-    duration: "3h 20m",
-    rating: 4.8,
-    views: 9800,
-    author: "CodeMaster Pro",
-    thumbnail:
-      "https://images.pexels.com/photos/1181677/pexels-photo-1181677.jpeg?auto=compress&cs=tinysrgb&w=400",
-    tags: ["Python", "Data Structures", "Coding", "Algorithms"],
-    isBookmarked: false,
-  },
-];
-
-const categories = [
-  "All Categories",
-  "Frontend Development",
-  "Backend Development",
-  "System Design",
-  "Machine Learning",
-  "Career Development",
-  "Data Structures",
-];
-
-const difficulties = ["All Levels", "beginner", "intermediate", "advanced"];
+const difficultyColors = {
+  beginner: "bg-green-100 text-green-800 border-green-200",
+  intermediate: "bg-yellow-100 text-yellow-800 border-yellow-200",
+  advanced: "bg-red-100 text-red-800 border-red-200",
+};
 
 const typeIcons = {
   video: Video,
@@ -195,27 +73,97 @@ const typeIcons = {
   code: Code,
 };
 
-const difficultyColors = {
-  beginner: "bg-green-100 text-green-800 border-green-200",
-  intermediate: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  advanced: "bg-red-100 text-red-800 border-red-200",
-};
-
 export default function StudyMaterialsPage() {
+  const router = useRouter();
+  const { userProfile } = useAuth();
+  const { canUploadStudyMaterials } = usePermissions();
+  const isMobile = useIsMobile();
+  const { toast } = useToast();
+
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All Categories");
   const [selectedDifficulty, setSelectedDifficulty] = useState("All Levels");
   const [selectedType, setSelectedType] = useState("all");
-  const [filteredMaterials, setFilteredMaterials] = useState(studyMaterials);
+  const [studyMaterials, setStudyMaterials] = useState<StudyMaterial[]>([]);
+  const [filteredMaterials, setFilteredMaterials] = useState<StudyMaterial[]>(
+    []
+  );
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [categories, setCategories] = useState<string[]>(["All Categories"]);
+  const [bookmarkedMaterials, setBookmarkedMaterials] = useState<
+    Record<string, boolean>
+  >({});
 
+  // Real-time listener for study materials
   useEffect(() => {
-    // Simulate loading
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, []);
+    setIsLoading(true);
+
+    const materialsRef = collection(db, "study-materials");
+
+    // Create query to get approved materials
+    const materialsQuery = query(
+      materialsRef,
+      where("approved", "==", true),
+      orderBy("createdAt", "desc")
+    );
+
+    // Set up real-time listener
+    const unsubscribe = onSnapshot(
+      materialsQuery,
+      (snapshot) => {
+        const materials: StudyMaterial[] = [];
+        const uniqueCategories = new Set<string>(["All Categories"]);
+
+        snapshot.forEach((doc) => {
+          const material = { id: doc.id, ...doc.data() } as StudyMaterial;
+          materials.push(material);
+
+          // Collect unique categories
+          if (material.category) {
+            uniqueCategories.add(material.category);
+          }
+
+          // Initialize bookmarks
+          if (material.isBookmarked) {
+            setBookmarkedMaterials((prev) => ({
+              ...prev,
+              [material.id]: true,
+            }));
+          }
+        });
+
+        setStudyMaterials(materials);
+        setFilteredMaterials(materials);
+        setCategories(Array.from(uniqueCategories));
+        setIsLoading(false);
+        setIsRefreshing(false);
+
+        // Show toast when new materials are added (after initial load)
+        if (!isLoading && materials.length > studyMaterials.length) {
+          toast({
+            title: "New materials available!",
+            description: `${
+              materials.length - studyMaterials.length
+            } new study materials have been added.`,
+          });
+        }
+      },
+      (error) => {
+        console.error("Error fetching study materials:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load study materials. Please try again.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
+    );
+
+    // Cleanup listener on unmount
+    return () => unsubscribe();
+  }, [toast]);
 
   useEffect(() => {
     let filtered = studyMaterials;
@@ -250,16 +198,93 @@ export default function StudyMaterialsPage() {
     }
 
     setFilteredMaterials(filtered);
-  }, [searchQuery, selectedCategory, selectedDifficulty, selectedType]);
+  }, [
+    searchQuery,
+    selectedCategory,
+    selectedDifficulty,
+    selectedType,
+    studyMaterials,
+  ]);
 
-  const handleBookmark = (id: string) => {
-    setFilteredMaterials((prev) =>
-      prev.map((material) =>
-        material.id === id
-          ? { ...material, isBookmarked: !material.isBookmarked }
-          : material
-      )
-    );
+  const handleBookmark = async (id: string) => {
+    try {
+      const newBookmarkState = !bookmarkedMaterials[id];
+
+      // Update local state immediately for better UX
+      setBookmarkedMaterials((prev) => ({
+        ...prev,
+        [id]: newBookmarkState,
+      }));
+
+      setFilteredMaterials((prev) =>
+        prev.map((material) =>
+          material.id === id
+            ? { ...material, isBookmarked: newBookmarkState }
+            : material
+        )
+      );
+
+      // Update in Firebase
+      await updateDoc(doc(db, "study-materials", id), {
+        isBookmarked: newBookmarkState,
+        updatedAt: new Date().toISOString(),
+      });
+
+      toast({
+        title: newBookmarkState ? "Bookmarked" : "Bookmark removed",
+        description: newBookmarkState
+          ? "Material added to your bookmarks"
+          : "Material removed from your bookmarks",
+      });
+    } catch (error) {
+      console.error("Error updating bookmark:", error);
+
+      // Revert local state on error
+      setBookmarkedMaterials((prev) => ({
+        ...prev,
+        [id]: !prev[id],
+      }));
+
+      setFilteredMaterials((prev) =>
+        prev.map((material) =>
+          material.id === id
+            ? { ...material, isBookmarked: !material.isBookmarked }
+            : material
+        )
+      );
+
+      toast({
+        title: "Error",
+        description: "Failed to update bookmark. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleViewMaterial = async (material: StudyMaterial) => {
+    try {
+      // Increment view count
+      await updateDoc(doc(db, "study-materials", material.id), {
+        views: (material.views || 0) + 1,
+        updatedAt: new Date().toISOString(),
+      });
+
+      // Navigate to material detail page
+      router.push(`/studyMaterials/${material.id}`);
+    } catch (error) {
+      console.error("Error updating view count:", error);
+      // Still navigate even if view count update fails
+      router.push(`/studyMaterials/${material.id}`);
+    }
+  };
+
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    // The real-time listener will automatically update the data
+    toast({
+      title: "Refreshing",
+      description: "Loading latest study materials...",
+    });
   };
 
   if (isLoading) {
@@ -279,7 +304,7 @@ export default function StudyMaterialsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden">
+    <div className="min-h-screen bg-background relative overflow-hidden max-w-full overflow-x-hidden">
       {/* Animated Background Elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary/5 rounded-full blur-3xl animate-pulse"></div>
@@ -293,9 +318,9 @@ export default function StudyMaterialsPage() {
         <div className="absolute bottom-20 right-20 w-4 h-4 bg-accent/15 rounded-full animate-bounce animation-delay-800"></div>
       </div>
 
-      <div className="relative z-10 max-w-7xl mx-auto py-8 px-4 space-y-8">
+      <div className="relative z-10 max-w-7xl mx-auto py-8 px-0 space-y-8">
         {/* Header Section */}
-        <div className="text-center space-y-6 animate-slideUpFadeIn">
+        <div className="text-center space-y-0 animate-slideUpFadeIn">
           <div className="relative inline-block">
             <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl animate-pulse"></div>
             <div className="relative w-20 h-20 bg-gradient-to-br from-primary to-accent rounded-full flex items-center justify-center mx-auto shadow-2xl">
@@ -310,43 +335,89 @@ export default function StudyMaterialsPage() {
               Discover curated learning resources to accelerate your tech
               career. From beginner tutorials to advanced system design.
             </p>
+
+            <div className="flex items-center justify-center gap-4">
+              {canUploadStudyMaterials && (
+                <Button
+                  onClick={() => router.push("/studyMaterials/upload")}
+                  className="bg-primary hover:bg-primary/90"
+                >
+                  <Upload className="mr-2 h-4 w-4" />
+                  Upload New Material
+                </Button>
+              )}
+
+              <Button
+                onClick={handleRefresh}
+                variant="outline"
+                disabled={isRefreshing}
+                className="border-primary/20 hover:bg-primary/10"
+              >
+                <RefreshCw
+                  className={`mr-2 h-4 w-4 ${
+                    isRefreshing ? "animate-spin" : ""
+                  }`}
+                />
+                {isRefreshing ? "Refreshing..." : "Refresh"}
+              </Button>
+            </div>
           </div>
 
           {/* Stats Cards */}
-          {/* <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto mt-8">
-            {[
-              { icon: BookOpen, label: "Courses", value: "150+" },
-              { icon: Users, label: "Students", value: "50K+" },
-              { icon: Award, label: "Certificates", value: "25+" },
-              { icon: Star, label: "Rating", value: "4.8" },
-            ].map((stat, index) => (
-              <Card
-                key={stat.label}
-                className="bg-card/50 backdrop-blur-sm border-border/50 hover:bg-card/70 transition-all duration-300 animate-slideUpFadeIn"
-                style={{ animationDelay: `${index * 100}ms` }}
-              >
-                <CardContent className="p-4 text-center">
-                  <stat.icon className="h-8 w-8 text-primary mx-auto mb-2" />
-                  <div className="text-2xl font-bold text-foreground">
-                    {stat.value}
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    {stat.label}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div> */}
-        </div>
-
-        <div className="text-3xl flex justify-center items-center h-screen text-justify">
-          Coming soon...
+          <div className="overflow-x-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 w-full max-w-4xl mx-auto mt-8">
+              {[
+                {
+                  icon: BookOpen,
+                  label: "Total Materials",
+                  value: `${studyMaterials.length}`,
+                },
+                {
+                  icon: Video,
+                  label: "Videos",
+                  value: `${
+                    studyMaterials.filter((m) => m.type === "video").length
+                  }`,
+                },
+                {
+                  icon: FileText,
+                  label: "Articles",
+                  value: `${
+                    studyMaterials.filter((m) => m.type === "article").length
+                  }`,
+                },
+                {
+                  icon: Brain,
+                  label: "Courses",
+                  value: `${
+                    studyMaterials.filter((m) => m.type === "course").length
+                  }`,
+                },
+              ].map((stat, index) => (
+                <Card
+                  key={stat.label}
+                  className="bg-card/50 backdrop-blur-sm border-border/50 hover:bg-card/70 transition-all duration-300 animate-slideUpFadeIn"
+                  style={{ animationDelay: `${index * 100}ms` }}
+                >
+                  <CardContent className="p-4 text-center">
+                    <stat.icon className="h-8 w-8 text-primary mx-auto mb-2" />
+                    <div className="text-2xl font-bold text-foreground">
+                      {stat.value}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {stat.label}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Search and Filters */}
-        <Card className="bg-card/80 backdrop-blur-xl border-border/50 shadow-2xl animate-slideUpFadeIn animation-delay-200 hidden h-0">
+        <Card className="bg-card/80 backdrop-blur-xl border-border/50 shadow-2xl animate-slideUpFadeIn animation-delay-200">
           <CardContent className="p-6">
-            <div className="space-y-6">
+            <div className="space-y-0">
               {/* Search Bar */}
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground" />
@@ -359,62 +430,64 @@ export default function StudyMaterialsPage() {
               </div>
 
               {/* Filter Tabs */}
-              <Tabs
-                value={selectedType}
-                onValueChange={setSelectedType}
-                className="w-full"
-              >
-                <TabsList className="grid w-full grid-cols-7 bg-muted/50">
-                  <TabsTrigger
-                    value="all"
-                    className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-                  >
-                    All
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="course"
-                    className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-                  >
-                    <BookOpen className="h-4 w-4 mr-1" />
-                    Courses
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="video"
-                    className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-                  >
-                    <Video className="h-4 w-4 mr-1" />
-                    Videos
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="article"
-                    className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-                  >
-                    <FileText className="h-4 w-4 mr-1" />
-                    Articles
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="quiz"
-                    className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-                  >
-                    <Brain className="h-4 w-4 mr-1" />
-                    Quizzes
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="podcast"
-                    className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-                  >
-                    <Headphones className="h-4 w-4 mr-1" />
-                    Podcasts
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="code"
-                    className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-                  >
-                    <Code className="h-4 w-4 mr-1" />
-                    Code
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
+              <div className="overflow-x-auto">
+                <Tabs
+                  value={selectedType}
+                  onValueChange={setSelectedType}
+                  className="w-full"
+                >
+                  <TabsList className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2 w-full bg-muted/50 overflow-x-auto">
+                    <TabsTrigger
+                      value="all"
+                      className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                    >
+                      All
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="course"
+                      className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                    >
+                      <BookOpen className="h-4 w-4 mr-1" />
+                      Courses
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="video"
+                      className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                    >
+                      <Video className="h-4 w-4 mr-1" />
+                      Videos
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="article"
+                      className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                    >
+                      <FileText className="h-4 w-4 mr-1" />
+                      Articles
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="quiz"
+                      className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                    >
+                      <Brain className="h-4 w-4 mr-1" />
+                      Quizzes
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="podcast"
+                      className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                    >
+                      <Headphones className="h-4 w-4 mr-1" />
+                      Podcasts
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="code"
+                      className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                    >
+                      <Code className="h-4 w-4 mr-1" />
+                      Code
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
 
               {/* Category and Difficulty Filters */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -443,14 +516,16 @@ export default function StudyMaterialsPage() {
                     onChange={(e) => setSelectedDifficulty(e.target.value)}
                     className="w-full h-12 px-4 bg-background border border-border rounded-md focus:border-primary/50 focus:ring-primary/20 text-foreground"
                   >
-                    {difficulties.map((difficulty) => (
-                      <option key={difficulty} value={difficulty}>
-                        {difficulty === "All Levels"
-                          ? difficulty
-                          : difficulty.charAt(0).toUpperCase() +
-                            difficulty.slice(1)}
-                      </option>
-                    ))}
+                    {["All Levels", "beginner", "intermediate", "advanced"].map(
+                      (difficulty) => (
+                        <option key={difficulty} value={difficulty}>
+                          {difficulty === "All Levels"
+                            ? difficulty
+                            : difficulty.charAt(0).toUpperCase() +
+                              difficulty.slice(1)}
+                        </option>
+                      )
+                    )}
                   </select>
                 </div>
               </div>
@@ -459,10 +534,16 @@ export default function StudyMaterialsPage() {
         </Card>
 
         {/* Results Summary */}
-        {/* <div className="flex items-center justify-between animate-fadeIn animation-delay-400">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-fadeIn animation-delay-400">
           <div className="flex items-center gap-2 text-muted-foreground">
             <Filter className="h-5 w-5" />
             <span>Showing {filteredMaterials.length} results</span>
+            {isRefreshing && (
+              <div className="flex items-center gap-2 text-primary">
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                <span className="text-sm">Updating...</span>
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -474,10 +555,10 @@ export default function StudyMaterialsPage() {
               Sort by Popular
             </Button>
           </div>
-        </div> */}
+        </div>
 
         {/* Study Materials Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 hidden">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredMaterials.map((material, index) => {
             const TypeIcon = typeIcons[material.type];
             return (
@@ -485,10 +566,11 @@ export default function StudyMaterialsPage() {
                 key={material.id}
                 className="group bg-card/80 backdrop-blur-sm border-border/50 hover:bg-card/90 hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 cursor-pointer animate-slideUpFadeIn"
                 style={{ animationDelay: `${index * 100}ms` }}
+                onClick={() => handleViewMaterial(material)}
               >
                 <div className="relative overflow-hidden rounded-t-lg">
                   <img
-                    src={material.thumbnail}
+                    src={material.thumbnail || "/placeholder.svg"}
                     alt={material.title}
                     className="w-full h-48 object-cover group-hover:scale-110 transition-transform duration-500"
                   />
@@ -513,6 +595,16 @@ export default function StudyMaterialsPage() {
                     </div>
                   )}
 
+                  {/* Author Role Badge */}
+                  {material.authorRole && (
+                    <div className="absolute top-12 left-3">
+                      <RoleBadge
+                        role={material.authorRole}
+                        className="text-xs"
+                      />
+                    </div>
+                  )}
+
                   {/* Bookmark Button */}
                   <Button
                     variant="ghost"
@@ -525,7 +617,7 @@ export default function StudyMaterialsPage() {
                   >
                     <Bookmark
                       className={`h-4 w-4 ${
-                        material.isBookmarked ? "fill-current" : ""
+                        bookmarkedMaterials[material.id] ? "fill-current" : ""
                       }`}
                     />
                   </Button>
@@ -549,7 +641,7 @@ export default function StudyMaterialsPage() {
                       </Badge>
                       <div className="flex items-center gap-1 text-sm text-muted-foreground">
                         <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                        {material.rating}
+                        {material.rating || "New"}
                       </div>
                     </div>
 
@@ -611,11 +703,15 @@ export default function StudyMaterialsPage() {
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                       <div className="flex items-center gap-1">
                         <Eye className="h-4 w-4" />
-                        {material.views.toLocaleString()}
+                        {material.views?.toLocaleString() || 0}
                       </div>
                       <Button
                         size="sm"
                         className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleViewMaterial(material);
+                        }}
                       >
                         Start Learning
                         <ArrowRight className="h-4 w-4 ml-1" />
@@ -629,7 +725,7 @@ export default function StudyMaterialsPage() {
         </div>
 
         {/* Empty State */}
-        {/* {filteredMaterials.length === 0 && (
+        {filteredMaterials.length === 0 && (
           <div className="text-center py-16 animate-fadeIn">
             <div className="w-24 h-24 bg-muted/20 rounded-full flex items-center justify-center mx-auto mb-6">
               <Search className="h-12 w-12 text-muted-foreground/50" />
@@ -654,10 +750,10 @@ export default function StudyMaterialsPage() {
               Clear Filters
             </Button>
           </div>
-        )} */}
+        )}
 
         {/* Featured Section */}
-        {/* <Card className="bg-gradient-to-r from-primary/5 via-accent/5 to-primary/5 border-primary/20 animate-slideUpFadeIn animation-delay-600">
+        <Card className="bg-gradient-to-r from-primary/5 via-accent/5 to-primary/5 border-primary/20 animate-slideUpFadeIn animation-delay-600">
           <CardHeader className="text-center pb-6">
             <CardTitle className="text-2xl font-bold flex items-center justify-center gap-3">
               <Sparkles className="h-6 w-6 text-primary" />
@@ -668,64 +764,94 @@ export default function StudyMaterialsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {[
-                {
-                  title: "Full-Stack Developer",
-                  description: "Complete journey from frontend to backend",
-                  courses: 12,
-                  duration: "6 months",
-                  icon: Code,
-                },
-                {
-                  title: "System Design Master",
-                  description: "Design scalable systems like a pro",
-                  courses: 8,
-                  duration: "3 months",
-                  icon: BarChart3,
-                },
-                {
-                  title: "Career Growth Track",
-                  description: "Leadership and soft skills development",
-                  courses: 6,
-                  duration: "2 months",
-                  icon: TrendingUp,
-                },
-              ].map((path, index) => (
-                <Card
-                  key={path.title}
-                  className="bg-card/50 border-border/50 hover:bg-card/70 hover:shadow-lg transition-all duration-300 group cursor-pointer"
-                >
-                  <CardContent className="p-6 text-center space-y-4">
-                    <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto group-hover:bg-primary/20 transition-colors duration-300">
-                      <path.icon className="h-8 w-8 text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-foreground mb-2">
-                        {path.title}
-                      </h3>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        {path.description}
-                      </p>
-                      <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
-                        <span>{path.courses} courses</span>
-                        <span>•</span>
-                        <span>{path.duration}</span>
+            <div className="overflow-x-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 w-full">
+                {[
+                  {
+                    title: "Full-Stack Developer",
+                    description: "Complete journey from frontend to backend",
+                    courses: studyMaterials.filter((m) =>
+                      m.tags.some((tag) =>
+                        [
+                          "fullstack",
+                          "frontend",
+                          "backend",
+                          "react",
+                          "node",
+                        ].includes(tag.toLowerCase())
+                      )
+                    ).length,
+                    duration: "6 months",
+                    icon: Code,
+                  },
+                  {
+                    title: "System Design Master",
+                    description: "Design scalable systems like a pro",
+                    courses: studyMaterials.filter((m) =>
+                      m.tags.some((tag) =>
+                        [
+                          "system",
+                          "design",
+                          "architecture",
+                          "scalability",
+                        ].includes(tag.toLowerCase())
+                      )
+                    ).length,
+                    duration: "3 months",
+                    icon: BarChart3,
+                  },
+                  {
+                    title: "Career Growth Track",
+                    description: "Leadership and soft skills development",
+                    courses: studyMaterials.filter((m) =>
+                      m.tags.some((tag) =>
+                        [
+                          "leadership",
+                          "career",
+                          "management",
+                          "soft skills",
+                        ].includes(tag.toLowerCase())
+                      )
+                    ).length,
+                    duration: "2 months",
+                    icon: TrendingUp,
+                  },
+                ].map((path, index) => (
+                  <Card
+                    key={path.title}
+                    className="bg-card/50 border-border/50 hover:bg-card/70 hover:shadow-lg transition-all duration-300 group cursor-pointer"
+                  >
+                    <CardContent className="p-6 text-center space-y-4">
+                      <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto group-hover:bg-primary/20 transition-colors duration-300">
+                        <path.icon className="h-8 w-8 text-primary" />
                       </div>
-                    </div>
-                    <Button
-                      variant="outline"
-                      className="w-full border-primary/20 hover:bg-primary/10 hover:border-primary/40"
-                    >
-                      Start Path
-                      <ChevronRight className="h-4 w-4 ml-2" />
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
+                      <div>
+                        <h3 className="text-lg font-semibold text-foreground mb-2">
+                          {path.title}
+                        </h3>
+                        <p className="text-sm text-muted-foreground mb-4">
+                          {path.description}
+                        </p>
+                        <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
+                          <span>{path.courses} materials</span>
+                          <span>•</span>
+                          <span>{path.duration}</span>
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        className="w-full border-primary/20 hover:bg-primary/10 hover:border-primary/40"
+                      >
+                        Start Path
+                        <ChevronRight className="h-4 w-4 ml-2" />
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             </div>
           </CardContent>
-        </Card> */}
+        </Card>
       </div>
     </div>
   );

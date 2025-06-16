@@ -111,8 +111,13 @@ export default function ClientLayout({
   const { user, initialLoading, loading: authLoading } = useAuth();
   const router = useRouter();
   const logoPath =
-    pathname === "/interview/start"
-      ? ".././images/logo_solid.svg"
+    pathname.startsWith("/interview/") && pathname !== "/interview/"
+      ? "../images/logo_solid.svg"
+      : pathname.startsWith("/studyMaterials/") &&
+        pathname !== "/studyMaterials/"
+      ? "../images/logo_solid.svg"
+      : pathname.startsWith("/feedback/") && pathname !== "/feedback/"
+      ? "../images/logo_solid.svg"
       : "./images/logo_solid.svg";
 
   useEffect(() => {
@@ -252,7 +257,7 @@ export default function ClientLayout({
             </div>
           </header>
 
-          <main className="flex-1 p-6">{children}</main>
+          <main className="flex-1 p-3">{children}</main>
         </SidebarInset>
       </SidebarProvider>
     </>

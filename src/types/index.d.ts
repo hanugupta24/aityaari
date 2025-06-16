@@ -48,6 +48,7 @@ export interface UserProfile {
   subscriptionPlan?: "monthly" | "quarterly" | "yearly" | null;
   isAdmin?: boolean;
   updatedAt?: string;
+  roles?: Role[];
 }
 
 // This type represents the comprehensive structured data
@@ -131,4 +132,154 @@ export interface InterviewFeedback {
   weaknessesSummary: string;
   overallAreasForImprovement: string;
   detailedQuestionFeedback?: DetailedQuestionFeedbackItem[];
+}
+
+// Role-based Access Control Types
+export type Role =
+  | "SUPER_ADMIN"
+  | "ADMIN"
+  | "CEO"
+  | "CTO"
+  | "CBO"
+  | "CMO"
+  | "CFO"
+  | "MANAGER";
+
+export type Permission =
+  | "VIEW_ADMIN_DASHBOARD"
+  | "MANAGE_USERS"
+  | "MANAGE_ROLES"
+  | "VIEW_ANALYTICS"
+  | "VIEW_FINANCIALS"
+  | "UPLOAD_STUDY_MATERIALS"
+  | "EDIT_STUDY_MATERIALS"
+  | "DELETE_STUDY_MATERIALS"
+  | "APPROVE_STUDY_MATERIALS"
+  | "MANAGE_CONTENT"
+  | "SYSTEM_SETTINGS";
+
+// Study Material Types
+export interface StudyMaterial {
+  id: string;
+  title: string;
+  description: string;
+  type: "article" | "video" | "course" | "quiz" | "podcast" | "code";
+  category: string;
+  difficulty: "beginner" | "intermediate" | "advanced";
+  duration: string;
+  tags: string[];
+  author: string;
+  authorUid: string;
+  authorRole?: Role;
+  views: number;
+  rating: number;
+  isBookmarked: boolean;
+  approved: boolean;
+  createdAt: string;
+  updatedAt: string;
+  fileUrl?: string;
+  thumbnail: string;
+  content?: string;
+  progress?: number;
+  isPremium?: boolean;
+
+  // Article
+  transcript?: string;
+
+  // Video
+  videoUrl?: string;
+
+  // Podcast
+  hostName?: string;
+  episodeNumber?: number;
+
+  // Course
+  modules?: {
+    id: string;
+    title: string;
+    description: string;
+    duration: string;
+  }[];
+
+  prerequisites?: string[];
+  learningOutcomes?: string[];
+
+  // Quiz
+  questions?: {
+    id: string;
+    question: string;
+    options: string[];
+    correctAnswer: number;
+    explanation?: string;
+  }[];
+  timeLimit?: number;
+  passingScore?: number;
+
+  // Code
+  programmingLanguage?: string;
+  githubUrl?: string;
+  liveDemo?: string;
+  codeContent?: string;
+  documentation?: string;
+
+  // Extra
+  estimatedHours?: number;
+  externalUrl?: string;
+}
+
+// API Response Types
+export interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+}
+
+// Filter and Search Types
+export interface UserFilters {
+  name?: string;
+  email?: string;
+  role?: Role | "all";
+  plan?: "all" | "free" | "monthly" | "quarterly" | "yearly" | "plus_unknown";
+  isAdmin?: "all" | "yes" | "no";
+  dateRange?: {
+    from?: Date;
+    to?: Date;
+  };
+}
+
+export interface MaterialFilters {
+  title?: string;
+  type?: StudyMaterial["type"] | "all";
+  category?: string;
+  difficulty?: StudyMaterial["difficulty"] | "all";
+  approved?: "all" | "approved" | "pending";
+  author?: string;
+  tags?: string[];
+}
+
+// Component Props Types
+export interface PermissionGuardProps {
+  permission: Permission;
+  children: React.ReactNode;
+  fallback?: React.ReactNode;
+}
+
+export interface RoleBadgeProps {
+  role: Role;
+  className?: string;
+}
+
+// Context Types
+export interface AuthContextType {
+  user: any; // Firebase User
+  userProfile: UserProfile | null;
+  isAdmin: boolean;
+  loading: boolean;
+  initialLoading: boolean;
+  signOut: () => Promise<void>;
+  refreshUserProfile: () => Promise<void>;
+  updateUserRoles: (uid: string, roles: Role[]) => Promise<void>;
+  hasRole: (role: Role) => boolean;
+  hasPermission: (permission: Permission) => boolean;
 }

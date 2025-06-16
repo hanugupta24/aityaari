@@ -285,7 +285,12 @@ const accountNavItems: NavItem[] = [
 ];
 
 const adminNavItems: NavItem[] = [
-  { title: "Admin Panel", href: "/admin", icon: Settings },
+  {
+    title: "Admin Panel",
+    href: "/admin",
+    icon: Settings,
+    description: "Admin dashboard",
+  },
 ];
 
 export function SidebarNav() {
@@ -334,9 +339,7 @@ export function SidebarNav() {
                 </div>
                 <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden min-h-10">
                   <div className="nav-text">{item.title}</div>
-                  {showDescription && item.description && (
-                    <div className="nav-description">{item.description}</div>
-                  )}
+                  <div className="nav-description">{item.description}</div>
                 </div>
                 {isActive && (
                   <ChevronRight className="w-4 h-4 text-primary group-data-[collapsible=icon]:hidden" />
@@ -380,7 +383,7 @@ export function SidebarNav() {
         </SidebarGroup>
 
         {/* Admin Navigation */}
-        {isAdmin && (
+        {userProfile?.roles && (
           <>
             <SidebarSeparator className="bg-gradient-to-r from-transparent via-border/50 to-transparent" />
             <SidebarGroup>

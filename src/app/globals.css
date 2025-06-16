@@ -9,69 +9,50 @@ body {
 @layer base {
   :root {
     /* VertexAI-inspired Dark Theme (default) */
-    --background: 210 30% 6%;
-    /* Very dark desaturated blue/almost black */
-    --foreground: 0 0% 98%;
-    /* White / Very light gray */
+    --background: 210 30% 6%; /* Very dark desaturated blue/almost black */
+    --foreground: 0 0% 98%; /* White / Very light gray */
 
-    --card: 210 25% 9%;
-    /* Slightly lighter dark blue/black for cards */
+    --card: 210 25% 9%; /* Slightly lighter dark blue/black for cards */
     --card-foreground: 0 0% 98%;
 
-    --popover: 210 30% 5%;
-    /* Darker popover */
+    --popover: 210 30% 5%; /* Darker popover */
     --popover-foreground: 0 0% 98%;
 
-    --primary: 145 65% 45%;
-    /* Vibrant green */
-    --primary-foreground: 0 0% 98%;
-    /* White text on green buttons */
-
+    --primary: 145 65% 45%; /* Vibrant green */
+    --primary-foreground: 0 0% 98%; /* White text on green buttons */
+    
     /* Secondary buttons to be light (e.g., white/light gray) with dark green text */
-    --secondary: 0 0% 93%;
-    /* Light gray / off-white for button background */
-    --secondary-foreground: 145 60% 20%;
-    /* Dark green text for light gray button */
+    --secondary: 0 0% 93%; /* Light gray / off-white for button background */
+    --secondary-foreground: 145 60% 20%; /* Dark green text for light gray button */
 
-    --muted: 210 20% 12%;
-    /* Very muted dark blue/gray for less emphasis areas */
-    --muted-foreground: 210 15% 60%;
-    /* Muted gray text */
+    --muted: 210 20% 12%; /* Very muted dark blue/gray for less emphasis areas */
+    --muted-foreground: 210 15% 60%; /* Muted gray text */
 
-    --accent: 145 60% 50%;
-    /* Slightly brighter green for accents */
-    --accent-foreground: 0 0% 98%;
-    /* White text on accent elements */
+    --accent: 145 60% 50%; /* Slightly brighter green for accents */
+    --accent-foreground: 0 0% 98%; /* White text on accent elements */
 
-    --destructive: 0 70% 55%;
-    /* Standard destructive red */
-    --destructive-foreground: 0 0% 100%;
-    /* White text on destructive elements */
+    --destructive: 0 70% 55%; /* Standard destructive red */
+    --destructive-foreground: 0 0% 100%; /* White text on destructive elements */
 
-    --border: 145 35% 20%;
-    /* Dark green border for elements, or 210 20% 15% for neutral */
-    --input: 210 20% 10%;
-    /* Dark input backgrounds */
-    --ring: 145 65% 50%;
-    /* Ring color based on primary green */
+    --border: 145 35% 20%; /* Dark green border for elements, or 210 20% 15% for neutral */
+    --input: 210 20% 10%; /* Dark input backgrounds */
+    --ring: 145 65% 50%; /* Ring color based on primary green */
 
     /* Chart Colors (greens, teals, blues for dark theme) */
-    --chart-1: 145 60% 40%;
-    --chart-2: 160 55% 45%;
-    --chart-3: 170 60% 50%;
-    --chart-4: 190 50% 55%;
-    --chart-5: 140 50% 35%;
+    --chart-1: 145 60% 40%; 
+    --chart-2: 160 55% 45%; 
+    --chart-3: 170 60% 50%; 
+    --chart-4: 190 50% 55%; 
+    --chart-5: 140 50% 35%; 
 
-    --radius: 0.5rem;
-    /* Moderately rounded corners */
+    --radius: 0.5rem; /* Moderately rounded corners */
 
     /* Sidebar Dark Theme */
-    --sidebar-background: 210 28% 7%;
+    --sidebar-background: 210 28% 7%; 
     --sidebar-foreground: 0 0% 95%;
-    --sidebar-primary: 145 65% 45%;
+    --sidebar-primary: 145 65% 45%; 
     --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 145 50% 20%;
-    /* Darker green for hover/active */
+    --sidebar-accent: 145 50% 20%; /* Darker green for hover/active */
     --sidebar-accent-foreground: 0 0% 98%;
     --sidebar-border: 145 30% 15%;
     --sidebar-ring: 145 65% 50%;
@@ -87,7 +68,7 @@ body {
     --popover-foreground: 0 0% 98%;
     --primary: 145 65% 45%;
     --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 93%;
+    --secondary: 0 0% 93%; 
     --secondary-foreground: 145 60% 20%;
     --muted: 210 20% 12%;
     --muted-foreground: 210 15% 60%;
@@ -114,51 +95,36 @@ body {
     --sidebar-border: 145 30% 15%;
     --sidebar-ring: 145 65% 50%;
   }
-
+  
   /* VertexAI-inspired Light Theme */
-  :root:not(.dark-override) .light,
-  :root.light {
-    --background: 0 0% 97%;
-    /* Very light gray / White */
-    --foreground: 210 30% 10%;
-    /* Very dark blue/black text */
+  :root:not(.dark-override) .light, :root.light {
+    --background: 0 0% 97%; /* Very light gray / White */
+    --foreground: 210 30% 10%; /* Very dark blue/black text */
 
-    --card: 0 0% 100%;
-    /* White cards */
+    --card: 0 0% 100%; /* White cards */
     --card-foreground: 210 30% 10%;
 
     --popover: 0 0% 100%;
     --popover-foreground: 210 30% 10%;
 
-    --primary: 145 60% 38%;
-    /* Strong green for light bg */
-    --primary-foreground: 0 0% 100%;
-    /* White text on green buttons */
+    --primary: 145 60% 38%; /* Strong green for light bg */
+    --primary-foreground: 0 0% 100%; /* White text on green buttons */
 
     /* Secondary buttons to be dark (e.g., dark green) with white text on light theme */
-    --secondary: 145 55% 30%;
-    /* Dark green for button background */
-    --secondary-foreground: 0 0% 95%;
-    /* White text for dark green button */
+    --secondary: 145 55% 30%; /* Dark green for button background */
+    --secondary-foreground: 0 0% 95%; /* White text for dark green button */
 
-    --muted: 210 20% 94%;
-    /* Light gray for less emphasis areas */
-    --muted-foreground: 210 15% 45%;
-    /* Medium gray text */
+    --muted: 210 20% 94%; /* Light gray for less emphasis areas */
+    --muted-foreground: 210 15% 45%; /* Medium gray text */
 
-    --accent: 145 60% 42%;
-    /* Similar to primary green */
-    --accent-foreground: 0 0% 100%;
-    /* White text on accent elements */
+    --accent: 145 60% 42%; /* Similar to primary green */
+    --accent-foreground: 0 0% 100%; /* White text on accent elements */
 
-    --destructive: 0 80% 55%;
-    /* Vibrant red */
+    --destructive: 0 80% 55%; /* Vibrant red */
     --destructive-foreground: 0 0% 100%;
 
-    --border: 145 30% 75%;
-    /* Light green border, or 210 20% 85% for neutral */
-    --input: 0 0% 100%;
-    /* White input with border */
+    --border: 145 30% 75%; /* Light green border, or 210 20% 85% for neutral */
+    --input: 0 0% 100%; /* White input with border */
     --ring: 145 60% 45%;
 
     /* Chart Colors (distinct greens, teals for light theme) */
@@ -169,12 +135,11 @@ body {
     --chart-5: 140 45% 30%;
 
     /* Sidebar Light Theme */
-    --sidebar-background: 210 25% 96%;
+    --sidebar-background: 210 25% 96%; 
     --sidebar-foreground: 210 30% 15%;
     --sidebar-primary: 145 60% 38%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 145 40% 88%;
-    /* Lighter green for hover/active */
+    --sidebar-accent: 145 40% 88%; /* Lighter green for hover/active */
     --sidebar-accent-foreground: 145 50% 25%;
     --sidebar-border: 145 30% 70%;
     --sidebar-ring: 145 60% 45%;
@@ -185,7 +150,6 @@ body {
   * {
     @apply border-border;
   }
-
   body {
     @apply bg-background text-foreground;
   }
@@ -195,19 +159,15 @@ body {
   .animate-slideUpFadeIn {
     animation: slideUpFadeIn 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
   }
-
   .animate-fadeIn {
     animation: fadeIn 0.7s ease-out forwards;
   }
-
   .animation-delay-200 {
     animation-delay: 0.2s;
   }
-
   .animation-delay-400 {
     animation-delay: 0.4s;
   }
-
   .animation-delay-600 {
     animation-delay: 0.6s;
   }
