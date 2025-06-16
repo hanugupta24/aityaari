@@ -385,6 +385,14 @@ export default function StudyMaterialDetailPage() {
 
   const TypeIcon = getTypeIcon(material.type);
 
+  function getYouTubeEmbedUrl(url: string): string {
+    const videoIdMatch = url.match(
+      /(?:v=|\/embed\/|\.be\/)([a-zA-Z0-9_-]{11})/
+    );
+    const videoId = videoIdMatch ? videoIdMatch[1] : "";
+    return videoId ? `https://www.youtube.com/embed/${videoId}` : "";
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto py-6 px-4 space-y-6">
@@ -619,7 +627,7 @@ export default function StudyMaterialDetailPage() {
                         <div className="aspect-video bg-black rounded-lg flex items-center justify-center">
                           {material.videoUrl ? (
                             <iframe
-                              src={material.videoUrl}
+                              src={getYouTubeEmbedUrl(material.videoUrl)}
                               className="w-full h-full rounded-lg"
                               allowFullScreen
                             />
