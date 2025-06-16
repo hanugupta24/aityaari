@@ -9,14 +9,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { use, useEffect } from "react";
 
 export function ThemeToggle() {
   const { setTheme, resolvedTheme } = useTheme();
-
-  useEffect(() => {
-    setTheme("system");
-  });
 
   return (
     <DropdownMenu>
