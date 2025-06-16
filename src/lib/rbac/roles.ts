@@ -10,6 +10,7 @@ export const roleDisplayNames: Record<Role, string> = {
   CMO: "Chief Marketing Officer",
   CFO: "Chief Financial Officer",
   MANAGER: "Manager",
+  NO_ROLE: "REMOVE ROLE",
 };
 
 // Role colors for badges
@@ -22,6 +23,7 @@ export const roleColors: Record<Role, string> = {
   CMO: "bg-pink-100 text-pink-800 border-pink-200",
   CFO: "bg-indigo-100 text-indigo-800 border-indigo-200",
   MANAGER: "bg-gray-100 text-gray-800 border-gray-200",
+  NO_ROLE: "bg-gray-100 text-gray-800 border-gray-200",
 };
 
 // Permissions for each role
@@ -89,6 +91,7 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "EDIT_STUDY_MATERIALS",
     "VIEW_ANALYTICS",
   ],
+  NO_ROLE: [],
 };
 
 // Check if user has specific permission
@@ -146,6 +149,7 @@ export function getRoleLevel(role: Role): number {
     CMO: 2,
     CBO: 2,
     MANAGER: 3,
+    NO_ROLE: 999, // No role has the lowest privilege
   };
 
   return hierarchy[role] ?? 999;

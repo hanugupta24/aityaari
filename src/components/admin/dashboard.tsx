@@ -122,6 +122,7 @@ const ALL_ROLES: Role[] = [
   "CMO",
   "CFO",
   "MANAGER",
+  "NO_ROLE",
 ];
 
 export default function AdminPage() {

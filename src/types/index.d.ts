@@ -143,7 +143,9 @@ export type Role =
   | "CBO"
   | "CMO"
   | "CFO"
-  | "MANAGER";
+  | "MANAGER"
+  | "NO_ROLE"
+
 
 export type Permission =
   | "VIEW_ADMIN_DASHBOARD"

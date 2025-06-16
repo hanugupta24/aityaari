@@ -11,7 +11,7 @@ import {
 } from "react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc, deleteField } from "firebase/firestore";
 import type { UserProfile, Role } from "@/types";
 import { hasPermission } from "@/lib/rbac/roles";
 
@@ -202,10 +202,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       console.log(`AuthContext: Updating roles for user ${uid}:`, roles);
 
-      await updateDoc(doc(db, "users", uid), {
-        roles,
-        updatedAt: new Date().toISOString(),
-      });
+      const userRef = doc(db, "users", uid);
+
+      const isNoRole = roles.includes("NO_ROLE");
+
+      if (isNoRole) {
+        // Delete roles field if NO_ROLE is present
+        await updateDoc(userRef, {
+          roles: deleteField(),
+          updatedAt: new Date().toISOString(),
+        });
+        console.log(`AuthContext: Removed roles for user ${uid} (NO_ROLE)`);
+      } else {
+        // Update roles field as usual
+        await updateDoc(userRef, {
+          roles,
+          updatedAt: new Date().toISOString(),
+        });
+        console.log(`AuthContext: Set new roles for user ${uid}`);
+      }
 
       // If this is the current user, update their profile
       if (user && user.uid === uid) {
@@ -213,6 +228,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           "AuthContext: Updated roles for current user, refreshing profile"
         );
         await refreshUserProfile();
+      }
+
+      if (isNoRole) {
+        window.location.reload();
       }
 
       console.log(`AuthContext: Successfully updated roles for user ${uid}`);
