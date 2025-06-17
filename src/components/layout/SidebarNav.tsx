@@ -282,6 +282,18 @@ const accountNavItems: NavItem[] = [
     icon: CreditCard,
     description: "Manage plan",
   },
+  {
+    title: "Contact Us",
+    href: "/contactUs",
+    icon: Briefcase,
+    description: "Get in touch",
+  },
+  {
+    title: "Feedback",
+    href: "/userFeedback",
+    icon: Briefcase,
+    description: "Share your thoughts",
+  },
 ];
 
 const adminNavItems: NavItem[] = [
