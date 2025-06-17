@@ -708,7 +708,7 @@ export default function AdminPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold">
-                      ${memoizedStats.estimatedMonthlyRevenue.toFixed(2)}
+                      ₹{memoizedStats.estimatedMonthlyRevenue.toFixed(2)}
                     </div>
                   </CardContent>
                 </Card>
@@ -842,7 +842,7 @@ export default function AdminPage() {
                             {memoizedStats.monthlySubscribers}
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            @ ${PLAN_PRICES.monthly.toFixed(2)}/mo
+                            @ ₹{PLAN_PRICES.monthly.toFixed(2)}/mo
                           </p>
                         </CardContent>
                       </Card>
@@ -858,7 +858,7 @@ export default function AdminPage() {
                             {memoizedStats.quarterlySubscribers}
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            @ ${PLAN_PRICES.quarterly.toFixed(2)}/qtr
+                            @ ₹{PLAN_PRICES.quarterly.toFixed(2)}/qtr
                           </p>
                         </CardContent>
                       </Card>
@@ -874,7 +874,7 @@ export default function AdminPage() {
                             {memoizedStats.yearlySubscribers}
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            @ ${PLAN_PRICES.yearly.toFixed(2)}/yr
+                            @ ₹{PLAN_PRICES.yearly.toFixed(2)}/yr
                           </p>
                         </CardContent>
                       </Card>
