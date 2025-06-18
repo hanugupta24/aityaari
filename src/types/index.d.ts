@@ -144,8 +144,7 @@ export type Role =
   | "CMO"
   | "CFO"
   | "MANAGER"
-  | "NO_ROLE"
-
+  | "NO_ROLE";
 
 export type Permission =
   | "VIEW_ADMIN_DASHBOARD"
@@ -174,6 +173,7 @@ export interface StudyMaterial {
   authorUid: string;
   authorRole?: Role;
   views: number;
+  viewedBy?: string[];
   rating: number;
   isBookmarked: boolean;
   approved: boolean;
@@ -184,6 +184,7 @@ export interface StudyMaterial {
   content?: string;
   progress?: number;
   isPremium?: boolean;
+  userRatings?: Record<string, number>;
 
   // Article
   transcript?: string;

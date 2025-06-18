@@ -52,6 +52,8 @@ import {
   onSnapshot,
   updateDoc,
   doc,
+  getDoc,
+  arrayUnion,
 } from "firebase/firestore";
 import type { StudyMaterial } from "@/types";
 import { RoleBadge } from "../../../components/role-badge";
@@ -264,10 +266,25 @@ export default function StudyMaterialsPage() {
   const handleViewMaterial = async (material: StudyMaterial) => {
     try {
       // Increment view count
-      await updateDoc(doc(db, "study-materials", material.id), {
-        views: (material.views || 0) + 1,
-        updatedAt: new Date().toISOString(),
-      });
+      const materialRef = doc(db, "study-materials", material.id);
+      const materialSnap = await getDoc(materialRef);
+
+      if (!materialSnap.exists()) {
+        throw new Error("Material does not exist");
+      }
+
+      const materialData = materialSnap.data() as StudyMaterial;
+      const hasViewed = userProfile?.uid
+        ? materialData.viewedBy?.includes(userProfile.uid)
+        : false;
+
+      if (!hasViewed && userProfile?.uid) {
+        await updateDoc(materialRef, {
+          views: (materialData.views || 0) + 1,
+          viewedBy: arrayUnion(userProfile.uid),
+          updatedAt: new Date().toISOString(),
+        });
+      }
 
       // Navigate to material detail page
       router.push(`/studyMaterials/${material.id}`);

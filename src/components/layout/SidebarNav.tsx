@@ -25,6 +25,7 @@ import {
   SidebarGroupLabel,
   SidebarGroupContent,
   SidebarSeparator,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -308,6 +309,7 @@ const adminNavItems: NavItem[] = [
 export function SidebarNav() {
   const pathname = usePathname();
   const { isAdmin, userProfile } = useAuth();
+  const { toggleSidebar } = useSidebar();
 
   // Get user initials for avatar
   const getUserInitials = () => {
@@ -336,6 +338,12 @@ export function SidebarNav() {
         pathname === item.href ||
         (item.href !== "/dashboard" && pathname.startsWith(item.href));
 
+      const handleClick = () => {
+        if (typeof window !== "undefined" && window.innerWidth < 768) {
+          toggleSidebar(); // Only close sidebar on mobile
+        }
+      };
+
       return (
         <SidebarMenuItem key={item.href}>
           <Link href={item.href} passHref legacyBehavior>
@@ -345,7 +353,10 @@ export function SidebarNav() {
               tooltip={item.title}
               className={cn("nav-item justify-start p-3", isActive && "active")}
             >
-              <a className="flex items-center gap-3 w-full h-auto">
+              <a
+                className="flex items-center gap-3 w-full h-auto"
+                onClick={handleClick}
+              >
                 <div className="nav-icon">
                   <Icon className="h-5 w-5 text-green-500" />
                 </div>

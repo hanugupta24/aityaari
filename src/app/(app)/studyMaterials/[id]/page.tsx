@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   Card,
@@ -76,6 +76,8 @@ import {
   where,
   orderBy,
   getDocs,
+  deleteDoc,
+  arrayUnion,
 } from "firebase/firestore";
 import type { StudyMaterial } from "@/types";
 import { RoleBadge } from "../../../../components/role-badge";
@@ -113,10 +115,12 @@ export default function StudyMaterialDetailPage() {
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [userRating, setUserRating] = useState(0);
   const [progress, setProgress] = useState(0);
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState("content");
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
 
   // Quiz state
   const [quizAnswers, setQuizAnswers] = useState<QuizAnswer[]>([]);
@@ -129,6 +133,15 @@ export default function StudyMaterialDetailPage() {
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
+
+  // const hasScrolledRef = useRef(false);
+
+  const handlePlayClick = () => {
+    window.scrollTo({
+      top: document.documentElement.scrollHeight,
+      behavior: "smooth",
+    });
+  };
 
   useEffect(() => {
     const fetchMaterial = async () => {
@@ -147,11 +160,29 @@ export default function StudyMaterialDetailPage() {
           setMaterial(materialData);
           setIsBookmarked(materialData.isBookmarked || false);
 
+          setUserRating(
+            userProfile?.uid
+              ? materialData.userRatings?.[userProfile.uid] || 0
+              : 0
+          );
+
           // Increment view count
-          await updateDoc(doc(db, "study-materials", materialId), {
-            views: (materialData.views || 0) + 1,
-            updatedAt: new Date().toISOString(),
-          });
+          const hasViewed =
+            userProfile?.uid &&
+            materialData.viewedBy?.includes(userProfile.uid);
+
+          console.log("User has viewed:", hasViewed);
+
+          // Increment views only if user hasn't viewed yet
+          const materialRef = doc(db, "study-materials", materialId);
+
+          if (!hasViewed) {
+            await updateDoc(materialRef, {
+              views: materialData.views + 1,
+              viewedBy: userProfile?.uid ? arrayUnion(userProfile.uid) : [],
+              updatedAt: new Date().toISOString(),
+            });
+          }
 
           // Fetch comments
           await fetchComments();
@@ -229,23 +260,46 @@ export default function StudyMaterialDetailPage() {
     }
   };
 
-  const handleRating = async (rating: number) => {
+  const handleRating = async (newRating: number) => {
     if (!material || !userProfile) return;
 
     try {
-      setUserRating(rating);
+      const materialRef = doc(db, "study-materials", materialId);
+      const materialSnap = await getDoc(materialRef);
 
-      // In a real app, you'd store individual ratings and calculate average
-      const newRating = ((material.rating || 0) + rating) / 2;
+      if (!materialSnap.exists()) return;
 
-      await updateDoc(doc(db, "study-materials", materialId), {
-        rating: newRating,
+      const data = materialSnap.data();
+      const userRatings = data.userRatings || {};
+      const previousRating = userRatings[userProfile.uid];
+
+      const updatedUserRatings = {
+        ...userRatings,
+        [userProfile.uid]: newRating,
+      };
+
+      let totalRating = 0;
+      let totalCount = 0;
+
+      Object.values(updatedUserRatings).forEach((val: any) => {
+        totalRating += val;
+        totalCount++;
+      });
+
+      const avgRating = totalRating / totalCount;
+
+      await updateDoc(materialRef, {
+        userRatings: updatedUserRatings,
+        rating: avgRating,
+        ratingCount: totalCount,
         updatedAt: new Date().toISOString(),
       });
 
+      setUserRating(newRating);
+
       toast({
         title: "Rating submitted",
-        description: `You rated this material ${rating} stars.`,
+        description: `You rated this material ${newRating} stars.`,
       });
     } catch (error) {
       console.error("Error submitting rating:", error);
@@ -393,6 +447,48 @@ export default function StudyMaterialDetailPage() {
     return videoId ? `https://www.youtube.com/embed/${videoId}` : "";
   }
 
+  const handleSaveEdit = async (commentId: string) => {
+    try {
+      await updateDoc(doc(db, "comments", commentId), {
+        content: editText,
+        updatedAt: new Date().toISOString(),
+      });
+
+      setComments((prev) =>
+        prev.map((comment) =>
+          comment.id === commentId ? { ...comment, content: editText } : comment
+        )
+      );
+
+      setEditingCommentId(null);
+      setEditText("");
+
+      toast({ title: "Comment updated successfully." });
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Failed to update comment.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    try {
+      await deleteDoc(doc(db, "comments", commentId));
+
+      setComments((prev) => prev.filter((comment) => comment.id !== commentId));
+
+      toast({ title: "Comment deleted successfully." });
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Failed to delete comment.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto py-6 px-4 space-y-6">
@@ -430,7 +526,11 @@ export default function StudyMaterialDetailPage() {
                 />
                 {material.type === "video" && (
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <Button size="lg" className="rounded-full w-16 h-16">
+                    <Button
+                      size="lg"
+                      className="rounded-full w-16 h-16"
+                      onClick={handlePlayClick}
+                    >
                       <Play className="h-8 w-8" />
                     </Button>
                   </div>
@@ -453,7 +553,7 @@ export default function StudyMaterialDetailPage() {
                       {material.description}
                     </CardDescription>
                   </div>
-                  <div className="flex items-center gap-2">
+                  {/* <div className="flex items-center gap-2">
                     <Button
                       variant="outline"
                       size="icon"
@@ -472,7 +572,7 @@ export default function StudyMaterialDetailPage() {
                     <Button variant="outline" size="icon">
                       <MoreVertical className="h-4 w-4" />
                     </Button>
-                  </div>
+                  </div> */}
                 </div>
 
                 {/* Stats */}
@@ -511,7 +611,7 @@ export default function StudyMaterialDetailPage() {
             <Card>
               <Tabs value={activeTab} onValueChange={setActiveTab}>
                 <CardHeader>
-                  <TabsList className="grid w-full grid-cols-4">
+                  <TabsList className="grid w-full grid-cols-4 text-sm sm:text-base">
                     <TabsTrigger value="overview">Overview</TabsTrigger>
                     <TabsTrigger value="content">Content</TabsTrigger>
                     <TabsTrigger value="comments">Comments</TabsTrigger>
@@ -922,45 +1022,77 @@ export default function StudyMaterialDetailPage() {
 
                     {/* Comments List */}
                     <div className="space-y-4">
-                      {comments.length > 0 ? (
-                        comments.map((comment) => (
+                      {comments.map((comment) => {
+                        const isAuthor = comment.authorUid === userProfile?.uid;
+                        const isEditing = editingCommentId === comment.id;
+
+                        return (
                           <Card key={comment.id} className="p-4">
                             <div className="flex items-start gap-3">
                               <div className="w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center text-sm font-medium">
                                 {comment.author.charAt(0)}
                               </div>
                               <div className="flex-1 space-y-2">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-medium">
-                                    {comment.author}
-                                  </span>
-                                  <span className="text-sm text-muted-foreground">
-                                    {formatDate(comment.createdAt)}
-                                  </span>
+                                <div className="flex items-center gap-2 justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium">
+                                      {comment.author}
+                                    </span>
+                                    <span className="text-sm text-muted-foreground">
+                                      {formatDate(comment.createdAt)}
+                                    </span>
+                                  </div>
+
+                                  {isAuthor && (
+                                    <div className="flex gap-2 text-sm">
+                                      {isEditing ? (
+                                        <button
+                                          onClick={() =>
+                                            handleSaveEdit(comment.id)
+                                          }
+                                          className="text-green-600 hover:underline"
+                                        >
+                                          Save
+                                        </button>
+                                      ) : (
+                                        <button
+                                          onClick={() => {
+                                            setEditingCommentId(comment.id);
+                                            setEditText(comment.content);
+                                          }}
+                                          className="text-green-600 hover:underline"
+                                        >
+                                          Edit
+                                        </button>
+                                      )}
+                                      <button
+                                        onClick={() =>
+                                          handleDeleteComment(comment.id)
+                                        }
+                                        className="text-red-600 hover:underline"
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
-                                <p className="text-sm">{comment.content}</p>
-                                <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                                  <button className="flex items-center gap-1 hover:text-primary">
-                                    <ThumbsUp className="h-3 w-3" />
-                                    {comment.likes}
-                                  </button>
-                                  <button className="hover:text-primary">
-                                    Reply
-                                  </button>
-                                </div>
+
+                                {isEditing ? (
+                                  <textarea
+                                    value={editText}
+                                    onChange={(e) =>
+                                      setEditText(e.target.value)
+                                    }
+                                    className="w-full p-2 text-sm rounded border border-muted bg-background text-foreground dark:border-muted-foreground"
+                                  />
+                                ) : (
+                                  <p className="text-sm">{comment.content}</p>
+                                )}
                               </div>
                             </div>
                           </Card>
-                        ))
-                      ) : (
-                        <div className="text-center py-8 text-muted-foreground">
-                          <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                          <p>
-                            No comments yet. Be the first to share your
-                            thoughts!
-                          </p>
-                        </div>
-                      )}
+                        );
+                      })}
                     </div>
                   </TabsContent>
 
@@ -1019,12 +1151,12 @@ export default function StudyMaterialDetailPage() {
             {/* Action Buttons */}
             <Card className="p-6">
               <div className="space-y-4">
-                <Button className="w-full" size="lg">
+                <Button className="w-full" size="lg" onClick={handlePlayClick}>
                   <PlayCircle className="h-5 w-5 mr-2" />
                   Start Learning
                 </Button>
 
-                <div className="grid grid-cols-2 gap-2">
+                {/* <div className="grid grid-cols-2 gap-2">
                   <Button variant="outline" onClick={handleBookmark}>
                     <Bookmark
                       className={`h-4 w-4 mr-2 ${
@@ -1037,12 +1169,12 @@ export default function StudyMaterialDetailPage() {
                     <Share2 className="h-4 w-4 mr-2" />
                     Share
                   </Button>
-                </div>
+                </div> */}
 
                 {/* Rating */}
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">
-                    Rate this material
+                    {userRating ? "Your Rating" : "Rate this material"}
                   </Label>
                   <div className="flex gap-1">
                     {[1, 2, 3, 4, 5].map((star) => (

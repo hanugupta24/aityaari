@@ -57,7 +57,14 @@ import {
   Bar,
 } from "recharts";
 import { db } from "@/lib/firebase";
-import { collection, getDocs, updateDoc, doc } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  updateDoc,
+  doc,
+  deleteField,
+  deleteDoc,
+} from "firebase/firestore";
 import type { UserProfile, Role, StudyMaterial } from "@/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
@@ -593,6 +600,51 @@ export default function AdminPage() {
         title: "Error approving material",
         description:
           error.message || "There was an error approving the material.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleUnApproveMaterial = async (material: StudyMaterial) => {
+    try {
+      await updateDoc(doc(db, "study-materials", material.id), {
+        approved: false,
+        updatedAt: new Date().toISOString(),
+      });
+
+      // Update local state
+      setStudyMaterials((prev) =>
+        prev.map((m) => (m.id === material.id ? { ...m, approved: false } : m))
+      );
+
+      toast({
+        title: "Material Un-approved",
+        description: `"${material.title}" has been approved and is now visible to users.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error approving material",
+        description:
+          error.message || "There was an error approving the material.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRejectMaterial = async (material: StudyMaterial) => {
+    try {
+      await deleteDoc(doc(db, "study-materials", material.id));
+
+      toast({
+        title: "Material rejected",
+        description: `"${material.title}" has been rejected and will not be visible to users.`,
+      });
+      window.location.reload();
+    } catch (error: any) {
+      toast({
+        title: "Error rejecting material",
+        description:
+          error.message || "There was an error rejecting the material.",
         variant: "destructive",
       });
     }
@@ -1465,6 +1517,30 @@ export default function AdminPage() {
                                       }
                                     >
                                       Approve
+                                    </Button>
+                                  )}
+                                {hasPermission("EDIT_STUDY_MATERIALS") &&
+                                  !material.approved && (
+                                    <Button
+                                      variant="destructive"
+                                      size="sm"
+                                      onClick={() =>
+                                        handleRejectMaterial(material)
+                                      }
+                                    >
+                                      Reject
+                                    </Button>
+                                  )}
+                                {hasPermission("EDIT_STUDY_MATERIALS") &&
+                                  material.approved && (
+                                    <Button
+                                      variant="destructive"
+                                      size="sm"
+                                      onClick={() =>
+                                        handleUnApproveMaterial(material)
+                                      }
+                                    >
+                                      Un-Approve
                                     </Button>
                                   )}
                               </div>
