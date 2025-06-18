@@ -10,6 +10,7 @@ export const roleDisplayNames: Record<Role, string> = {
   CMO: "Chief Marketing Officer",
   CFO: "Chief Financial Officer",
   MANAGER: "Manager",
+  HR: "Human Resources",
   NO_ROLE: "REMOVE ROLE",
 };
 
@@ -24,6 +25,7 @@ export const roleColors: Record<Role, string> = {
   CFO: "bg-indigo-100 text-indigo-800 border-indigo-200",
   MANAGER: "bg-gray-100 text-gray-800 border-gray-200",
   NO_ROLE: "bg-gray-100 text-gray-800 border-gray-200",
+  HR: "bg-teal-100 text-teal-800 border-teal-200",
 };
 
 // Permissions for each role
@@ -40,6 +42,7 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "APPROVE_STUDY_MATERIALS",
     "MANAGE_CONTENT",
     "SYSTEM_SETTINGS",
+    "VIEW_USER_QUERY",
   ],
   ADMIN: [
     "VIEW_ADMIN_DASHBOARD",
@@ -51,6 +54,7 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "DELETE_STUDY_MATERIALS",
     "APPROVE_STUDY_MATERIALS",
     "MANAGE_CONTENT",
+    "VIEW_USER_QUERY",
   ],
   CEO: [
     "VIEW_ADMIN_DASHBOARD",
@@ -61,6 +65,7 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "APPROVE_STUDY_MATERIALS",
     "VIEW_FINANCIALS",
     "SYSTEM_SETTINGS",
+    "VIEW_USER_QUERY",
   ],
   CTO: [
     "VIEW_ADMIN_DASHBOARD",
@@ -71,6 +76,7 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "MANAGE_CONTENT",
     "VIEW_FINANCIALS",
     "SYSTEM_SETTINGS",
+    "VIEW_USER_QUERY",
   ],
   CBO: [
     "VIEW_ADMIN_DASHBOARD",
@@ -78,6 +84,7 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "UPLOAD_STUDY_MATERIALS",
     "EDIT_STUDY_MATERIALS",
     "MANAGE_CONTENT",
+    "VIEW_USER_QUERY",
   ],
   CMO: [
     "VIEW_ADMIN_DASHBOARD",
@@ -85,6 +92,7 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "UPLOAD_STUDY_MATERIALS",
     "EDIT_STUDY_MATERIALS",
     "MANAGE_CONTENT",
+    "VIEW_USER_QUERY",
   ],
   CFO: [
     "VIEW_ADMIN_DASHBOARD",
@@ -92,13 +100,16 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "VIEW_FINANCIALS",
     "UPLOAD_STUDY_MATERIALS",
     "EDIT_STUDY_MATERIALS",
+    "VIEW_USER_QUERY",
   ],
   MANAGER: [
     "VIEW_ADMIN_DASHBOARD",
     "UPLOAD_STUDY_MATERIALS",
     "EDIT_STUDY_MATERIALS",
     "VIEW_ANALYTICS",
+    "VIEW_USER_QUERY",
   ],
+  HR: ["VIEW_USER_QUERY"],
   NO_ROLE: [],
 };
 
@@ -157,6 +168,7 @@ export function getRoleLevel(role: Role): number {
     CMO: 2,
     CBO: 2,
     MANAGER: 3,
+    HR: 4,
     NO_ROLE: 999, // No role has the lowest privilege
   };
 

@@ -129,6 +129,7 @@ const ALL_ROLES: Role[] = [
   "CMO",
   "CFO",
   "MANAGER",
+  "HR",
   "NO_ROLE",
 ];
 

@@ -45,6 +45,7 @@ const ALL_ROLES: Role[] = [
   "CBO",
   "CMO",
   "CFO",
+  "HR",
   "MANAGER",
 ];
 

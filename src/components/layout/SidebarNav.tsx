@@ -284,16 +284,10 @@ const accountNavItems: NavItem[] = [
     description: "Manage plan",
   },
   {
-    title: "Contact Us",
-    href: "/contactUs",
+    title: "Support",
+    href: "/customerSupport",
     icon: Briefcase,
     description: "Get in touch",
-  },
-  {
-    title: "Feedback",
-    href: "/userFeedback",
-    icon: Briefcase,
-    description: "Share your thoughts",
   },
 ];
 
@@ -303,6 +297,15 @@ const adminNavItems: NavItem[] = [
     href: "/admin",
     icon: Settings,
     description: "Admin dashboard",
+  },
+];
+
+const queryNavItems: NavItem[] = [
+  {
+    title: "Customer Queries",
+    href: "/queryDashboard",
+    icon: Briefcase,
+    description: "Query dashboard",
   },
 ];
 
@@ -406,16 +409,35 @@ export function SidebarNav() {
         </SidebarGroup>
 
         {/* Admin Navigation */}
+        {userProfile?.roles &&
+          (userProfile?.roles.length > 1 ||
+            (userProfile?.roles.length == 1 &&
+              !userProfile?.roles.includes("HR"))) && (
+            <>
+              <SidebarSeparator className="bg-gradient-to-r from-transparent via-border/50 to-transparent" />
+              <SidebarGroup>
+                <SidebarGroupLabel className="text-xs font-bold text-muted-foreground/70 uppercase tracking-widest mb-2 px-2">
+                  Admin
+                </SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu className="space-y-1">
+                    {renderNavItems(adminNavItems, false)}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            </>
+          )}
+
         {userProfile?.roles && (
           <>
             <SidebarSeparator className="bg-gradient-to-r from-transparent via-border/50 to-transparent" />
             <SidebarGroup>
               <SidebarGroupLabel className="text-xs font-bold text-muted-foreground/70 uppercase tracking-widest mb-2 px-2">
-                Admin
+                Customer Queries
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu className="space-y-1">
-                  {renderNavItems(adminNavItems, false)}
+                  {renderNavItems(queryNavItems, false)}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>

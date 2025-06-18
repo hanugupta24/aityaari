@@ -144,6 +144,7 @@ export type Role =
   | "CMO"
   | "CFO"
   | "MANAGER"
+  | "HR"
   | "NO_ROLE";
 
 export type Permission =
@@ -157,6 +158,7 @@ export type Permission =
   | "DELETE_STUDY_MATERIALS"
   | "APPROVE_STUDY_MATERIALS"
   | "MANAGE_CONTENT"
+  | "VIEW_USER_QUERY"
   | "SYSTEM_SETTINGS";
 
 // Study Material Types
