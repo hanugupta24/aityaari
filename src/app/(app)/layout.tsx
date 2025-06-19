@@ -7,8 +7,7 @@ import ClientLayout from "./ClientLayout";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "aiTyaari",
-  description: "Interview Mastery Platform",
+  description: "Best AI learning Platform",
 };
 
 export default function RootLayout({
