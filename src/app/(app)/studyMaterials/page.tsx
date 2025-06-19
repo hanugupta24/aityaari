@@ -770,7 +770,7 @@ export default function StudyMaterialsPage() {
         )}
 
         {/* Featured Section */}
-        <Card className="bg-gradient-to-r from-primary/5 via-accent/5 to-primary/5 border-primary/20 animate-slideUpFadeIn animation-delay-600">
+        {/* <Card className="bg-gradient-to-r from-primary/5 via-accent/5 to-primary/5 border-primary/20 animate-slideUpFadeIn animation-delay-600">
           <CardHeader className="text-center pb-6">
             <CardTitle className="text-2xl font-bold flex items-center justify-center gap-3">
               <Sparkles className="h-6 w-6 text-primary" />
@@ -868,7 +868,7 @@ export default function StudyMaterialsPage() {
               </div>
             </div>
           </CardContent>
-        </Card>
+        </Card> */}
       </div>
     </div>
   );

@@ -242,14 +242,14 @@ export default function ClientLayout({
                   </span>
                 </div>
 
-                <Button
+                {/* <Button
                   variant="ghost"
                   size="icon"
                   className="rounded-full relative hover:bg-primary/10"
                 >
                   <Bell className="h-5 w-5" />
                   <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full"></span>
-                </Button>
+                </Button> */}
 
                 <ThemeToggle />
                 <UserDropdown />
