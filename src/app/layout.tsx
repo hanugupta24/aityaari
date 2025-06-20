@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "aiTyaari – Best AI-Powered Interview Preparation Platform",
+  title: "aiTyaari – Best Interview Prep & Study Platform",
   description:
     "aiTyaari is your learning partner to crack professional interviews with smart study material, personalized guidance, and practice tools. Start your AI prep journey today!",
   keywords: [
@@ -43,10 +43,8 @@ export const metadata: Metadata = {
   authors: [{ name: "Hanu Gupta", url: "https://aityaari.com" }],
   creator: "aiTyaari Team",
   applicationName: "aiTyaari",
-  themeColor: "#0f172a",
-  colorScheme: "light",
   openGraph: {
-    title: "aiTyaari – Crack Interviews with AI",
+    title: "aiTyaari – Best Interview Prep & Study Platform",
     description:
       "Crack your next tech interview with aiTyaari — the smartest AI-based interview prep app with tailored content, mock interviews, and more.",
     url: "https://aityaari.com",
@@ -54,18 +52,18 @@ export const metadata: Metadata = {
     type: "website",
     images: [
       {
-        url: "https://aityaari.com/images/og-image.png",
+        url: "https://aityaari.com/images/logo.png",
         width: 1200,
         height: 630,
-        alt: "aiTyaari – Crack Interviews with AI",
+        alt: "aiTyaari – Best Interview Prep & Study Platform",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "aiTyaari – Crack Interviews with AI",
+    title: "aiTyaari – Best Interview Prep & Study Platform",
     description:
-      "Best AI-powered platform for interview preparation. Smart practice tools, personalized learning paths, and expert-backed guidance.",
+      "Best platform for interview preparation. Smart practice tools, personalized learning paths, and expert-backed guidance.",
     site: "@aityaari",
     creator: "@aityaari",
     images: ["https://aityaari.com/twitter-image.png"],
