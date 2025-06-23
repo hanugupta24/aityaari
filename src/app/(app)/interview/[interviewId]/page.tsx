@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { InterviewSession, GeneratedQuestion } from "@/types";
 import { analyzeInterviewFeedback, type AnalyzeInterviewFeedbackInput } from "@/ai/flows/analyze-interview-feedback";
 import { Progress } from "@/components/ui/progress";
+import ElevenLabsAgent from "@/components/ElevenLabsAgent";
 
 interface AnsweredQuestion extends GeneratedQuestion {
   answer?: string;
@@ -781,29 +782,52 @@ export default function InterviewPage() {
 
   return (
     <div className="flex flex-col lg:flex-row h-[calc(100vh-var(--header-height,4rem)-2rem)] gap-4 p-4">
+      <ElevenLabsAgent />
       <div className="lg:w-1/3 flex flex-col gap-4">
         <Card className="flex-shrink-0 shadow-lg">
           <CardHeader>
             <CardTitle className="text-xl">Your Video</CardTitle>
           </CardHeader>
           <CardContent>
-            <video ref={videoRef} autoPlay muted className="w-full aspect-video rounded-md bg-muted object-cover" data-ai-hint="video conference"></video>
+            <video
+              ref={videoRef}
+              autoPlay
+              muted
+              className="w-full aspect-video rounded-md bg-muted object-cover"
+              data-ai-hint="video conference"
+            ></video>
             {/* Display on-screen warning if active */}
             {onScreenProctoringWarning.message && (
-              <Alert variant="default" className="mt-2 border-yellow-500 text-yellow-700 dark:border-yellow-400 dark:text-yellow-300">
+              <Alert
+                variant="default"
+                className="mt-2 border-yellow-500 text-yellow-700 dark:border-yellow-400 dark:text-yellow-300"
+              >
                 <Info className="h-4 w-4 !text-yellow-500 dark:!text-yellow-400" />
-                <AlertTitle className="text-yellow-700 dark:text-yellow-300">Proctoring Notice</AlertTitle>
-                <AlertDescription className="text-yellow-600 dark:text-yellow-200">{onScreenProctoringWarning.message}</AlertDescription>
+                <AlertTitle className="text-yellow-700 dark:text-yellow-300">
+                  Proctoring Notice
+                </AlertTitle>
+                <AlertDescription className="text-yellow-600 dark:text-yellow-200">
+                  {onScreenProctoringWarning.message}
+                </AlertDescription>
               </Alert>
             )}
             {/* Display constant "Face Not Visible?" alert only if no other on-screen warning is active */}
-            {!isFaceCurrentlyVisible && isInterviewEffectivelyActive() && !onScreenProctoringWarning.message && (
-                <Alert variant="default" className="mt-2 border-amber-500 text-amber-700 dark:text-amber-300">
-                    <EyeOff className="h-4 w-4 !text-amber-500 dark:!text-amber-400" />
-                    <AlertTitle className="text-amber-700 dark:text-amber-300">Face Not Visible?</AlertTitle>
-                    <AlertDescription className="text-amber-600 dark:text-amber-200">Please ensure your face is clearly visible in the camera.</AlertDescription>
+            {!isFaceCurrentlyVisible &&
+              isInterviewEffectivelyActive() &&
+              !onScreenProctoringWarning.message && (
+                <Alert
+                  variant="default"
+                  className="mt-2 border-amber-500 text-amber-700 dark:text-amber-300"
+                >
+                  <EyeOff className="h-4 w-4 !text-amber-500 dark:!text-amber-400" />
+                  <AlertTitle className="text-amber-700 dark:text-amber-300">
+                    Face Not Visible?
+                  </AlertTitle>
+                  <AlertDescription className="text-amber-600 dark:text-amber-200">
+                    Please ensure your face is clearly visible in the camera.
+                  </AlertDescription>
                 </Alert>
-            )}
+              )}
           </CardContent>
         </Card>
         <Card className="flex-grow flex flex-col shadow-lg">
@@ -811,67 +835,211 @@ export default function InterviewPage() {
             <CardTitle className="text-xl">Transcript Log</CardTitle>
           </CardHeader>
           <CardContent className="flex-grow overflow-y-auto space-y-2 p-2 bg-muted/50 rounded-b-md">
-            {transcriptLog.map((line, index) => (<p key={index} className={`text-sm p-2 rounded-md ${line.startsWith("AI") ? "bg-secondary text-secondary-foreground self-start mr-auto max-w-[90%]" : "bg-primary text-primary-foreground self-end ml-auto max-w-[90%]"}`}>{line}</p>))}
-            {isSubmittingAnswer && <div className="flex justify-center"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>}
+            {transcriptLog.map((line, index) => (
+              <p
+                key={index}
+                className={`text-sm p-2 rounded-md ${
+                  line.startsWith("AI")
+                    ? "bg-secondary text-secondary-foreground self-start mr-auto max-w-[90%]"
+                    : "bg-primary text-primary-foreground self-end ml-auto max-w-[90%]"
+                }`}
+              >
+                {line}
+              </p>
+            ))}
+            {isSubmittingAnswer && (
+              <div className="flex justify-center">
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
 
       <div className="lg:w-2/3 flex flex-col">
-       {isInterviewEffectivelyActive() && currentQuestion ? (
-        <Card className="flex-grow flex flex-col shadow-lg">
-          <CardHeader>
-            <div className="flex justify-between items-center mb-2">
-                <CardTitle className="text-2xl">Question {currentQuestionIndex + 1} of {totalQuestions}</CardTitle>
-                 <div className="flex items-center gap-2 text-sm text-muted-foreground"><TimerIcon className="h-5 w-5" /><span>Time Left: {formatTime(timeLeftInSeconds)}</span></div>
-            </div>
-            <Progress value={progress} className="w-full h-2" />
-            {currentQuestion && (<CardDescription className="text-lg pt-4 whitespace-pre-wrap pb-0">{currentQuestion.text}</CardDescription>)}
-             {isAISpeaking && currentStage === 'oral' && (
+        {isInterviewEffectivelyActive() && currentQuestion ? (
+          <Card className="flex-grow flex flex-col shadow-lg">
+            <CardHeader>
+              <div className="flex justify-between items-center mb-2">
+                <CardTitle className="text-2xl">
+                  Question {currentQuestionIndex + 1} of {totalQuestions}
+                </CardTitle>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <TimerIcon className="h-5 w-5" />
+                  <span>Time Left: {formatTime(timeLeftInSeconds)}</span>
+                </div>
+              </div>
+              <Progress value={progress} className="w-full h-2" />
+              {currentQuestion && (
+                <CardDescription className="text-lg pt-4 whitespace-pre-wrap pb-0">
+                  {currentQuestion.text}
+                </CardDescription>
+              )}
+              {isAISpeaking && currentStage === "oral" && (
                 <div className="flex items-center text-primary pt-1 pl-1">
-                    <Volume2 className="h-5 w-5 mr-2 animate-pulse" />
-                    <p className="text-md font-medium">AI is asking the question...</p>
+                  <Volume2 className="h-5 w-5 mr-2 animate-pulse" />
+                  <p className="text-md font-medium">
+                    AI is asking the question...
+                  </p>
                 </div>
-            )}
-            <p className="text-xs text-muted-foreground capitalize mt-1">Stage: {currentStage?.replace('_', ' ')} ({currentQuestionType})</p>
-          </CardHeader>
-          <CardContent className="flex-grow flex flex-col">
-            {currentStage === "oral" ? (
-              <div className="flex-grow flex flex-col justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground mb-2">{isListening ? "Speak now. Your transcribed answer will appear below." : (userAnswer ? "Review your transcribed answer or click mic to re-record." : "Click the mic to speak your answer.")}</p>
-                  <Textarea 
-                    placeholder={isListening ? "Listening... Speak now." : (userAnswer ? userAnswer : "Your transcribed answer will appear here...")} 
-                    value={userAnswer} 
-                    readOnly 
-                    className="text-base min-h-[100px] mb-4 bg-background/70 cursor-not-allowed" 
-                    disabled={isSubmittingAnswer || isEndingInterviewRef.current || isAISpeaking} 
-                  />
-                  {speechError && <Alert variant="destructive" className="mb-2"><AlertTriangle className="h-4 w-4" /><AlertTitle>Speech Error</AlertTitle><AlertDescription>{speechError}</AlertDescription></Alert>}
-                </div>
-                 <div className="flex gap-2 items-center">
-                    <Button variant="outline" onClick={handleToggleListening} disabled={isSubmittingAnswer || isEndingInterviewRef.current || isAISpeaking || !speechRecognitionSupported} className={isListening ? "border-red-500 text-red-500 hover:bg-red-500/10 dark:border-red-400 dark:text-red-400 dark:hover:bg-red-400/10" : ""}>
-                      {isListening ? <MicOff className="mr-2 h-4 w-4" /> : <Mic className="mr-2 h-4 w-4" />}
-                      {isListening ? "Stop Listening" : (userAnswer ? "Listen Again (clears previous)" : "Start Listening")}
+              )}
+              <p className="text-xs text-muted-foreground capitalize mt-1">
+                Stage: {currentStage?.replace("_", " ")} ({currentQuestionType})
+              </p>
+            </CardHeader>
+            <CardContent className="flex-grow flex flex-col">
+              {currentStage === "oral" ? (
+                <div className="flex-grow flex flex-col justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      {isListening
+                        ? "Speak now. Your transcribed answer will appear below."
+                        : userAnswer
+                        ? "Review your transcribed answer or click mic to re-record."
+                        : "Click the mic to speak your answer."}
+                    </p>
+                    <Textarea
+                      placeholder={
+                        isListening
+                          ? "Listening... Speak now."
+                          : userAnswer
+                          ? userAnswer
+                          : "Your transcribed answer will appear here..."
+                      }
+                      value={userAnswer}
+                      readOnly
+                      className="text-base min-h-[100px] mb-4 bg-background/70 cursor-not-allowed"
+                      disabled={
+                        isSubmittingAnswer ||
+                        isEndingInterviewRef.current ||
+                        isAISpeaking
+                      }
+                    />
+                    {speechError && (
+                      <Alert variant="destructive" className="mb-2">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertTitle>Speech Error</AlertTitle>
+                        <AlertDescription>{speechError}</AlertDescription>
+                      </Alert>
+                    )}
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <Button
+                      variant="outline"
+                      onClick={handleToggleListening}
+                      disabled={
+                        isSubmittingAnswer ||
+                        isEndingInterviewRef.current ||
+                        isAISpeaking ||
+                        !speechRecognitionSupported
+                      }
+                      className={
+                        isListening
+                          ? "border-red-500 text-red-500 hover:bg-red-500/10 dark:border-red-400 dark:text-red-400 dark:hover:bg-red-400/10"
+                          : ""
+                      }
+                    >
+                      {isListening ? (
+                        <MicOff className="mr-2 h-4 w-4" />
+                      ) : (
+                        <Mic className="mr-2 h-4 w-4" />
+                      )}
+                      {isListening
+                        ? "Stop Listening"
+                        : userAnswer
+                        ? "Listen Again (clears previous)"
+                        : "Start Listening"}
                     </Button>
-                    {!speechRecognitionSupported && <p className="text-xs text-destructive">Voice input not supported by browser.</p>}
-                 </div>
+                    {!speechRecognitionSupported && (
+                      <p className="text-xs text-destructive">
+                        Voice input not supported by browser.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-grow flex flex-col">
+                  <div className="flex items-center text-sm text-muted-foreground mb-2 gap-1">
+                    <Terminal className="h-4 w-4" />
+                    <span>
+                      {currentQuestion?.type === "coding"
+                        ? "Write your code below. Pasting is disabled."
+                        : "Provide your detailed answer below. Pasting is disabled."}
+                    </span>
+                  </div>
+                  <Textarea
+                    placeholder={
+                      currentQuestion?.type === "coding"
+                        ? "// Your code here..."
+                        : "Your detailed answer..."
+                    }
+                    className="flex-grow font-mono text-sm min-h-[200px] bg-background/70"
+                    value={userAnswer}
+                    onChange={(e) => {
+                      setUserAnswer(e.target.value);
+                      setLastActivityTime(Date.now());
+                    }}
+                    onPaste={handlePaste}
+                    disabled={
+                      isSubmittingAnswer ||
+                      isEndingInterviewRef.current ||
+                      isAISpeaking
+                    }
+                  />
+                </div>
+              )}
+            </CardContent>
+            <CardFooter className="border-t pt-4 flex justify-between items-center">
+              <p className="text-sm text-muted-foreground">
+                Interview Duration: {session.duration} mins
+              </p>
+              <div>
+                <Button
+                  onClick={handleNextQuestion}
+                  disabled={isSubmitButtonDisabled}
+                >
+                  {isSubmittingAnswer ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="mr-2 h-4 w-4" />
+                  )}
+                  {currentQuestionIndex < totalQuestions - 1
+                    ? "Next Question"
+                    : "End Interview & Get Feedback"}
+                </Button>
               </div>
-            ) : ( 
-               <div className="flex-grow flex flex-col">
-                <div className="flex items-center text-sm text-muted-foreground mb-2 gap-1"><Terminal className="h-4 w-4" /><span>{currentQuestion?.type === 'coding' ? "Write your code below. Pasting is disabled." : "Provide your detailed answer below. Pasting is disabled."}</span></div>
-                <Textarea placeholder={currentQuestion?.type === 'coding' ? "// Your code here..." : "Your detailed answer..."} className="flex-grow font-mono text-sm min-h-[200px] bg-background/70" value={userAnswer} onChange={(e) => { setUserAnswer(e.target.value); setLastActivityTime(Date.now()); }} onPaste={handlePaste} disabled={isSubmittingAnswer || isEndingInterviewRef.current || isAISpeaking} />
-              </div>
-            )}
-          </CardContent>
-          <CardFooter className="border-t pt-4 flex justify-between items-center">
-             <p className="text-sm text-muted-foreground">Interview Duration: {session.duration} mins</p>
-            <div><Button onClick={handleNextQuestion} disabled={isSubmitButtonDisabled}>{isSubmittingAnswer ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4"/>}{currentQuestionIndex < totalQuestions - 1 ? "Next Question" : "End Interview & Get Feedback"}</Button></div>
-          </CardFooter>
-        </Card>
-         ) : ( 
-          <Card className="flex-grow flex flex-col shadow-lg items-center justify-center"><CardHeader><CardTitle className="text-2xl">Interview Session {session?.status === 'completed' ? 'Completed' : (isEndingInterviewRef.current ? 'Ending...' : 'Ended')}</CardTitle></CardHeader><CardContent><p>Your responses are being processed or session has concluded.</p>{isEndingInterviewRef.current && <Loader2 className="h-8 w-8 animate-spin text-primary my-4" />}</CardContent><CardFooter><Button onClick={() => router.push('/dashboard')} variant="outline">Return to Dashboard</Button></CardFooter></Card>
-         )}
+            </CardFooter>
+          </Card>
+        ) : (
+          <Card className="flex-grow flex flex-col shadow-lg items-center justify-center">
+            <CardHeader>
+              <CardTitle className="text-2xl">
+                Interview Session{" "}
+                {session?.status === "completed"
+                  ? "Completed"
+                  : isEndingInterviewRef.current
+                  ? "Ending..."
+                  : "Ended"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p>
+                Your responses are being processed or session has concluded.
+              </p>
+              {isEndingInterviewRef.current && (
+                <Loader2 className="h-8 w-8 animate-spin text-primary my-4" />
+              )}
+            </CardContent>
+            <CardFooter>
+              <Button
+                onClick={() => router.push("/dashboard")}
+                variant="outline"
+              >
+                Return to Dashboard
+              </Button>
+            </CardFooter>
+          </Card>
+        )}
       </div>
     </div>
   );

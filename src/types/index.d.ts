@@ -288,3 +288,15 @@ export interface AuthContextType {
   hasRole: (role: Role) => boolean;
   hasPermission: (permission: Permission) => boolean;
 }
+
+// types/globals.d.ts
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      "elevenlabs-convai": React.DetailedHTMLProps<
+        React.HTMLAttributes<HTMLElement>,
+        HTMLElement
+      >;
+    }
+  }
+}
