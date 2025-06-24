@@ -134,7 +134,12 @@ export default function Component() {
             <img
               src="./images/logo_Transparent.svg"
               className="h-30 w-40"
-            ></img>
+              fetchPriority="high"
+              loading="eager"
+              width="160"
+              height="120"
+              alt="aityaari logo"
+            />
           </motion.div>
           {/* <motion.span
             initial={{ opacity: 0, x: -10 }}
