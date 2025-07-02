@@ -37,62 +37,62 @@ export const products = [
 
   {
     title: "Tailwind Master Kit",
-    thumbnail: "./homepageImages/img3.png",
+    thumbnail: "./homepageImages/img3.webp",
   },
   {
     title: "Tailwind Master Kit",
-    thumbnail: "./homepageImages/img4.png",
+    thumbnail: "./homepageImages/img4.webp",
   },
   {
     title: "Tailwind Master Kit",
-    thumbnail: "./homepageImages/img6.png",
+    thumbnail: "./homepageImages/img6.webp",
   },
   {
     title: "Tailwind Master Kit",
-    thumbnail: "./homepageImages/img5.png",
+    thumbnail: "./homepageImages/img5.webp",
   },
   {
     title: "Tailwind Master Kit",
-    thumbnail: "./homepageImages/img7.png",
+    thumbnail: "./homepageImages/img7.webp",
   },
   {
     title: "Tailwind Master Kit",
-    thumbnail: "./homepageImages/img8.png",
+    thumbnail: "./homepageImages/img8.webp",
   },
   {
     title: "Tailwind Master Kit",
-    thumbnail: "./homepageImages/img9.png",
+    thumbnail: "./homepageImages/img9.webp",
   },
   {
     title: "Tailwind Master Kit",
-    thumbnail: "./homepageImages/img4.png",
+    thumbnail: "./homepageImages/img4.webp",
   },
   {
     title: "Tailwind Master Kit",
-    thumbnail: "./homepageImages/img3.png",
+    thumbnail: "./homepageImages/img3.webp",
   },
   {
     title: "Tailwind Master Kit",
-    thumbnail: "./homepageImages/img4.png",
+    thumbnail: "./homepageImages/img4.webp",
   },
   {
     title: "Tailwind Master Kit",
-    thumbnail: "./homepageImages/img6.png",
+    thumbnail: "./homepageImages/img6.webp",
   },
   {
     title: "Tailwind Master Kit",
-    thumbnail: "./homepageImages/img5.png",
+    thumbnail: "./homepageImages/img5.webp",
   },
   {
     title: "Tailwind Master Kit",
-    thumbnail: "./homepageImages/img7.png",
+    thumbnail: "./homepageImages/img7.webp",
   },
   {
     title: "Tailwind Master Kit",
-    thumbnail: "./homepageImages/img8.png",
+    thumbnail: "./homepageImages/img8.webp",
   },
   {
     title: "Tailwind Master Kit",
-    thumbnail: "./homepageImages/img9.png",
+    thumbnail: "./homepageImages/img9.webp",
   },
 ];
