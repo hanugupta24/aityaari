@@ -151,6 +151,8 @@ export const ProductCard = ({
           width="600"
           className="object-cover object-left-top absolute h-full w-full inset-0 rounded-lg"
           alt={product.title}
+          fetchPriority="high"
+          loading="eager"
         />
       </div>
       <div className="absolute inset-0 h-full w-full opacity-0 group-hover/product:opacity-80 bg-gradient-to-t from-black/60 to-transparent pointer-events-none rounded-lg"></div>
