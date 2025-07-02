@@ -13,17 +13,5 @@ export default function Component() {
     setIsLoaded(true);
   }, []);
 
-  return (
-    <>
-      <Head>
-        <link
-          rel="preload"
-          as="image"
-          href="/homepageImages/img8.webp"
-          type="image/webp"
-        />
-      </Head>
-      <HeroParallaxDemo />
-    </>
-  );
+  return <HeroParallaxDemo />;
 }

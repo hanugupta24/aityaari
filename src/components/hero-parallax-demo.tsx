@@ -42,10 +42,10 @@ export const products = [
     title: "Interview Performance Light",
     thumbnail: "./homepageImages/img7.webp",
   },
-  {
-    title: "Interview Performance dark",
-    thumbnail: "./homepageImages/img8.webp",
-  },
+  // {
+  //   title: "Interview Performance dark",
+  //   thumbnail: "./homepageImages/img8.webp",
+  // },
   {
     title: "Study Materials Light",
     thumbnail: "./homepageImages/img9.webp",
@@ -74,10 +74,10 @@ export const products = [
     title: "Interview Performance Light",
     thumbnail: "./homepageImages/img7.webp",
   },
-  {
-    title: "Interview Performance dark",
-    thumbnail: "./homepageImages/img8.webp",
-  },
+  // {
+  //   title: "Interview Performance dark",
+  //   thumbnail: "./homepageImages/img8.webp",
+  // },
   {
     title: "Study Materials Light",
     thumbnail: "./homepageImages/img9.webp",

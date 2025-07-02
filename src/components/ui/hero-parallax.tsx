@@ -54,7 +54,7 @@ export const HeroParallax = ({
   return (
     <div
       ref={ref}
-      className="h-[300vh] py-40 overflow-hidden antialiased relative flex flex-col self-auto [perspective:1000px] [transform-style:preserve-3d]"
+      className="bg-neutral-900 h-[300vh] py-40 overflow-hidden antialiased relative flex flex-col self-auto [perspective:1000px] [transform-style:preserve-3d]"
     >
       <Header />
       <motion.div
@@ -105,7 +105,7 @@ export const Header = () => {
         Your AI Powered <br />
         <span className="text-green-600">Mock Interview</span>
       </h1>
-      <p className="max-w-2xl text-base md:text-xl mt-8 text-gray-600 leading-relaxed">
+      <p className="max-w-2xl text-base md:text-xl mt-8 text-white-600 leading-relaxed">
         Practice live interview tailored to your dream role - with instant
         scoring, answer analysis, and real time AI interaction
       </p>
