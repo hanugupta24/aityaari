@@ -147,9 +147,7 @@ export const ProductCard = ({
       <div className="block group-hover/product:shadow-2xl ">
         <img
           src={product.thumbnail || "/placeholder.svg"}
-          height="317"
-          width="600"
-          className="object-cover object-left-top absolute h-full w-full inset-0 rounded-lg"
+          className="w-[600px] h-[317px] object-cover object-left-top absolute inset-0 rounded-lg"
           alt={product.title}
           fetchPriority="high"
           loading="eager"
