@@ -23,12 +23,6 @@ export default function HeroParallaxDemo() {
 
 export const products = [
   {
-    title: "Cursor",
-    thumbnail:
-      "https://aceternity.com/images/products/thumbnails/new/cursor.png",
-  },
-
-  {
     title: "Interview Light",
     thumbnail: "./homepageImages/img3.webp",
   },
@@ -60,12 +54,6 @@ export const products = [
     title: "Study Materials dark",
     thumbnail: "./homepageImages/img10.webp",
   },
-  {
-    title: "Cursor",
-    thumbnail:
-      "https://aceternity.com/images/products/thumbnails/new/cursor.png",
-  },
-
   {
     title: "Interview Light",
     thumbnail: "./homepageImages/img3.webp",
