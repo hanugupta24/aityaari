@@ -110,14 +110,14 @@ export const Header = () => {
         scoring, answer analysis, and real time AI interaction
       </p>
       <div className="mt-10">
-        {/* <button
+        <button
           className="bg-green-600  text-white font-semibold px-8 py-4 rounded-full text-lg shadow-lg hover:shadow-xl hover:shadow-emerald-200/50 transition-all duration-300 transform hover:scale-105"
           onClick={() => {
             window.location.href = "/signup";
           }}
         >
           Get Started Free
-        </button> */}
+        </button>
       </div>
     </div>
   );
