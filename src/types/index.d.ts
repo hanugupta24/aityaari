@@ -45,6 +45,7 @@ export interface UserProfile {
   createdAt: string;
   interviewsTaken?: number;
   isPlusSubscriber?: boolean;
+  subscriptionStart?: string | null;
   subscriptionPlan?: "monthly" | "quarterly" | "yearly" | null;
   isAdmin?: boolean;
   updatedAt?: string;

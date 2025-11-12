@@ -63,6 +63,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (userDocSnap.exists()) {
         const profileData = userDocSnap.data() as UserProfile;
+        console.log(profileData.isPlusSubscriber, profileData.subscriptionPlan, profileData.subscriptionStart, profileData.isPlusSubscriber && profileData.subscriptionPlan && profileData.subscriptionStart)
+        // setUserProfile(profileData);
+        if (profileData.isPlusSubscriber && profileData.subscriptionPlan && profileData.subscriptionStart) {
+          console.log('imhereee')
+          const startDate = new Date(profileData.subscriptionStart);
+          const now = new Date();
+      
+          // Plan duration (days)
+          let durationDays = 30; // default monthly
+          if (profileData.subscriptionPlan === "quarterly") durationDays = 90;
+          if (profileData.subscriptionPlan === "yearly") durationDays = 365;
+      
+          const expiryDate = new Date(startDate);
+          expiryDate.setDate(startDate.getDate() + durationDays);
+      
+          if (now > expiryDate) {
+            console.log("Subscription expired. Updating Firestore...");
+      
+            const userRef = doc(db, "users", fbUser.uid);
+            await updateDoc(userRef, {
+              isPlusSubscriber: false,
+              subscriptionPlan: null,
+              subscriptionStart: null,
+              updatedAt: new Date().toISOString(),
+            });
+      
+            // Reflect immediately in local state
+            profileData.isPlusSubscriber = false;
+            profileData.subscriptionPlan = null;
+            profileData.subscriptionStart = null;
+          }
+        }
+        // --- AUTO EXPIRE LOGIC ENDS HERE ---
+      
         setUserProfile(profileData);
 
         // Determine admin status from isAdmin field or roles

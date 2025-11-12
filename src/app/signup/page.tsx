@@ -306,7 +306,11 @@ export default function SignupPage() {
       const firebaseUser = userCredential.user;
 
       // Send email verification
-      await sendEmailVerification(firebaseUser);
+      // await sendEmailVerification(firebaseUser);
+      await sendEmailVerification(firebaseUser, {
+        url: "https://www.aityaari.com/login?verified=true",
+        handleCodeInApp: false,
+      });
       setEmailVerificationSent(true);
 
       // Save user data to Firestore
@@ -323,6 +327,7 @@ export default function SignupPage() {
         interviewsTaken: 0,
         isPlusSubscriber: false,
         subscriptionPlan: null,
+        subscriptionStart: null,
         isAdmin: false,
         updatedAt: new Date().toISOString(),
         emailVerified: true,
@@ -474,6 +479,7 @@ export default function SignupPage() {
         interviewsTaken: 0,
         isPlusSubscriber: false,
         subscriptionPlan: null,
+        subscriptionStart: null,
         isAdmin: false,
         updatedAt: new Date().toISOString(),
         emailVerified: phoneSignupData.email ? false : true, // If no email provided, mark as verified
@@ -513,7 +519,12 @@ export default function SignupPage() {
   const handleResendEmailVerification = async () => {
     if (user && !user.emailVerified) {
       try {
-        await sendEmailVerification(user);
+        // await sendEmailVerification(user);
+        await sendEmailVerification(user, {
+          url: "https://www.aityaari.com/login?verified=true",
+          handleCodeInApp: false,
+        });
+        
         toast({
           title: "Verification Email Sent",
           description: "Please check your email for the verification link.",

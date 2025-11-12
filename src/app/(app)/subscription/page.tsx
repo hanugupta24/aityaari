@@ -187,6 +187,7 @@ export default function SubscriptionPage() {
         {
           isPlusSubscriber: true,
           subscriptionPlan: planId,
+          subscriptionStart: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },
         { merge: true }
@@ -394,7 +395,7 @@ export default function SubscriptionPage() {
                           }
                         `}
                         onClick={() => handleUpgrade(plan.id)}
-                        disabled={!!isProcessing || isLoading}
+                        disabled={!!isProcessing || isLoading || plan.id ==='quarterly' || plan.id ==='yearly'}
                       >
                         {isProcessing === plan.id ? (
                           <div className="flex items-center gap-2">

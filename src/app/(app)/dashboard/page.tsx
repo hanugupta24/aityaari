@@ -670,7 +670,7 @@ export default function DashboardPage() {
           {/* Left Column - Main Content */}
           <div className="xl:col-span-2 space-y-8">
             {/* Free User Credits Section */}
-            {userProfile && !userProfile.isPlusSubscriber && (
+            {userProfile && !userProfile.isPlusSubscriber && interviewsTaken <= FREE_INTERVIEW_LIMIT && (
               <div className="animate-slide-in stagger-1">
                 <Card className="relative overflow-hidden border-0 shadow-xl glassmorphism gradient-border">
                   <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-accent/10 opacity-70 animate-rotate-gradient"></div>
