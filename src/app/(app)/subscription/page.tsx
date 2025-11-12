@@ -340,7 +340,27 @@ export default function SubscriptionPage() {
                               : "text-foreground"
                           }`}
                         >
-                          {plan.priceDisplay}
+                          {plan.id === "monthly" ? (
+                            <div className="flex justify-center items-center gap-3">
+                              <span
+                                className="relative text-muted-foreground text-2xl md:text-3xl opacity-60"
+                                style={{ padding: "0 2px" }}
+                              >
+                                <span className="opacity-100">{plan.priceDisplay}</span>
+                                <span
+                                  className="absolute left-0 top-1/2 w-full border-b-2 border-muted-foreground pointer-events-none"
+                                  style={{
+                                    transform: "translateY(-50%)",
+                                    zIndex: 10,
+                                  }}
+                                  aria-hidden="true"
+                                ></span>
+                              </span>
+                              <span className="text-4xl md:text-5xl font-bold text-green-600">₹0</span>
+                            </div>
+                          ) : (
+                            plan.priceDisplay
+                          )}
                         </div>
                       </div>
 
