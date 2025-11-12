@@ -395,7 +395,7 @@ export default function SubscriptionPage() {
                           }
                         `}
                         onClick={() => handleUpgrade(plan.id)}
-                        disabled={!!isProcessing || isLoading || plan.id ==='quarterly' || plan.id ==='yearly'}
+                        disabled={!!isProcessing || isLoading }
                       >
                         {isProcessing === plan.id ? (
                           <div className="flex items-center gap-2">
