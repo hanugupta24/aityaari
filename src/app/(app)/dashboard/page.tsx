@@ -798,12 +798,35 @@ export default function DashboardPage() {
                         </CardTitle>
                         <CardDescription className="text-sm sm:text-base">
                           Unlimited access • Current Plan:{" "}
-                          {userProfile.subscriptionPlan
-                            ? userProfile.subscriptionPlan
-                                .charAt(0)
-                                .toUpperCase() +
-                              userProfile.subscriptionPlan.slice(1)
-                            : "Plus"}
+                          {(() => {
+                            // Get plan and base label
+                            const plan = userProfile.subscriptionPlan;
+                            const planLabel = plan
+                              ? plan.charAt(0).toUpperCase() + plan.slice(1)
+                              : "Plus";
+                            const subStart = userProfile.subscriptionStart
+                              ? new Date(userProfile.subscriptionStart)
+                              : null;
+                            let durationDays = 365;
+                            if (plan === "monthly") durationDays = 30;
+                            else if (plan === "quarterly") durationDays = 90;
+                            // Calculate end date if start exists
+                            let display = planLabel;
+                            if (subStart) {
+                              const endDate = new Date(
+                                subStart.getTime() + durationDays * 24 * 60 * 60 * 1000
+                              );
+                              const today = new Date();
+                              // Difference in ms, round up days
+                              const diffTime = endDate.getTime() - today.getTime();
+                              const daysLeft = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+                              display +=
+                                " • Till " +
+                                endDate.toLocaleDateString() +
+                                (daysLeft >= 0 ? ` (${daysLeft} days left)` : "");
+                            }
+                            return display;
+                          })()}
                         </CardDescription>
                       </div>
                     </div>
