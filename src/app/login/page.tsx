@@ -8,6 +8,7 @@ import {
   signInWithEmailAndPassword,
   RecaptchaVerifier,
   signInWithPhoneNumber,
+  sendPasswordResetEmail,
   type ConfirmationResult,
 } from "firebase/auth";
 import { z } from "zod";
@@ -37,11 +38,20 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Loader2, AlertTriangle } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Loader2, AlertTriangle, Mail } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Link from "next/link";
 import { siteConfig } from "@/config/site";
 import { doc, getDoc } from "firebase/firestore";
+import { ForgotPasswordDialog } from "@/components/auth/ForgotPasswordDialog";
 
 const emailLoginSchema = z.object({
   email: z.string().email({ message: "Invalid email address." }),
@@ -229,7 +239,10 @@ export default function LoginPage() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="passwordLogin">Password</Label>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label htmlFor="passwordLogin">Password</Label>
+                    <ForgotPasswordDialog />
+                  </div>
                   <Input
                     id="passwordLogin"
                     name="password"
