@@ -1,17 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import HeroParallaxDemo from "@/components/hero-parallax-demo";
-import Head from "next/head";
+import { LandingNavbar } from "@/components/layout/LandingNavbar";
+import { HeroSection } from "@/components/landing/HeroSection";
+import { ProductsSection } from "@/components/landing/ProductsSection";
+import { SolutionsSection } from "@/components/landing/SolutionsSection";
+import { FeaturesSection } from "@/components/landing/FeaturesSection";
+import { ResourcesSection } from "@/components/landing/ResourcesSection";
+import { Footer } from "@/components/layout/Footer";
 
-export default function Component() {
-  // State for staggered animations and mobile menu
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+export default function LandingPage() {
+  return (
+    <div className="min-h-screen bg-background">
+      <LandingNavbar />
+      
+      <main>
+        <HeroSection />
+        <ProductsSection />
+        <SolutionsSection />
+        <FeaturesSection />
+        <ResourcesSection />
+      </main>
 
-  useEffect(() => {
-    setIsLoaded(true);
-  }, []);
-
-  return <HeroParallaxDemo />;
+      <Footer />
+    </div>
+  );
 }
