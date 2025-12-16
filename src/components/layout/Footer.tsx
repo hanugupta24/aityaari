@@ -45,8 +45,8 @@ export function Footer() {
   };
 
   const socialLinks = [
-    { icon: Linkedin, href: "https://www.linkedin.com/company/aityaari", label: "LinkedIn", color: "hover:text-blue-500" },
-    { icon: Instagram, href: "https://www.instagram.com/aityaari", label: "Instagram", color: "hover:text-foreground" },
+    { icon: Linkedin, href: "https://www.linkedin.com/company/aityaari", label: "LinkedIn", color: "hover:text-primary" },
+    { icon: Instagram, href: "https://www.instagram.com/aityaari", label: "Instagram", color: "hover:text-primary" },
     { icon: Mail, href: "mailto:contact@aityaari.com", label: "Email", color: "hover:text-primary" },
   ];
 
