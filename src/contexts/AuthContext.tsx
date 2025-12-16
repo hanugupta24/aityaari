@@ -11,9 +11,15 @@ import {
 } from "react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
-import { doc, getDoc, updateDoc, deleteField } from "firebase/firestore";
+import { doc, getDoc, updateDoc, deleteField, onSnapshot } from "firebase/firestore";
 import type { UserProfile, Role } from "@/types";
 import { hasPermission } from "@/lib/rbac/roles";
+import {
+  validateSession,
+  getLocalSessionId,
+  invalidateSession,
+} from "@/lib/session-manager";
+import { toast } from "@/hooks/use-toast";
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -36,6 +42,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false); // Profile fetch loading
   const [initialLoading, setInitialLoading] = useState<boolean>(true); // Auth state loading
+  const [sessionInvalidated, setSessionInvalidated] = useState<boolean>(false);
+
+  // Handle session invalidation with user notification
+  const handleSessionInvalidation = useCallback(async () => {
+    if (sessionInvalidated) return; // Prevent multiple calls
+    
+    console.log("[AuthContext] Session invalidated. Logging out user.");
+    setSessionInvalidated(true);
+    
+    // Show notification to user
+    toast({
+      title: "Session Ended",
+      description: "You have been logged out because you logged in from another device.",
+      variant: "destructive",
+    });
+    
+    // Sign out
+    await firebaseSignOut(auth);
+    setUser(null);
+    setUserProfile(null);
+    setIsAdmin(false);
+    setLoading(false);
+    
+    // Clear localStorage
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("sessionId");
+    }
+  }, [sessionInvalidated]);
 
   const fetchUserProfile = useCallback(async (fbUser: FirebaseUser | null) => {
     if (!fbUser) {
@@ -64,6 +98,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (userDocSnap.exists()) {
         const profileData = userDocSnap.data() as UserProfile;
         console.log(profileData.isPlusSubscriber, profileData.subscriptionPlan, profileData.subscriptionStart, profileData.isPlusSubscriber && profileData.subscriptionPlan && profileData.subscriptionStart)
+        
+        // Validate session
+        const localSessionId = getLocalSessionId();
+        if (localSessionId) {
+          const isValid = await validateSession(fbUser.uid, localSessionId);
+          if (!isValid) {
+            console.log("[AuthContext] Session validation failed during profile fetch");
+            await handleSessionInvalidation();
+            return;
+          }
+        }
+        
         // setUserProfile(profileData);
         if (profileData.isPlusSubscriber && profileData.subscriptionPlan && profileData.subscriptionStart) {
           console.log('imhereee')
@@ -148,7 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       );
       setLoading(false);
     }
-  }, []);
+  }, [handleSessionInvalidation]);
 
   useEffect(() => {
     console.log(
@@ -162,6 +208,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         if (firebaseUser) {
           setUser(firebaseUser);
+          setSessionInvalidated(false); // Reset flag for new user
           console.log(
             "AuthContext: Firebase user detected, calling fetchUserProfile."
           );
@@ -208,9 +255,88 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchUserProfile]);
 
+  // Real-time session validation listener
+  useEffect(() => {
+    if (!user) return;
+
+    console.log(
+      `[AuthContext] Setting up real-time session listener for user: ${user.uid}`
+    );
+
+    const userDocRef = doc(db, "users", user.uid);
+    const unsubscribe = onSnapshot(
+      userDocRef,
+      (snapshot) => {
+        if (!snapshot.exists()) return;
+
+        const userData = snapshot.data();
+        const firestoreSessionId = userData.activeSessionId;
+        const localSessionId = getLocalSessionId();
+
+        console.log(
+          `[AuthContext] Session snapshot - Local: ${localSessionId}, Firestore: ${firestoreSessionId}`
+        );
+
+        // Check if session IDs match
+        if (localSessionId && firestoreSessionId && localSessionId !== firestoreSessionId) {
+          console.log("[AuthContext] Session mismatch detected via real-time listener");
+          handleSessionInvalidation();
+        }
+      },
+      (error) => {
+        console.error("[AuthContext] Error in session snapshot listener:", error);
+      }
+    );
+
+    return () => {
+      console.log("[AuthContext] Cleaning up session listener");
+      unsubscribe();
+    };
+  }, [user, handleSessionInvalidation]);
+
+  // Periodic session validation (fallback)
+  useEffect(() => {
+    if (!user) return;
+
+    console.log(
+      `[AuthContext] Starting periodic session validation for user: ${user.uid}`
+    );
+
+    const intervalId = setInterval(async () => {
+      const localSessionId = getLocalSessionId();
+      if (!localSessionId) {
+        console.log("[AuthContext] No local session ID found during periodic check");
+        return;
+      }
+
+      console.log("[AuthContext] Running periodic session validation");
+      const isValid = await validateSession(user.uid, localSessionId);
+
+      if (!isValid) {
+        console.log("[AuthContext] Session validation failed during periodic check");
+        await handleSessionInvalidation();
+      }
+    }, 30000); // Check every 30 seconds
+
+    return () => {
+      console.log("[AuthContext] Cleaning up periodic session validation");
+      clearInterval(intervalId);
+    };
+  }, [user, handleSessionInvalidation]);
+
   const signOut = async () => {
     console.log("AuthContext: signOut called.");
     setLoading(true);
+    
+    // Invalidate session in Firestore
+    if (user) {
+      try {
+        await invalidateSession(user.uid);
+      } catch (error) {
+        console.error("AuthContext: Error invalidating session during signOut:", error);
+      }
+    }
+    
     await firebaseSignOut(auth);
     setUser(null);
     setUserProfile(null);

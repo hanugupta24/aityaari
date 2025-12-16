@@ -50,6 +50,12 @@ export interface UserProfile {
   isAdmin?: boolean;
   updatedAt?: string;
   roles?: Role[];
+
+  // Session Management Fields
+  activeSessionId?: string | null;
+  sessionDeviceInfo?: string | null;
+  sessionStartTime?: string | null;
+  sessionLastActive?: string | null;
 }
 
 // This type represents the comprehensive structured data
