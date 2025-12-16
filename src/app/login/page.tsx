@@ -52,6 +52,7 @@ import Link from "next/link";
 import { siteConfig } from "@/config/site";
 import { doc, getDoc } from "firebase/firestore";
 import { ForgotPasswordDialog } from "@/components/auth/ForgotPasswordDialog";
+import { createSession } from "@/lib/session-manager";
 
 const emailLoginSchema = z.object({
   email: z.string().email({ message: "Invalid email address." }),
@@ -114,12 +115,10 @@ export default function LoginPage() {
         return;
       }
 
-      // Proceed if verified
-      toast({
-        title: "Login Successful",
-        description: "Redirecting to dashboard...",
-      });
+      // Create session for this device
+      await createSession(user.uid);
 
+      // Proceed if verified
       toast({
         title: "Login Successful",
         description: "Redirecting to dashboard...",

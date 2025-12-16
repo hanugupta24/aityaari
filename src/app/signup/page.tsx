@@ -17,6 +17,7 @@ import { doc, setDoc } from "firebase/firestore";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { createSession } from "@/lib/session-manager";
 import {
   Form,
   FormControl,
@@ -334,6 +335,9 @@ export default function SignupPage() {
         phoneVerified: false,
       });
 
+      // Create session for this device
+      await createSession(firebaseUser.uid);
+
       toast({
         title: "Account Created Successfully",
         description:
@@ -487,6 +491,9 @@ export default function SignupPage() {
         // Store password hash would be handled by your backend in a real app
         // For now, we're just using Firebase Auth's built-in password handling
       });
+
+      // Create session for this device
+      await createSession(firebaseUser.uid);
 
       toast({
         title: "Signup Successful!",
